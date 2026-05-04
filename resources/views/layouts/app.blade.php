@@ -133,7 +133,7 @@
 <body>
     <div class="container">
         <header class="animate-in">
-            <div class="logo">ResCalc Pro</div>
+            <div class="logo">Reservation</div>
             <nav>
                 <a href="{{ route('dashboard') }}" class="btn" style="color: var(--text)">Dashboard</a>
             </nav>
