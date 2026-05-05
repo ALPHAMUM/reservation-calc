@@ -204,7 +204,7 @@
                 @endphp
                 <tr>
                     <td>{{ $isFirst ? $resNo : '' }}</td>
-                    <td>{{ $isFirst ? ($res['roomtyp'] ?? $res['roomType'] ?? '') : '' }}</td>
+                    <td>{{ $isFirst ? ($res['village_name'] ?? $res['roomtyp'] ?? $res['roomType'] ?? '') : '' }}</td>
                     <td>{{ $res['gstName'] ?? $res['guestName'] ?? '' }}</td>
                     <td>{{ $res['gstType'] ?? '' }}{{ $isValidCard ? ' (' . $privCard . ')' : '' }}</td>
                     <td>{{ $res['age'] ?? '' }}</td>

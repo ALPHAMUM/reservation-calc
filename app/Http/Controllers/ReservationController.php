@@ -14,6 +14,33 @@ class ReservationController extends Controller
     private $apiKey = '12A3A9C3-3D8F-4204-9737-3C4ADE94650F'; //Training
     // private $apiKey = 'A450BD7D-DD86-4A54-A6A5-A971B64CC7AB'; //Prod
 
+    private $villageMap = [
+        'ATNS' => 'ZZ-ATTACHED ROOM',
+        'BALI' => 'BALI',
+        'BLSN' => 'BALESIN',
+        'CDSL' => 'COSTA DEL SOL',
+        'CLBH' => 'CLUBHOUSE',
+        'MYKO' => 'MYKONOS',
+        'PHKT' => 'PHUKET',
+        'PV4' => 'PRIVATE 4',
+        'PV6' => 'PRIVATE 6',
+        'PV8' => 'PRIVATE 8',
+        'RGNCY' => 'REGENCY A',
+        'RGNYB' => 'REGENCY B',
+        'RGNYC' => 'REGENCY C',
+        'RGNYD' => 'REGENCY D',
+        'ROYL' => 'ROYAL',
+        'STRP' => 'ST. TROPEZ',
+        'TANG' => 'APSARAS VILLA',
+        'TCNA' => 'TOSCANA',
+    ];
+
+    private function getVillageName($code)
+    {
+        $code = strtoupper(trim($code));
+        return $this->villageMap[$code] ?? $code;
+    }
+
     public function index(Request $request)
     {
         $resNoList = $request->get('resnolist');
@@ -53,6 +80,7 @@ class ReservationController extends Controller
                     $this->consolidateRates($msgs);
                     foreach ($msgs as &$res) {
                         $res['calculated_rates'] = $calculator->calculatePassengerRates($res);
+                        $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
                     }
                     $reservations = array_merge($reservations, $msgs);
                 }
@@ -144,6 +172,7 @@ class ReservationController extends Controller
                             $allDates[$d] = true;
                         }
                     }
+                    $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
                     $allRows[] = [
                         'res' => $res,
                         'rates' => $calculator->calculatePassengerRates($res),
@@ -225,7 +254,7 @@ class ReservationController extends Controller
 
                 echo '<tr>';
                 echo '<td>' . ($isFirst ? htmlspecialchars($resNo) : '') . '</td>';
-                echo '<td>' . ($isFirst ? htmlspecialchars($res['roomtyp'] ?? $res['roomType'] ?? '') : '') . '</td>';
+                echo '<td>' . ($isFirst ? htmlspecialchars($res['village_name'] ?? $res['roomtyp'] ?? $res['roomType'] ?? '') : '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['gstName'] ?? $res['guestName'] ?? '') . '</td>';
                 $privCard = trim((string) ($res['privCard'] ?? $res['privcard'] ?? ''));
                 $privCardLower = strtolower($privCard);
@@ -353,6 +382,7 @@ class ReservationController extends Controller
                 $msgs = $resp->json()['msg'] ?? [];
                 foreach ($msgs as &$res) {
                     $res['calculated_rates'] = $calculator->calculatePassengerRates($res);
+                    $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
                 }
                 $reservations = array_merge($reservations, $msgs);
             }
@@ -363,39 +393,23 @@ class ReservationController extends Controller
     private function consolidateRates(array &$msgs)
     {
         foreach ($msgs as &$res) {
-            if (isset($res['rate']) && is_array($res['rate']) && count($res['rate']) > 0) {
-                // Sort by date just in case it is out of order
-                usort($res['rate'], function ($a, $b) {
-                    return strcmp($a['date'] ?? '', $b['date'] ?? '');
-                });
+            $rates = $res['rate'] ?? [];
+            if (empty($rates))
+                continue;
 
-                $firstDate = reset($res['rate'])['date'] ?? null;
-                $originalDepDt = $res['depdt'] ?? $res['depDt'] ?? end($res['rate'])['date'] ?? '';
-
-                // Consolidate rate values, grouping by 'desc'
-                $grouped = [];
-                foreach ($res['rate'] as $r) {
-                    $desc = strtolower(trim($r['desc'] ?? ''));
-                    if (!isset($grouped[$desc])) {
-                        $grouped[$desc] = 0;
-                    }
-                    $grouped[$desc] += (float) ($r['val'] ?? 0);
+            $consolidated = [];
+            foreach ($rates as $r) {
+                $date = $r['date'] ?? '';
+                if ($date) {
+                    $consolidated[$date] = ($consolidated[$date] ?? 0) + (float) ($r['val'] ?? 0);
                 }
-
-                $consolidated = [];
-                foreach ($grouped as $desc => $val) {
-                    $newItem = [
-                        'date' => $firstDate . ' to ' . $originalDepDt,
-                        'val' => $val
-                    ];
-                    if ($desc !== '') {
-                        $newItem['desc'] = $desc;
-                    }
-                    $consolidated[] = $newItem;
-                }
-
-                $res['rate'] = $consolidated;
             }
+
+            $newRates = [];
+            foreach ($consolidated as $date => $val) {
+                $newRates[] = ['date' => $date, 'val' => $val];
+            }
+            $res['rate'] = $newRates;
         }
     }
 }

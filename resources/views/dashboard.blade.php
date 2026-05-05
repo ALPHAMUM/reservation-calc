@@ -346,7 +346,7 @@
                                         {{ $res['gstType'] ?? 'Guest' }}
                                     </span>
                                 </td>
-                                <td>{{ $res['roomtyp'] ?? $res['roomType'] ?? 'N/A' }}</td>
+                                <td>{{ $res['village_name'] ?? $res['roomtyp'] ?? $res['roomType'] ?? 'N/A' }}</td>
                                 <td>
                                     <div style="font-size: 0.875rem">{{ $res['arrdt'] ?? $res['arrDt'] ?? '' }}</div>
                                     <div style="font-size: 0.75rem; color: var(--text-muted)">to {{ $res['depdt'] ?? $res['depDt'] ?? '' }}</div>
