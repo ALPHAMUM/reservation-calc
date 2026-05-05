@@ -107,8 +107,21 @@ class ReservationController extends Controller
                 ->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
             if ($resp->successful()) {
                 foreach ($resp->json()['msg'] ?? [] as $res) {
+                    $depdt = $res['depdt'] ?? $res['depDt'] ?? '';
                     $rateDates = [];
+                    
+                    // Filter out dates beyond depdt from the rates array so they don't affect sums or columns
+                    $filteredRates = [];
                     foreach ($res['rate'] ?? [] as $r) {
+                        $d = $r['date'] ?? '';
+                        if ($d && $depdt !== '' && strcmp($d, $depdt) >= 0) {
+                            continue;
+                        }
+                        $filteredRates[] = $r;
+                    }
+                    $res['rate'] = $filteredRates;
+
+                    foreach ($res['rate'] as $r) {
                         $d = $r['date'] ?? '';
                         if ($d) {
                             $rateDates[$d] = (float) ($r['val'] ?? 0);
@@ -147,7 +160,7 @@ class ReservationController extends Controller
             echo '<td rowspan="2">RELATION</td>';
             echo '<td rowspan="2">CHECK-IN</td>';
             echo '<td rowspan="2">CHECK-OUT</td>';
-            echo '<td colspan="' . ($dateCount + 1) . '" class="dh">ACCOMMODATION</td>';
+            echo '<td colspan="' . $dateCount . '" class="dh">ACCOMMODATION</td>';
             echo '<td rowspan="2">AIRFARE</td>';
             echo '<td rowspan="2">HANGAR</td>';
             echo '<td rowspan="2">AVIATION</td>';
@@ -161,7 +174,6 @@ class ReservationController extends Controller
                 $dt = new \DateTime($d);
                 echo '<td class="dh">' . $dt->format('M-d, D') . '</td>';
             }
-            echo '<td class="dh">TOTAL</td>';
             echo '</tr>';
 
             // Data rows
@@ -180,10 +192,10 @@ class ReservationController extends Controller
                 if ($isFirst)
                     $last = $resNo;
 
-                $totals['air'] += $rates['air'];
-                $totals['han'] += $rates['han'];
-                $totals['avi'] += $rates['avi'];
-                $totals['env'] += $rates['env'];
+                $totals['air'] += floor($rates['air']);
+                $totals['han'] += floor($rates['han']);
+                $totals['avi'] += floor($rates['avi']);
+                $totals['env'] += floor($rates['env']);
 
                 echo '<tr>';
                 echo '<td>' . ($isFirst ? htmlspecialchars($resNo) : '') . '</td>';
@@ -198,14 +210,14 @@ class ReservationController extends Controller
                     if (isset($rateDates[$d])) {
                         $val = $rateDates[$d];
                         echo '<td class="num">' . number_format($val, 2) . '</td>';
-                        $dateTotals[$d] += $val;
-                        $passengerAccTotal += $val;
+                        $valToSum = floor($val);
+                        $dateTotals[$d] += $valToSum;
+                        $passengerAccTotal += $valToSum;
                     } else {
                         echo '<td></td>';
                     }
                 }
                 $accGrandTotal += $passengerAccTotal;
-                echo '<td class="num">' . number_format($passengerAccTotal, 2) . '</td>';
                 echo '<td class="num">' . number_format($rates['air'], 2) . '</td>';
                 echo '<td class="num">' . number_format($rates['han'], 2) . '</td>';
                 echo '<td class="num">' . number_format($rates['avi'], 2) . '</td>';
@@ -220,7 +232,6 @@ class ReservationController extends Controller
             foreach ($dateCols as $d) {
                 echo '<td class="num">' . number_format($dateTotals[$d], 2) . '</td>';
             }
-            echo '<td class="num">' . number_format($accGrandTotal, 2) . '</td>';
             echo '<td class="num">' . number_format($totals['air'], 2) . '</td>';
             echo '<td class="num">' . number_format($totals['han'], 2) . '</td>';
             echo '<td class="num">' . number_format($totals['avi'], 2) . '</td>';

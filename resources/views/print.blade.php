@@ -74,11 +74,11 @@
                     $rates = ['acc' => 0, 'air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0];
                     if (isset($res['calculated_rates'])) {
                         $rates = $res['calculated_rates'];
-                        $grandTotals['acc'] += $rates['acc'];
-                        $grandTotals['air'] += $rates['air'];
-                        $grandTotals['han'] += $rates['han'];
-                        $grandTotals['avi'] += $rates['avi'];
-                        $grandTotals['env'] += $rates['env'];
+                        $grandTotals['acc'] += floor($rates['acc']);
+                        $grandTotals['air'] += floor($rates['air']);
+                        $grandTotals['han'] += floor($rates['han']);
+                        $grandTotals['avi'] += floor($rates['avi']);
+                        $grandTotals['env'] += floor($rates['env']);
                     }
 
                     // Build per-date accommodation breakdown
