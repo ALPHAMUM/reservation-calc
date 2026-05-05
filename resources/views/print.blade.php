@@ -70,7 +70,14 @@
                     if ($isFirst) $lastResNo = $resNo;
 
                     $rates = ['acc' => 0, 'air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0];
-                    if (isset($res['rate']) && is_array($res['rate'])) {
+                    if (isset($res['calculated_rates'])) {
+                        $rates = $res['calculated_rates'];
+                        $grandTotals['acc'] += $rates['acc'];
+                        $grandTotals['air'] += $rates['air'];
+                        $grandTotals['han'] += $rates['han'];
+                        $grandTotals['avi'] += $rates['avi'];
+                        $grandTotals['env'] += $rates['env'];
+                    } elseif (isset($res['rate']) && is_array($res['rate'])) {
                         foreach($res['rate'] as $r) {
                             $val = (float)($r['val'] ?? 0);
                             $desc = strtolower($r['desc'] ?? '');

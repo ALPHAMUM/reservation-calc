@@ -134,8 +134,9 @@
     <div class="container">
         <header class="animate-in">
             <div class="logo">Reservation</div>
-            <nav>
+            <nav style="display: flex; gap: 1rem;">
                 <a href="{{ route('dashboard') }}" class="btn" style="color: var(--text)">Dashboard</a>
+                <a href="{{ url('/setup') }}" class="btn" style="color: var(--text); border: 1px solid var(--border);">Setup</a>
             </nav>
         </header>
 

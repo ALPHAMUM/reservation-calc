@@ -293,7 +293,9 @@
                                 <td>
                                     @php
                                         $total = 0;
-                                        if (isset($res['rate']) && is_array($res['rate'])) {
+                                        if (isset($res['calculated_rates'])) {
+                                            $total = array_sum($res['calculated_rates']);
+                                        } elseif (isset($res['rate']) && is_array($res['rate'])) {
                                             foreach($res['rate'] as $r) $total += (float)($r['val'] ?? 0);
                                         }
                                     @endphp

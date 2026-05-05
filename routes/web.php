@@ -12,3 +12,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', [ReservationController::class, 'index'])->name('dashboard');
 Route::get('/export', [ReservationController::class, 'export'])->name('export');
 Route::get('/print', [ReservationController::class, 'print'])->name('print');
+
+use App\Http\Controllers\SettingsController;
+Route::get('/setup', [SettingsController::class, 'index'])->name('setup');
+Route::post('/setup', [SettingsController::class, 'update']);

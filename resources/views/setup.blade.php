@@ -1,0 +1,280 @@
+@extends('layouts.app')
+
+@section('styles')
+<style>
+    .setup-section {
+        background: var(--card-bg);
+        border: 1px solid var(--border);
+        border-radius: 1rem;
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+    
+    .setup-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+        color: var(--primary);
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 0.5rem;
+    }
+
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-label {
+        display: block;
+        margin-bottom: 0.5rem;
+        color: var(--text-muted);
+        font-size: 0.875rem;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 0.75rem;
+        background: var(--glass-bg);
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+        color: white;
+        font-family: inherit;
+    }
+
+    .form-control:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    }
+
+    .checkbox-wrap {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+    }
+
+    .peak-period-row {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+        align-items: flex-end;
+    }
+
+    .btn-sm {
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+    }
+
+    .alert-success {
+        background: rgba(16, 185, 129, 0.1);
+        color: #34d399;
+        border-color: rgba(16, 185, 129, 0.2);
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin-bottom: 2rem;
+    }
+</style>
+@endsection
+
+@section('content')
+<div class="animate-in" style="animation-delay: 0.1s">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h2 style="font-size: 1.5rem; font-weight: 600;">Calculator Setup & Configuration</h2>
+    </div>
+
+    @if(session('success'))
+        <div class="alert-success">
+            {{ session('success') }}
+        </div>
+    @endif
+
+    <form action="{{ url('/setup') }}" method="POST">
+        @csrf
+
+        <!-- Base Rates -->
+        <div class="setup-section">
+            <h3 class="setup-title">Base Airfare Rates</h3>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label class="form-label">Member Airfare Rate (₱)</label>
+                    <input type="number" step="0.01" name="base_rates[member]" class="form-control" value="{{ $settings['base_rates']['member'] ?? 4200 }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Guest Airfare Rate (₱)</label>
+                    <input type="number" step="0.01" name="base_rates[guest]" class="form-control" value="{{ $settings['base_rates']['guest'] ?? 6200 }}">
+                </div>
+            </div>
+            <div class="checkbox-wrap">
+                <input type="checkbox" id="airfare_free" name="infants[airfare_free]" {{ !empty($settings['infants']['airfare_free']) ? 'checked' : '' }}>
+                <label for="airfare_free" class="form-label" style="margin:0">Infants (≤23 mos) travel free of charge</label>
+            </div>
+        </div>
+
+        <!-- Promo Rates -->
+        <div class="setup-section">
+            <h3 class="setup-title">Promo Rates</h3>
+            <div class="checkbox-wrap" style="margin-bottom: 1.5rem;">
+                <input type="checkbox" id="promo_active" name="promo_rates[active]" {{ !empty($settings['promo_rates']['active']) ? 'checked' : '' }}>
+                <label for="promo_active" class="form-label" style="margin:0">Enable Promo Rates</label>
+            </div>
+            
+            <div class="grid-2">
+                <div class="form-group">
+                    <label class="form-label">Promo Member Rate (₱)</label>
+                    <input type="number" step="0.01" name="promo_rates[member]" class="form-control" value="{{ $settings['promo_rates']['member'] ?? 4200 }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Promo Guest Rate (₱)</label>
+                    <input type="number" step="0.01" name="promo_rates[guest]" class="form-control" value="{{ $settings['promo_rates']['guest'] ?? 6200 }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Promo Start Date</label>
+                    <input type="date" name="promo_rates[start_date]" class="form-control" value="{{ $settings['promo_rates']['start_date'] ?? '' }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Promo End Date</label>
+                    <input type="date" name="promo_rates[end_date]" class="form-control" value="{{ $settings['promo_rates']['end_date'] ?? '' }}">
+                </div>
+            </div>
+
+            <div style="margin-top: 1.5rem;">
+                <label class="form-label">Peak Periods (Promo rates do not apply during these dates)</label>
+                <div id="peak-periods-container">
+                    @forelse($settings['promo_rates']['peak_periods'] ?? [] as $period)
+                        <div class="peak-period-row">
+                            <div style="flex:1">
+                                <input type="date" name="peak_periods[start][]" class="form-control" value="{{ $period['start'] }}">
+                            </div>
+                            <div style="color:var(--text-muted)">to</div>
+                            <div style="flex:1">
+                                <input type="date" name="peak_periods[end][]" class="form-control" value="{{ $period['end'] }}">
+                            </div>
+                            <button type="button" class="btn btn-primary btn-sm" onclick="this.parentElement.remove()" style="background: #ef4444">Remove</button>
+                        </div>
+                    @empty
+                        <div class="peak-period-row">
+                            <div style="flex:1"><input type="date" name="peak_periods[start][]" class="form-control"></div>
+                            <div style="color:var(--text-muted)">to</div>
+                            <div style="flex:1"><input type="date" name="peak_periods[end][]" class="form-control"></div>
+                            <button type="button" class="btn btn-primary btn-sm" onclick="this.parentElement.remove()" style="background: #ef4444">Remove</button>
+                        </div>
+                    @endforelse
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" onclick="addPeakPeriod()" style="margin-top:0.5rem; background: rgba(255,255,255,0.1)">+ Add Peak Period</button>
+            </div>
+        </div>
+
+        <!-- Discounts & VAT -->
+        <div class="setup-section">
+            <h3 class="setup-title">Discounts & VAT</h3>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label class="form-label">Standard VAT Rate (%)</label>
+                    <input type="number" step="0.1" name="discounts[vat_rate]" class="form-control" value="{{ $settings['discounts']['vat_rate'] ?? 12 }}">
+                </div>
+            </div>
+            <div class="checkbox-wrap">
+                <input type="checkbox" id="remove_vat" name="discounts[sc_pwd][remove_vat]" {{ !empty($settings['discounts']['sc_pwd']['remove_vat']) ? 'checked' : '' }}>
+                <label for="remove_vat" class="form-label" style="margin:0">Remove VAT for Senior Citizens / PWDs</label>
+            </div>
+            <div class="form-group" style="margin-top: 1rem; max-width: 50%;">
+                <label class="form-label">Additional SC/PWD Discount (%) [Default: 0 if rates already discounted]</label>
+                <input type="number" step="0.1" name="discounts[sc_pwd][additional_discount_percent]" class="form-control" value="{{ $settings['discounts']['sc_pwd']['additional_discount_percent'] ?? 0 }}">
+            </div>
+        </div>
+
+        <!-- Additional Fees -->
+        <div class="setup-section">
+            <h3 class="setup-title">Additional Fees</h3>
+            
+            <div class="form-group" style="padding-bottom: 1.5rem; border-bottom: 1px solid var(--border);">
+                <label class="form-label" style="font-size: 1rem; color: white;">Hangar Fee</label>
+                <div class="grid-2">
+                    <div>
+                        <label class="form-label">Amount (₱)</label>
+                        <input type="number" step="0.01" name="fees[hangar][amount]" class="form-control" value="{{ $settings['fees']['hangar']['amount'] ?? 400 }}">
+                    </div>
+                    <div>
+                        <label class="form-label">Apply To</label>
+                        @php $hangarApplies = $settings['fees']['hangar']['apply_to'] ?? ['member', 'guest']; @endphp
+                        <div class="checkbox-wrap"><input type="checkbox" name="fees[hangar][apply_to][]" value="member" {{ in_array('member', $hangarApplies) ? 'checked' : '' }}> Members</div>
+                        <div class="checkbox-wrap"><input type="checkbox" name="fees[hangar][apply_to][]" value="guest" {{ in_array('guest', $hangarApplies) ? 'checked' : '' }}> Guests</div>
+                        <div class="checkbox-wrap"><input type="checkbox" name="fees[hangar][apply_to][]" value="infant" {{ in_array('infant', $hangarApplies) ? 'checked' : '' }}> Infants</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group" style="padding-bottom: 1.5rem; border-bottom: 1px solid var(--border);">
+                <label class="form-label" style="font-size: 1rem; color: white;">Aviation Operational Fee (AOF)</label>
+                <div class="grid-2">
+                    <div>
+                        <label class="form-label">Amount (₱)</label>
+                        <input type="number" step="0.01" name="fees[aof][amount]" class="form-control" value="{{ $settings['fees']['aof']['amount'] ?? 2000 }}">
+                        <label class="form-label" style="margin-top:1rem;">Active Months</label>
+                        <select name="fees[aof][active_months][]" class="form-control" multiple style="height: 120px;">
+                            @php $aofMonths = $settings['fees']['aof']['active_months'] ?? [4]; @endphp
+                            @foreach(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] as $i => $m)
+                                <option value="{{ $i+1 }}" {{ in_array($i+1, $aofMonths) ? 'selected' : '' }}>{{ $m }}</option>
+                            @endforeach
+                        </select>
+                        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Hold Ctrl/Cmd to select multiple.</div>
+                    </div>
+                    <div>
+                        <label class="form-label">Apply To</label>
+                        @php $aofApplies = $settings['fees']['aof']['apply_to'] ?? ['member', 'guest']; @endphp
+                        <div class="checkbox-wrap"><input type="checkbox" name="fees[aof][apply_to][]" value="member" {{ in_array('member', $aofApplies) ? 'checked' : '' }}> Members</div>
+                        <div class="checkbox-wrap"><input type="checkbox" name="fees[aof][apply_to][]" value="guest" {{ in_array('guest', $aofApplies) ? 'checked' : '' }}> Guests</div>
+                        <div class="checkbox-wrap"><input type="checkbox" name="fees[aof][apply_to][]" value="infant" {{ in_array('infant', $aofApplies) ? 'checked' : '' }}> Infants</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group" style="padding-top: 1.5rem;">
+                <label class="form-label" style="font-size: 1rem; color: white;">Environmental Fee</label>
+                <div class="grid-2">
+                    <div>
+                        <label class="form-label">Amount (₱)</label>
+                        <input type="number" step="0.01" name="fees[environmental][amount]" class="form-control" value="{{ $settings['fees']['environmental']['amount'] ?? 200 }}">
+                    </div>
+                    <div>
+                        <label class="form-label">Apply To</label>
+                        @php $envApplies = $settings['fees']['environmental']['apply_to'] ?? ['guest']; @endphp
+                        <div class="checkbox-wrap"><input type="checkbox" name="fees[environmental][apply_to][]" value="member" {{ in_array('member', $envApplies) ? 'checked' : '' }}> Members</div>
+                        <div class="checkbox-wrap"><input type="checkbox" name="fees[environmental][apply_to][]" value="guest" {{ in_array('guest', $envApplies) ? 'checked' : '' }}> Guests</div>
+                        <div class="checkbox-wrap"><input type="checkbox" name="fees[environmental][apply_to][]" value="infant" {{ in_array('infant', $envApplies) ? 'checked' : '' }}> Infants</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div style="text-align: right;">
+            <button type="submit" class="btn btn-primary" style="font-size: 1.125rem; padding: 1rem 2.5rem; background: var(--success);">
+                Save Setup Configuration
+            </button>
+        </div>
+    </form>
+</div>
+@endsection
+
+@section('scripts')
+<script>
+    function addPeakPeriod() {
+        const container = document.getElementById('peak-periods-container');
+        const row = document.createElement('div');
+        row.className = 'peak-period-row';
+        row.innerHTML = `
+            <div style="flex:1"><input type="date" name="peak_periods[start][]" class="form-control"></div>
+            <div style="color:var(--text-muted)">to</div>
+            <div style="flex:1"><input type="date" name="peak_periods[end][]" class="form-control"></div>
+            <button type="button" class="btn btn-primary btn-sm" onclick="this.parentElement.remove()" style="background: #ef4444">Remove</button>
+        `;
+        container.appendChild(row);
+    }
+</script>
+@endsection

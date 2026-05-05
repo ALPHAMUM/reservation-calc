@@ -37,10 +37,17 @@ class ReservationController extends Controller
                 $viewType = 'detail';
                 $allConfIds = array_filter(explode(',', $resNoList));
                 $chunks = array_chunk($allConfIds, 25);
+                $calculator = app(\App\Services\RateCalculatorService::class);
                 foreach ($chunks as $chunk) {
                     $resp = Http::withHeaders(['Authorization' => $apiKey])->withoutVerifying()
                         ->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
-                    if ($resp->successful()) $reservations = array_merge($reservations, $resp->json()['msg'] ?? []);
+                    if ($resp->successful()) {
+                        $msgs = $resp->json()['msg'] ?? [];
+                        foreach ($msgs as &$res) {
+                            $res['calculated_rates'] = $calculator->calculatePassengerRates($res);
+                        }
+                        $reservations = array_merge($reservations, $msgs);
+                    }
                 }
                 $total = count($reservations);
                 $pagedReservations = array_slice($reservations, ($page - 1) * $perPage, $perPage);
@@ -100,15 +107,12 @@ class ReservationController extends Controller
                         $resNo = $res['resNo'] ?? $res['conf'] ?? '';
                         $isFirst = ($resNo !== $last);
                         if ($isFirst) $last = $resNo;
-                        $rates = ['acc' => 0, 'air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0];
-                        foreach ($res['rate'] ?? [] as $r) {
-                            $v = (float)($r['val'] ?? 0); $d = strtolower($r['desc'] ?? '');
-                            if (str_contains($d, 'airfare')) { $rates['air'] += $v; $totals['air'] += $v; }
-                            elseif (str_contains($d, 'hangar')) { $rates['han'] += $v; $totals['han'] += $v; }
-                            elseif (str_contains($d, 'aviation')) { $rates['avi'] += $v; $totals['avi'] += $v; }
-                            elseif (str_contains($d, 'environmental')) { $rates['env'] += $v; $totals['env'] += $v; }
-                            else { $rates['acc'] += $v; $totals['acc'] += $v; }
-                        }
+                        $rates = app(\App\Services\RateCalculatorService::class)->calculatePassengerRates($res);
+                        $totals['acc'] += $rates['acc'];
+                        $totals['air'] += $rates['air'];
+                        $totals['han'] += $rates['han'];
+                        $totals['avi'] += $rates['avi'];
+                        $totals['env'] += $rates['env'];
                         echo '<tr>';
                         echo '<td>' . ($isFirst ? $resNo : '') . '</td>';
                         echo '<td>' . ($isFirst ? ($res['roomtyp'] ?? $res['roomType'] ?? '') : '') . '</td>';
@@ -151,9 +155,16 @@ class ReservationController extends Controller
         if (empty($ids)) return back()->with('error', 'No data to print.');
 
         $reservations = [];
+        $calculator = app(\App\Services\RateCalculatorService::class);
         foreach (array_chunk(array_slice($ids, 0, 1000), 50) as $chunk) {
             $resp = Http::withHeaders(['Authorization' => $apiKey])->withoutVerifying()->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
-            if ($resp->successful()) $reservations = array_merge($reservations, $resp->json()['msg'] ?? []);
+            if ($resp->successful()) {
+                $msgs = $resp->json()['msg'] ?? [];
+                foreach ($msgs as &$res) {
+                    $res['calculated_rates'] = $calculator->calculatePassengerRates($res);
+                }
+                $reservations = array_merge($reservations, $msgs);
+            }
         }
         return view('print', compact('reservations'));
     }
