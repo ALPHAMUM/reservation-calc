@@ -30,7 +30,10 @@ class RateCalculatorService
         $isMember = in_array($gstType, ['member', 'spouse', 'dependent']); // Generic check
         if ($gstType === 'member') $isMember = true; // explicitly
 
-        $isInfant = strtolower(trim((string)($passenger['pup'] ?? ''))) === 'y';
+        // TODO: Infant (pup) logic temporarily disabled - data being verified
+        // $isInfant = strtolower(trim((string)($passenger['pup'] ?? ''))) === 'y';
+        $isInfant = false; // Force all passengers as non-infant for now
+
         $privCardStr = strtolower(trim((string)($passenger['privCard'] ?? '')));
         $hasPrivCard = !empty($privCardStr) && !in_array($privCardStr, ['n', 'no', 'false', '0', 'none', 'null']);
         $arrDate = $passenger['arrdt'] ?? $passenger['arrDt'] ?? null;
