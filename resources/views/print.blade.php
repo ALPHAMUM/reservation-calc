@@ -186,7 +186,7 @@
                     <td>{{ $res['age'] ?? '' }}</td>
                     <td>{{ $res['dateOfBirth'] ?? '' }}</td>
                     <td>{{ $res['nationality'] ?? '' }}</td>
-                    <td>{{ $res['gstType'] ?? '' }}{{ $isValidCard ? '(' . $privCard . ')' : '' }}</td>
+                    <td>{{ $res['gstType'] ?? '' }}{{ $isValidCard ? ' (' . $privCard . ')' : '' }}</td>
                     <td>{{ $res['arrdt'] ?? $res['arrDt'] ?? '' }}</td>
                     <td>{{ $res['depdt'] ?? $res['depDt'] ?? '' }}</td>
                     <td class="acc">{{ $accDisplay ?? '' }}</td>
