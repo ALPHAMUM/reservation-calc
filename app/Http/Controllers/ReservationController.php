@@ -173,9 +173,14 @@ class ReservationController extends Controller
             // Header Row 2: date sub-columns + TOTAL
             echo '<tr class="hdr">';
             foreach ($dateCols as $d) {
-                // $dt = new DateTime($d);
-                $dt = new \DateTime($d);
-                echo '<td class="dh">' . $dt->format('M-d, D') . '</td>';
+                $label = $d;
+                try {
+                    if (!str_contains($d, ' to ')) {
+                        $dt = new \DateTime($d);
+                        $label = $dt->format('M-d, D');
+                    }
+                } catch (\Exception $e) {}
+                echo '<td class="dh">' . htmlspecialchars($label) . '</td>';
             }
             echo '</tr>';
 

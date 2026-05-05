@@ -165,8 +165,16 @@
                         $rDate = $r['date'] ?? '';
                         $rVal = (float) ($r['val'] ?? 0);
                         if ($rDate) {
-                            $dt = new \DateTime($rDate);
-                            $accLines[] = $dt->format('Y-m-d') . ' (' . $dt->format('D') . '): ' . number_format($rVal, 2);
+                            if (str_contains($rDate, ' to ')) {
+                                $accLines[] = $rDate . ': ' . number_format($rVal, 2);
+                            } else {
+                                try {
+                                    $dt = new \DateTime($rDate);
+                                    $accLines[] = $dt->format('Y-m-d') . ' (' . $dt->format('D') . '): ' . number_format($rVal, 2);
+                                } catch (\Exception $e) {
+                                    $accLines[] = $rDate . ': ' . number_format($rVal, 2);
+                                }
+                            }
                         }
                     }
                     $accDisplay = implode("\n", $accLines);
