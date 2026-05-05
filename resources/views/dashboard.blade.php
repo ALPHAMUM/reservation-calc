@@ -171,6 +171,45 @@
         background-color: rgba(255, 255, 255, 0.1) !important;
         transform: translateY(-2px);
     }
+
+    /* Custom Checkbox Styling */
+    .custom-checkbox {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 1.25rem;
+        height: 1.25rem;
+        border: 2px solid var(--border);
+        border-radius: 0.375rem;
+        background-color: rgba(15, 23, 42, 0.3);
+        cursor: pointer;
+        position: relative;
+        transition: all 0.2s ease;
+        display: inline-block;
+        vertical-align: middle;
+        margin: 0;
+    }
+
+    .custom-checkbox:hover {
+        border-color: var(--primary);
+        background-color: rgba(99, 102, 241, 0.1);
+    }
+
+    .custom-checkbox:checked {
+        background-color: var(--primary);
+        border-color: var(--primary);
+    }
+
+    .custom-checkbox:checked::after {
+        content: '';
+        position: absolute;
+        left: 32%;
+        top: 15%;
+        width: 30%;
+        height: 50%;
+        border: solid white;
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg);
+    }
 </style>
 @endsection
 
@@ -257,6 +296,7 @@
             <table id="resTable" class="table table-dark table-hover">
                 <thead>
                     <tr>
+                        <th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllRes" class="custom-checkbox"></th>
                         <th>Res No</th>
                         <th>Guest Name</th>
                         @if($viewType === 'detail')
@@ -274,6 +314,11 @@
                     @foreach($reservations as $res)
                         @php $currentResNo = $res['resNo'] ?? $res['conf'] ?? null; @endphp
                         <tr>
+                            <td style="text-align: center;">
+                                @if($currentResNo)
+                                    <input type="checkbox" class="res-checkbox custom-checkbox" value="{{ $currentResNo }}" {{ in_array($currentResNo, array_filter(explode(',', request('resnolist', '')))) ? 'checked' : '' }}>
+                                @endif
+                            </td>
                             <td>
                                 @if($currentResNo)
                                     <a href="{{ route('dashboard', ['resnolist' => $currentResNo]) }}" style="text-decoration: none;">
@@ -389,6 +434,49 @@
 
         $('input[name], select[name]').on('change input', updateLinks);
         updateLinks(); // Initialize
+
+        // Checkbox logic for selective export
+        function syncResNoList() {
+            let listInput = $('input[name="resnolist"]');
+            let currentList = listInput.val().split(',').map(s => s.trim()).filter(s => s !== '');
+            let currentSet = new Set(currentList);
+
+            $('.res-checkbox').each(function() {
+                let val = $(this).val();
+                if ($(this).is(':checked')) {
+                    currentSet.add(val);
+                } else {
+                    currentSet.delete(val);
+                }
+            });
+
+            listInput.val(Array.from(currentSet).join(','));
+            updateLinks();
+        }
+
+        // When a checkbox is toggled, update the input
+        $('.res-checkbox').on('change', function() {
+            syncResNoList();
+            if (!$(this).is(':checked')) {
+                $('#selectAllRes').prop('checked', false);
+            }
+        });
+
+        // "Select All" toggle
+        $('#selectAllRes').on('change', function() {
+            let isChecked = $(this).is(':checked');
+            $('.res-checkbox').prop('checked', isChecked);
+            syncResNoList();
+        });
+
+        // When the input is typed into, update the checkboxes
+        $('input[name="resnolist"]').on('input change', function() {
+            let currentList = $(this).val().split(',').map(s => s.trim()).filter(s => s !== '');
+            $('.res-checkbox').each(function() {
+                $(this).prop('checked', currentList.includes($(this).val()));
+            });
+            updateLinks();
+        });
     });
 </script>
 @endsection
