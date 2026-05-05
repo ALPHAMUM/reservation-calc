@@ -94,7 +94,7 @@ class ReservationController extends Controller
         return response()->stream(function() use ($ids, $apiKey) {
             echo '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
             echo '<head><meta http-equiv="Content-type" content="text/html;charset=utf-8" />';
-            echo '<style>td { vertical-align: middle; border: 0.5pt solid #ccc; } .header { background-color: #e2e8f0; font-weight: bold; } .num { mso-number-format:"\#\,\#\#0\.00"; }</style></head><body><table border="1">';
+            echo '<style>td { vertical-align: top; border: 0.5pt solid #ccc; } .header { background-color: #e2e8f0; font-weight: bold; } .num { mso-number-format:"\#\,\#\#0\.00"; } .acc { white-space: pre-line; vertical-align: top; }</style></head><body><table border="1">';
             echo '<tr class="header"><td>RSVN#</td><td>VILLAGE</td><td>OCCUPANTS</td><td>RELATION</td><td>CHECK-IN</td><td>CHECK-OUT</td><td>ACCOMMODATION</td><td>AIRFARE</td><td>HANGAR</td><td>AVIATION</td><td>ENVIRONMENTAL</td></tr>';
 
             $totals = ['acc' => 0, 'air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0];
@@ -113,6 +113,18 @@ class ReservationController extends Controller
                         $totals['han'] += $rates['han'];
                         $totals['avi'] += $rates['avi'];
                         $totals['env'] += $rates['env'];
+                        // Build per-date accommodation breakdown
+                        $accLines = [];
+                        foreach ($res['rate'] ?? [] as $r) {
+                            $rDate = $r['date'] ?? '';
+                            $rVal  = (float)($r['val'] ?? 0);
+                            if ($rDate) {
+                                $dt = new DateTime($rDate);
+                                $accLines[] = $dt->format('Y-m-d') . ' (' . $dt->format('D') . '): ' . number_format($rVal, 2);
+                            }
+                        }
+                        $accDisplay = implode('&#10;', $accLines); // Excel line break in cell
+
                         echo '<tr>';
                         echo '<td>' . ($isFirst ? $resNo : '') . '</td>';
                         echo '<td>' . ($isFirst ? ($res['roomtyp'] ?? $res['roomType'] ?? '') : '') . '</td>';
@@ -120,7 +132,7 @@ class ReservationController extends Controller
                         echo '<td>' . ($res['gstType'] ?? '') . '</td>';
                         echo '<td>' . ($res['arrdt'] ?? $res['arrDt'] ?? '') . '</td>';
                         echo '<td>' . ($res['depdt'] ?? $res['depDt'] ?? '') . '</td>';
-                        echo '<td class="num">' . number_format($rates['acc'], 2) . '</td>';
+                        echo '<td class="acc" style="white-space:pre-wrap">' . $accDisplay . '</td>';
                         echo '<td class="num">' . number_format($rates['air'], 2) . '</td>';
                         echo '<td class="num">' . number_format($rates['han'], 2) . '</td>';
                         echo '<td class="num">' . number_format($rates['avi'], 2) . '</td>';
