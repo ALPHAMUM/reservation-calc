@@ -196,29 +196,16 @@
             <h2 style="font-size: 1.25rem; font-weight: 600; color: var(--text)">
                 {{ $viewType === 'list' ? 'Reservation Summary' : 'Detailed Records' }}
             </h2>
-            @if($viewType === 'detail' && ($fromDate || $toDate))
-                <a href="{{ route('dashboard', ['fromdate' => $fromDate, 'todate' => $toDate]) }}" class="btn btn-primary" style="background: rgba(255,255,255,0.1); font-size: 0.875rem;">
+            @if($viewType === 'detail')
+                <a href="javascript:void(0);" onclick="window.history.back();" class="btn btn-primary" style="background: rgba(255,255,255,0.1); font-size: 0.875rem;">
                     &larr; Back to List
                 </a>
             @endif
         </div>
 
-        <form action="{{ route('dashboard') }}" method="GET" class="search-box">
-            @if($viewType !== 'detail' || !$resNoList)
-                <div class="input-group">
-                    <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">From Date</label>
-                    <input type="date" name="fromdate" value="{{ $fromDate }}">
-                </div>
-                <div class="input-group">
-                    <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">To Date</label>
-                    <input type="date" name="todate" value="{{ $toDate }}">
-                </div>
-            @endif
-            <div class="input-group" style="flex: 2;">
-                <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Res No List</label>
-                <input type="text" name="resnolist" value="{{ $resNoList }}" placeholder="114481,114475...">
-            </div>
-            <div style="display: flex; align-items: flex-end; gap: 1rem;">
+        <form action="{{ route('dashboard') }}" method="GET" class="search-box" style="flex-direction: column;">
+            <!-- First Row: Show Selection and Actions -->
+            <div style="display: flex; justify-content: space-between; align-items: flex-end; width: 100%; gap: 1rem;">
                 <div class="input-group" style="flex: 0 0 100px; min-width: 100px;">
                     <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Show</label>
                     <select name="per_page" onchange="this.form.submit()">
@@ -228,14 +215,32 @@
                         <option value="100" {{ request('per_page') == 100 ? 'selected' : '' }}>100</option>
                     </select>
                 </div>
-                <button type="submit" class="btn btn-primary">Refresh Data</button>
                 <div style="display: flex; gap: 0.5rem;">
+                    <button type="submit" class="btn btn-primary">Refresh Data</button>
                     <a href="{{ route('export', ['fromdate' => $fromDate, 'todate' => $toDate, 'resnolist' => $resNoList]) }}" class="btn btn-primary btn-export-excel" style="background: var(--success)">
                         Export Excel
                     </a>
                     <a href="{{ route('print', ['fromdate' => $fromDate, 'todate' => $toDate, 'resnolist' => $resNoList]) }}" target="_blank" class="btn btn-primary btn-export-pdf" style="background: #ef4444">
                         Export PDF
                     </a>
+                </div>
+            </div>
+
+            <!-- Second Row: Filters -->
+            <div style="display: flex; width: 100%; gap: 1rem; flex-wrap: wrap;">
+                @if($viewType !== 'detail' || !$resNoList)
+                    <div class="input-group">
+                        <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">From Date</label>
+                        <input type="date" name="fromdate" value="{{ $fromDate }}">
+                    </div>
+                    <div class="input-group">
+                        <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">To Date</label>
+                        <input type="date" name="todate" value="{{ $toDate }}">
+                    </div>
+                @endif
+                <div class="input-group" style="flex: 2;">
+                    <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Res No List</label>
+                    <input type="text" name="resnolist" value="{{ $resNoList }}" placeholder="114481,114475...">
                 </div>
             </div>
         </form>
@@ -258,7 +263,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse($reservations as $res)
+                    @foreach($reservations as $res)
                         @php $currentResNo = $res['resNo'] ?? $res['conf'] ?? null; @endphp
                         <tr>
                             <td>
@@ -299,9 +304,7 @@
                                 <td>{{ $res['depdt'] ?? $res['depDt'] ?? '' }}</td>
                             @endif
                         </tr>
-                    @empty
-                        <tr><td colspan="6" style="text-align: center; padding: 2rem;">No data found.</td></tr>
-                    @endforelse
+                    @endforeach
                 </tbody>
             </table>
         </div>
@@ -319,16 +322,16 @@
 <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
 <script>
     $(document).ready(function() {
-        const table = $('#resTable').DataTable({
-            "paging": false,
-            "info": false,
-            "searching": false,
-            "ordering": true,
-            "order": [],
-            "language": {
-                "search": "Filter current page:"
-            }
-        });
+        if (!$.fn.DataTable.isDataTable('#resTable')) {
+            $('#resTable').DataTable({
+                "paging": false,
+                "info": false,
+                "searching": false,
+                "ordering": true,
+                "order": [],
+                "columnDefs": [{ "orderable": false, "targets": "_all" }]
+            });
+        }
 
         // Function to update export/print links based on current inputs
         function updateLinks() {
