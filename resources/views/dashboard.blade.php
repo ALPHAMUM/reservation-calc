@@ -296,7 +296,9 @@
             <table id="resTable" class="table table-dark table-hover">
                 <thead>
                     <tr>
-                        <th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllRes" class="custom-checkbox"></th>
+                        @if($viewType !== 'detail')
+                            <th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllRes" class="custom-checkbox"></th>
+                        @endif
                         <th>Res No</th>
                         <th>Guest Name</th>
                         @if($viewType === 'detail')
@@ -314,16 +316,22 @@
                     @foreach($reservations as $res)
                         @php $currentResNo = $res['resNo'] ?? $res['conf'] ?? null; @endphp
                         <tr>
-                            <td style="text-align: center;">
-                                @if($currentResNo)
-                                    <input type="checkbox" class="res-checkbox custom-checkbox" value="{{ $currentResNo }}" {{ in_array($currentResNo, array_filter(explode(',', request('resnolist', '')))) ? 'checked' : '' }}>
-                                @endif
-                            </td>
+                            @if($viewType !== 'detail')
+                                <td style="text-align: center;">
+                                    @if($currentResNo)
+                                        <input type="checkbox" class="res-checkbox custom-checkbox" value="{{ $currentResNo }}" {{ in_array($currentResNo, array_filter(explode(',', request('resnolist', '')))) ? 'checked' : '' }}>
+                                    @endif
+                                </td>
+                            @endif
                             <td>
                                 @if($currentResNo)
-                                    <a href="{{ route('dashboard', ['resnolist' => $currentResNo]) }}" style="text-decoration: none;">
+                                    @if($viewType === 'detail')
                                         <span class="res-no">#{{ $currentResNo }}</span>
-                                    </a>
+                                    @else
+                                        <a href="{{ route('dashboard', ['resnolist' => $currentResNo]) }}" style="text-decoration: none;">
+                                            <span class="res-no">#{{ $currentResNo }}</span>
+                                        </a>
+                                    @endif
                                 @else
                                     <span class="res-no">N/A</span>
                                 @endif
