@@ -122,8 +122,8 @@
     @php
         // PASS 1: Collect all unique dates across all reservations
         $allDates = [];
-        foreach($reservations as $res) {
-            foreach($res['rate'] ?? [] as $r) {
+        foreach ($reservations as $res) {
+            foreach ($res['rate'] ?? [] as $r) {
                 $d = $r['date'] ?? '';
                 if ($d && !str_contains($d, ' to ')) {
                     $allDates[$d] = true;
@@ -133,7 +133,7 @@
         ksort($allDates);
         $dateCols = array_keys($allDates);
         $dateCount = count($dateCols);
-        
+
         $grandTotals = ['air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0];
         $dateTotals = array_fill_keys($dateCols, 0);
         $accGrandTotal = 0;
@@ -165,7 +165,8 @@
                         try {
                             $dt = new \DateTime($d);
                             $label = strtoupper($dt->format('M-d, D'));
-                        } catch(\Exception $e) {}
+                        } catch (\Exception $e) {
+                        }
                     @endphp
                     <th class="dh" style="font-size: 9px; min-width: 60px;">{{ $label }}</th>
                 @endforeach
@@ -194,10 +195,10 @@
 
                     // Index rates by date for this passenger
                     $rateMap = [];
-                    foreach($res['rate'] ?? [] as $r) {
+                    foreach ($res['rate'] ?? [] as $r) {
                         $d = $r['date'] ?? '';
                         if ($d) {
-                            $rateMap[$d] = (float)($r['val'] ?? 0);
+                            $rateMap[$d] = (float) ($r['val'] ?? 0);
                         }
                     }
                 @endphp
@@ -209,28 +210,28 @@
                     <td>{{ $res['age'] ?? '' }}</td>
                     <td>{{ $res['dateOfBirth'] ?? '' }}</td>
                     <td>{{ $res['nationality'] ?? '' }}</td>
+                    <td>{{ $res['gstType'] ?? '' }}{{ $isValidCard ? ' (' . $privCard . ')' : '' }}</td>
                     <td>{{ $res['arrdt'] ?? $res['arrDt'] ?? '' }}</td>
                     <td>{{ $res['depdt'] ?? $res['depDt'] ?? '' }}</td>
-                    
+
                     @php $passengerAccTotal = 0; @endphp
                     @foreach($dateCols as $d)
                         @php 
-                            $val = $rateMap[$d] ?? 0; 
+                                                $val = $rateMap[$d] ?? 0;
                             $valFloor = floor($val);
                             $dateTotals[$d] += $valFloor;
                             $passengerAccTotal += $valFloor;
                         @endphp
-                        <td class="num">{{ $val > 0 ? number_format($val, 2) : '' }}</td>
+                            <td class="num">{{ $val > 0 ? number_format($val, 2) : '' }}</td>
                     @endforeach
                     @php $accGrandTotal += $passengerAccTotal; @endphp
-
-                    <td class="num">{{ number_format($rates['air'], 2) }}</td>
-                    <td class="num">{{ number_format($rates['han'], 2) }}</td>
-                    <td class="num">{{ number_format($rates['avi'], 2) }}</td>
-                    <td class="num">{{ number_format($rates['env'], 2) }}</td>
-                </tr>
+                        <td class="num">{{ number_format($rates['air'], 2) }}</td>
+                        <td class="num">{{ number_format($rates['han'], 2) }}</td>
+                        <td class="num">{{ number_format($rates['avi'], 2) }}</td>
+                        <td class="num">{{ number_format($rates['env'], 2) }}</td>
+                    </tr>
             @endforeach
-        </tbody>
+    </tbody>
         <tfoot>
             <tr class="total-row">
                 <td colspan="9" style="text-align: right;">GRAND TOTALS:</td>
