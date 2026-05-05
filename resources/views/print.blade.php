@@ -120,6 +120,7 @@
                 <th>RSVN#</th>
                 <th>Village</th>
                 <th>Guest Name</th>
+                <th>Age</th>
                 <th>Relation</th>
                 <th>Check-In</th>
                 <th>Check-Out</th>
@@ -168,6 +169,7 @@
                     <td>{{ $isFirst ? $resNo : '' }}</td>
                     <td>{{ $isFirst ? ($res['roomtyp'] ?? $res['roomType'] ?? '') : '' }}</td>
                     <td>{{ $res['gstName'] ?? $res['guestName'] ?? '' }}</td>
+                    <td>{{ $res['age'] ?? '' }}</td>
                     <td>{{ $res['gstType'] ?? '' }}</td>
                     <td>{{ $res['arrdt'] ?? $res['arrDt'] ?? '' }}</td>
                     <td>{{ $res['depdt'] ?? $res['depDt'] ?? '' }}</td>
@@ -181,7 +183,7 @@
         </tbody>
         <tfoot>
             <tr class="total-row">
-                <td colspan="6" style="text-align: right;">GRAND TOTALS:</td>
+                <td colspan="7" style="text-align: right;">GRAND TOTALS:</td>
                 <td class="num">{{ number_format($grandTotals['acc'], 2) }}</td>
                 <td class="num">{{ number_format($grandTotals['air'], 2) }}</td>
                 <td class="num">{{ number_format($grandTotals['han'], 2) }}</td>

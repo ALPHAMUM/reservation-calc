@@ -44,6 +44,7 @@ class ReservationController extends Controller
                         ->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
                     if ($resp->successful()) {
                         $msgs = $resp->json()['msg'] ?? [];
+                        $this->consolidateRates($msgs);
                         foreach ($msgs as &$res) {
                             $res['calculated_rates'] = $calculator->calculatePassengerRates($res);
                         }
@@ -256,6 +257,7 @@ class ReservationController extends Controller
             $resp = Http::withHeaders(['Authorization' => $apiKey])->withoutVerifying()->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
             if ($resp->successful()) {
                 $msgs = $resp->json()['msg'] ?? [];
+                $this->consolidateRates($msgs);
                 foreach ($msgs as &$res) {
                     $res['calculated_rates'] = $calculator->calculatePassengerRates($res);
                 }
@@ -263,5 +265,44 @@ class ReservationController extends Controller
             }
         }
         return view('print', compact('reservations'));
+    }
+
+    private function consolidateRates(array &$msgs)
+    {
+        foreach ($msgs as &$res) {
+            if (isset($res['rate']) && is_array($res['rate']) && count($res['rate']) > 0) {
+                // Sort by date just in case it is out of order
+                usort($res['rate'], function ($a, $b) {
+                    return strcmp($a['date'] ?? '', $b['date'] ?? '');
+                });
+
+                $firstDate = reset($res['rate'])['date'] ?? null;
+                $originalDepDt = $res['depdt'] ?? $res['depDt'] ?? end($res['rate'])['date'] ?? '';
+
+                // Consolidate rate values, grouping by 'desc'
+                $grouped = [];
+                foreach ($res['rate'] as $r) {
+                    $desc = strtolower(trim($r['desc'] ?? ''));
+                    if (!isset($grouped[$desc])) {
+                        $grouped[$desc] = 0;
+                    }
+                    $grouped[$desc] += (float) ($r['val'] ?? 0);
+                }
+
+                $consolidated = [];
+                foreach ($grouped as $desc => $val) {
+                    $newItem = [
+                        'date' => $firstDate . ' to ' . $originalDepDt,
+                        'val' => $val
+                    ];
+                    if ($desc !== '') {
+                        $newItem['desc'] = $desc;
+                    }
+                    $consolidated[] = $newItem;
+                }
+
+                $res['rate'] = $consolidated;
+            }
+        }
     }
 }
