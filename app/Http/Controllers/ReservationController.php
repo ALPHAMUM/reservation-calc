@@ -89,13 +89,15 @@ class ReservationController extends Controller
             }
         }
 
-        if (empty($ids)) return back()->with('error', 'No data to export.');
+        if (empty($ids))
+            return back()->with('error', 'No data to export.');
 
-        if (ob_get_level()) ob_end_clean();
+        if (ob_get_level())
+            ob_end_clean();
         $filename = 'reservations_' . date('Ymd_His') . '.xls';
 
         // PASS 1: Load all data, collect unique dates and calculated rates
-        $allRows  = [];
+        $allRows = [];
         $allDates = [];
         $calculator = app(\App\Services\RateCalculatorService::class);
 
@@ -108,13 +110,13 @@ class ReservationController extends Controller
                     foreach ($res['rate'] ?? [] as $r) {
                         $d = $r['date'] ?? '';
                         if ($d) {
-                            $rateDates[$d] = (float)($r['val'] ?? 0);
-                            $allDates[$d]  = true;
+                            $rateDates[$d] = (float) ($r['val'] ?? 0);
+                            $allDates[$d] = true;
                         }
                     }
                     $allRows[] = [
-                        'res'       => $res,
-                        'rates'     => $calculator->calculatePassengerRates($res),
+                        'res' => $res,
+                        'rates' => $calculator->calculatePassengerRates($res),
                         'rateDates' => $rateDates,
                     ];
                 }
@@ -126,7 +128,7 @@ class ReservationController extends Controller
         $dateCount = count($dateCols);
 
         // PASS 2: Stream HTML Excel output
-        return response()->stream(function() use ($allRows, $dateCols, $dateCount) {
+        return response()->stream(function () use ($allRows, $dateCols, $dateCount) {
             echo '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
             echo '<head><meta http-equiv="Content-type" content="text/html;charset=utf-8" />';
             echo '<style>';
@@ -154,26 +156,28 @@ class ReservationController extends Controller
             // Header Row 2: date sub-columns + TOTAL
             echo '<tr class="hdr">';
             foreach ($dateCols as $d) {
-                $dt = new DateTime($d);
+                // $dt = new DateTime($d);
+                $dt = new \DateTime($d);
                 echo '<td class="dh">' . $dt->format('M-d, D') . '</td>';
             }
             echo '<td class="dh">TOTAL</td>';
             echo '</tr>';
 
             // Data rows
-            $totals     = ['air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0];
+            $totals = ['air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0];
             $dateTotals = array_fill_keys($dateCols, 0);
             $accGrandTotal = 0;
             $last = null;
 
             foreach ($allRows as $row) {
-                $res       = $row['res'];
-                $rates     = $row['rates'];
+                $res = $row['res'];
+                $rates = $row['rates'];
                 $rateDates = $row['rateDates'];
 
-                $resNo   = $res['resNo'] ?? $res['conf'] ?? '';
+                $resNo = $res['resNo'] ?? $res['conf'] ?? '';
                 $isFirst = ($resNo !== $last);
-                if ($isFirst) $last = $resNo;
+                if ($isFirst)
+                    $last = $resNo;
 
                 $totals['air'] += $rates['air'];
                 $totals['han'] += $rates['han'];
@@ -193,7 +197,7 @@ class ReservationController extends Controller
                     if (isset($rateDates[$d])) {
                         $val = $rateDates[$d];
                         echo '<td class="num">' . number_format($val, 2) . '</td>';
-                        $dateTotals[$d]    += $val;
+                        $dateTotals[$d] += $val;
                         $passengerAccTotal += $val;
                     } else {
                         echo '<td></td>';
