@@ -97,51 +97,136 @@ class ReservationController extends Controller
             ob_end_clean();
         $filename = 'reservations_' . date('Ymd_His') . '.xls';
 
-        return response()->stream(function () use ($ids, $apiKey) {
-            echo '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
-            echo '<head><meta http-equiv="Content-type" content="text/html;charset=utf-8" />';
-            echo '<style>td { vertical-align: middle; border: 0.5pt solid #ccc; } .header { background-color: #e2e8f0; font-weight: bold; } .num { mso-number-format:"\#\,\#\#0\.00"; }</style></head><body><table border="1">';
-            echo '<tr class="header"><td>RSVN#</td><td>VILLAGE</td><td>OCCUPANTS</td><td>AGE</td><td>RELATION</td><td>CHECK-IN</td><td>CHECK-OUT</td><td>ACCOMMODATION</td><td>AIRFARE</td><td>HANGAR</td><td>AVIATION</td><td>ENVIRONMENTAL</td></tr>';
+        // PASS 1: Load all data, collect unique dates and calculated rates
+        $allRows = [];
+        $allDates = [];
+        $calculator = app(\App\Services\RateCalculatorService::class);
 
-            $totals = ['acc' => 0, 'air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0];
-            $last = null;
-
-            foreach (array_chunk($ids, 40) as $chunk) {
-                $resp = Http::withHeaders(['Authorization' => $apiKey])->withoutVerifying()->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
-                if ($resp->successful()) {
-                    $msgs = $resp->json()['msg'] ?? [];
-                    $this->consolidateRates($msgs);
-                    foreach ($msgs as $res) {
-                        $resNo = $res['resNo'] ?? $res['conf'] ?? '';
-                        $isFirst = ($resNo !== $last);
-                        if ($isFirst)
-                            $last = $resNo;
-                        $rates = app(\App\Services\RateCalculatorService::class)->calculatePassengerRates($res);
-                        $totals['acc'] += $rates['acc'];
-                        $totals['air'] += $rates['air'];
-                        $totals['han'] += $rates['han'];
-                        $totals['avi'] += $rates['avi'];
-                        $totals['env'] += $rates['env'];
-                        echo '<tr>';
-                        echo '<td>' . ($isFirst ? $resNo : '') . '</td>';
-                        echo '<td>' . ($isFirst ? ($res['roomtyp'] ?? $res['roomType'] ?? '') : '') . '</td>';
-                        echo '<td>' . ($res['gstName'] ?? $res['guestName'] ?? '') . '</td>';
-                        echo '<td>' . ($res['age'] ?? '') . '</td>';
-                        echo '<td>' . ($res['gstType'] ?? '') . '</td>';
-                        echo '<td>' . ($res['arrdt'] ?? $res['arrDt'] ?? '') . '</td>';
-                        echo '<td>' . ($res['depdt'] ?? $res['depDt'] ?? '') . '</td>';
-                        echo '<td class="num">' . number_format($rates['acc'], 2) . '</td>';
-                        echo '<td class="num">' . number_format($rates['air'], 2) . '</td>';
-                        echo '<td class="num">' . number_format($rates['han'], 2) . '</td>';
-                        echo '<td class="num">' . number_format($rates['avi'], 2) . '</td>';
-                        echo '<td class="num">' . number_format($rates['env'], 2) . '</td>';
-                        echo '</tr>';
+        foreach (array_chunk($ids, 40) as $chunk) {
+            $resp = Http::withHeaders(['Authorization' => $apiKey])->withoutVerifying()
+                ->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
+            if ($resp->successful()) {
+                foreach ($resp->json()['msg'] ?? [] as $res) {
+                    $rateDates = [];
+                    foreach ($res['rate'] ?? [] as $r) {
+                        $d = $r['date'] ?? '';
+                        if ($d) {
+                            $rateDates[$d] = (float) ($r['val'] ?? 0);
+                            $allDates[$d] = true;
+                        }
                     }
-                    flush();
+                    $allRows[] = [
+                        'res' => $res,
+                        'rates' => $calculator->calculatePassengerRates($res),
+                        'rateDates' => $rateDates,
+                    ];
                 }
             }
-            echo '<tr style="font-weight:bold;background:#f8fafc"><td colspan="7" style="text-align:right">GRAND TOTALS:</td>';
-            echo '<td class="num">' . number_format($totals['acc'], 2) . '</td><td class="num">' . number_format($totals['air'], 2) . '</td><td class="num">' . number_format($totals['han'], 2) . '</td><td class="num">' . number_format($totals['avi'], 2) . '</td><td class="num">' . number_format($totals['env'], 2) . '</td></tr>';
+        }
+
+        ksort($allDates);
+        $dateCols = array_keys($allDates);
+        $dateCount = count($dateCols);
+
+        // PASS 2: Stream HTML Excel output
+        return response()->stream(function () use ($allRows, $dateCols, $dateCount) {
+            echo '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
+            echo '<head><meta http-equiv="Content-type" content="text/html;charset=utf-8" />';
+            echo '<style>';
+            echo 'td, th { border: 0.5pt solid #ccc; vertical-align: middle; font-size: 10pt; }';
+            echo '.hdr  { background-color: #e2e8f0; font-weight: bold; text-align: center; }';
+            echo '.dh   { background-color: #dbeafe; font-weight: bold; text-align: center; }';
+            echo '.num  { mso-number-format:"\#\,\#\#0\.00"; text-align: right; }';
+            echo '</style></head><body><table border="1">';
+
+            // Header Row 1: fixed cols (rowspan=2) + ACCOMMODATION (colspan = dateCount+1) + fee cols (rowspan=2)
+            echo '<tr class="hdr">';
+            echo '<td rowspan="2">RSVN#</td>';
+            echo '<td rowspan="2">VILLAGE</td>';
+            echo '<td rowspan="2">OCCUPANTS</td>';
+            echo '<td rowspan="2">RELATION</td>';
+            echo '<td rowspan="2">CHECK-IN</td>';
+            echo '<td rowspan="2">CHECK-OUT</td>';
+            echo '<td colspan="' . ($dateCount + 1) . '" class="dh">ACCOMMODATION</td>';
+            echo '<td rowspan="2">AIRFARE</td>';
+            echo '<td rowspan="2">HANGAR</td>';
+            echo '<td rowspan="2">AVIATION</td>';
+            echo '<td rowspan="2">ENVIRONMENTAL</td>';
+            echo '</tr>';
+
+            // Header Row 2: date sub-columns + TOTAL
+            echo '<tr class="hdr">';
+            foreach ($dateCols as $d) {
+                // $dt = new DateTime($d);
+                $dt = new \DateTime($d);
+                echo '<td class="dh">' . $dt->format('M-d, D') . '</td>';
+            }
+            echo '<td class="dh">TOTAL</td>';
+            echo '</tr>';
+
+            // Data rows
+            $totals = ['air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0];
+            $dateTotals = array_fill_keys($dateCols, 0);
+            $accGrandTotal = 0;
+            $last = null;
+
+            foreach ($allRows as $row) {
+                $res = $row['res'];
+                $rates = $row['rates'];
+                $rateDates = $row['rateDates'];
+
+                $resNo = $res['resNo'] ?? $res['conf'] ?? '';
+                $isFirst = ($resNo !== $last);
+                if ($isFirst)
+                    $last = $resNo;
+
+                $totals['air'] += $rates['air'];
+                $totals['han'] += $rates['han'];
+                $totals['avi'] += $rates['avi'];
+                $totals['env'] += $rates['env'];
+
+                echo '<tr>';
+                echo '<td>' . ($isFirst ? htmlspecialchars($resNo) : '') . '</td>';
+                echo '<td>' . ($isFirst ? htmlspecialchars($res['roomtyp'] ?? $res['roomType'] ?? '') : '') . '</td>';
+                echo '<td>' . htmlspecialchars($res['gstName'] ?? $res['guestName'] ?? '') . '</td>';
+                echo '<td>' . htmlspecialchars($res['gstType'] ?? '') . '</td>';
+                echo '<td>' . htmlspecialchars($res['arrdt'] ?? $res['arrDt'] ?? '') . '</td>';
+                echo '<td>' . htmlspecialchars($res['depdt'] ?? $res['depDt'] ?? '') . '</td>';
+
+                $passengerAccTotal = 0;
+                foreach ($dateCols as $d) {
+                    if (isset($rateDates[$d])) {
+                        $val = $rateDates[$d];
+                        echo '<td class="num">' . number_format($val, 2) . '</td>';
+                        $dateTotals[$d] += $val;
+                        $passengerAccTotal += $val;
+                    } else {
+                        echo '<td></td>';
+                    }
+                }
+                $accGrandTotal += $passengerAccTotal;
+                echo '<td class="num">' . number_format($passengerAccTotal, 2) . '</td>';
+                echo '<td class="num">' . number_format($rates['air'], 2) . '</td>';
+                echo '<td class="num">' . number_format($rates['han'], 2) . '</td>';
+                echo '<td class="num">' . number_format($rates['avi'], 2) . '</td>';
+                echo '<td class="num">' . number_format($rates['env'], 2) . '</td>';
+                echo '</tr>';
+                flush();
+            }
+
+            // Grand totals row
+            echo '<tr style="font-weight:bold;background:#f1f5f9">';
+            echo '<td colspan="6" style="text-align:right">GRAND TOTALS:</td>';
+            foreach ($dateCols as $d) {
+                echo '<td class="num">' . number_format($dateTotals[$d], 2) . '</td>';
+            }
+            echo '<td class="num">' . number_format($accGrandTotal, 2) . '</td>';
+            echo '<td class="num">' . number_format($totals['air'], 2) . '</td>';
+            echo '<td class="num">' . number_format($totals['han'], 2) . '</td>';
+            echo '<td class="num">' . number_format($totals['avi'], 2) . '</td>';
+            echo '<td class="num">' . number_format($totals['env'], 2) . '</td>';
+            echo '</tr>';
+
             echo '</table></body></html>';
         }, 200, ['Content-Type' => 'application/vnd.ms-excel', 'Content-Disposition' => 'attachment; filename="' . $filename . '"']);
     }

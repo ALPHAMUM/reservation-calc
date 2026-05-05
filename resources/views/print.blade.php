@@ -13,6 +13,7 @@
         th, td { border: 1px solid #e2e8f0; padding: 8px; text-align: left; }
         th { background: #f8fafc; font-weight: bold; text-transform: uppercase; font-size: 10px; color: #64748b; }
         .num { text-align: right; }
+        .acc { vertical-align: top; font-size: 11px; white-space: pre-line; }
         .total-row { font-weight: bold; background: #f8fafc; }
         @media print {
             .no-print { display: none; }
@@ -78,17 +79,19 @@
                         $grandTotals['han'] += $rates['han'];
                         $grandTotals['avi'] += $rates['avi'];
                         $grandTotals['env'] += $rates['env'];
-                    } elseif (isset($res['rate']) && is_array($res['rate'])) {
-                        foreach($res['rate'] as $r) {
-                            $val = (float)($r['val'] ?? 0);
-                            $desc = strtolower($r['desc'] ?? '');
-                            if (str_contains($desc, 'airfare')) { $rates['air'] += $val; $grandTotals['air'] += $val; }
-                            elseif (str_contains($desc, 'hangar')) { $rates['han'] += $val; $grandTotals['han'] += $val; }
-                            elseif (str_contains($desc, 'aviation')) { $rates['avi'] += $val; $grandTotals['avi'] += $val; }
-                            elseif (str_contains($desc, 'environmental')) { $rates['env'] += $val; $grandTotals['env'] += $val; }
-                            else { $rates['acc'] += $val; $grandTotals['acc'] += $val; }
+                    }
+
+                    // Build per-date accommodation breakdown
+                    $accLines = [];
+                    foreach ($res['rate'] ?? [] as $r) {
+                        $rDate = $r['date'] ?? '';
+                        $rVal  = (float)($r['val'] ?? 0);
+                        if ($rDate) {
+                            $dt = new DateTime($rDate);
+                            $accLines[] = $dt->format('Y-m-d') . ' (' . $dt->format('D') . '): ' . number_format($rVal, 2);
                         }
                     }
+                    $accDisplay = implode("\n", $accLines);
                 @endphp
                 <tr>
                     <td>{{ $isFirst ? $resNo : '' }}</td>
@@ -98,7 +101,7 @@
                     <td>{{ $res['gstType'] ?? '' }}</td>
                     <td>{{ $res['arrdt'] ?? $res['arrDt'] ?? '' }}</td>
                     <td>{{ $res['depdt'] ?? $res['depDt'] ?? '' }}</td>
-                    <td class="num">{{ number_format($rates['acc'], 2) }}</td>
+                    <td class="acc">{{ $accDisplay ?? '' }}</td>
                     <td class="num">{{ number_format($rates['air'], 2) }}</td>
                     <td class="num">{{ number_format($rates['han'], 2) }}</td>
                     <td class="num">{{ number_format($rates['avi'], 2) }}</td>
