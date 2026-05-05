@@ -121,6 +121,8 @@
                 <th>Village</th>
                 <th>Guest Name</th>
                 <th>Age</th>
+                <th>Birthday</th>
+                <th>Nationality</th>
                 <th>Relation</th>
                 <th>Check-In</th>
                 <th>Check-Out</th>
@@ -153,6 +155,10 @@
                         $grandTotals['env'] += floor($rates['env']);
                     }
 
+                    $privCard = trim((string) ($res['privCard'] ?? $res['privcard'] ?? ''));
+                    $privCardLower = strtolower($privCard);
+                    $isValidCard = $privCard !== '' && !in_array($privCardLower, ['n', 'no', 'false', '0', 'none', 'null']);
+
                     // Build per-date accommodation breakdown
                     $accLines = [];
                     foreach ($res['rate'] ?? [] as $r) {
@@ -170,7 +176,9 @@
                     <td>{{ $isFirst ? ($res['roomtyp'] ?? $res['roomType'] ?? '') : '' }}</td>
                     <td>{{ $res['gstName'] ?? $res['guestName'] ?? '' }}</td>
                     <td>{{ $res['age'] ?? '' }}</td>
-                    <td>{{ $res['gstType'] ?? '' }}</td>
+                    <td>{{ $res['dateOfBirth'] ?? '' }}</td>
+                    <td>{{ $res['nationality'] ?? '' }}</td>
+                    <td>{{ $res['gstType'] ?? '' }}{{ $isValidCard ? ' - ' . '(' . $privCard . ')' : '' }}</td>
                     <td>{{ $res['arrdt'] ?? $res['arrDt'] ?? '' }}</td>
                     <td>{{ $res['depdt'] ?? $res['depDt'] ?? '' }}</td>
                     <td class="acc">{{ $accDisplay ?? '' }}</td>

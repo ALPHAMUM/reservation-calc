@@ -109,7 +109,7 @@ class ReservationController extends Controller
                 foreach ($resp->json()['msg'] ?? [] as $res) {
                     $depdt = $res['depdt'] ?? $res['depDt'] ?? '';
                     $rateDates = [];
-                    
+
                     // Filter out dates beyond depdt from the rates array so they don't affect sums or columns
                     $filteredRates = [];
                     foreach ($res['rate'] ?? [] as $r) {
@@ -157,6 +157,9 @@ class ReservationController extends Controller
             echo '<td rowspan="2">RSVN#</td>';
             echo '<td rowspan="2">VILLAGE</td>';
             echo '<td rowspan="2">OCCUPANTS</td>';
+            echo '<td rowspan="2">AGE</td>';
+            echo '<td rowspan="2">BIRTHDAY</td>';
+            echo '<td rowspan="2">NATIONALITY</td>';
             echo '<td rowspan="2">RELATION</td>';
             echo '<td rowspan="2">CHECK-IN</td>';
             echo '<td rowspan="2">CHECK-OUT</td>';
@@ -201,7 +204,19 @@ class ReservationController extends Controller
                 echo '<td>' . ($isFirst ? htmlspecialchars($resNo) : '') . '</td>';
                 echo '<td>' . ($isFirst ? htmlspecialchars($res['roomtyp'] ?? $res['roomType'] ?? '') : '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['gstName'] ?? $res['guestName'] ?? '') . '</td>';
-                echo '<td>' . htmlspecialchars($res['gstType'] ?? '') . '</td>';
+                echo '<td>' . htmlspecialchars($res['age'] ?? '') . '</td>';
+
+                $privCard = trim((string) ($res['privCard'] ?? $res['privcard'] ?? ''));
+                $privCardLower = strtolower($privCard);
+                $isValidCard = $privCard !== '' && !in_array($privCardLower, ['n', 'no', 'false', '0', 'none', 'null']);
+
+                $relation = htmlspecialchars($res['gstType'] ?? '');
+                if ($isValidCard) {
+                    $relation .= ' (' . htmlspecialchars($privCard) . ')';
+                }
+                echo '<td>' . htmlspecialchars($res['dateOfBirth'] ?? '') . '</td>';
+                echo '<td>' . htmlspecialchars($res['nationality'] ?? '') . '</td>';
+                echo '<td>' . $relation . '</td>';
                 echo '<td>' . htmlspecialchars($res['arrdt'] ?? $res['arrDt'] ?? '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['depdt'] ?? $res['depDt'] ?? '') . '</td>';
 
