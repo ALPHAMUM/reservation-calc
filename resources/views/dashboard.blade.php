@@ -248,8 +248,8 @@
         <!-- Name Search (Client-side DataTable filter) -->
         <div style="margin-top: 1rem; margin-bottom: 0.5rem;">
             <div class="input-group" style="max-width: 320px;">
-                <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Search by Guest Name</label>
-                <input type="text" id="nameSearchInput" placeholder="Type guest name..." autocomplete="off">
+                <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Search (Name, Res No, Type...)</label>
+                <input type="text" id="nameSearchInput" placeholder="Type to filter results..." autocomplete="off">
             </div>
         </div>
 
@@ -341,9 +341,7 @@
                 "ordering": true,
                 "order": [],
                 "columnDefs": [
-                    { "orderable": false, "targets": "_all" },
-                    { "searchable": false, "targets": "_all" },
-                    { "searchable": true, "targets": 1 }
+                    { "orderable": false, "targets": "_all" }
                 ]
             });
             // Hide the built-in DataTable search box (we use our own)
@@ -352,9 +350,9 @@
             table = $('#resTable').DataTable();
         }
 
-        // Wire our custom name search input to DataTable column 1
+        // Wire our custom search input to global DataTable search
         $('#nameSearchInput').on('keyup input', function() {
-            table.column(1).search(this.value).draw();
+            table.search(this.value).draw();
         });
 
         // Form validation: require dates if no resnolist

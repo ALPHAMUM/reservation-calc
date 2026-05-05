@@ -64,7 +64,13 @@
             text-align: right;
         }
 
-        .total-row {
+        <<<<<<< HEAD=======.acc {
+            vertical-align: top;
+            font-size: 11px;
+            white-space: pre-line;
+        }
+
+        >>>>>>>bff847e8ffb91697e80f215d04cec1693947c9b6 .total-row {
             font-weight: bold;
             background: #f8fafc;
         }
@@ -140,33 +146,24 @@
                     $rates = ['acc' => 0, 'air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0];
                     if (isset($res['calculated_rates'])) {
                         $rates = $res['calculated_rates'];
-                        $grandTotals['acc'] += $rates['acc'];
-                        $grandTotals['air'] += $rates['air'];
-                        $grandTotals['han'] += $rates['han'];
-                        $grandTotals['avi'] += $rates['avi'];
-                        $grandTotals['env'] += $rates['env'];
-                    } elseif (isset($res['rate']) && is_array($res['rate'])) {
-                        foreach ($res['rate'] as $r) {
-                            $val = (float) ($r['val'] ?? 0);
-                            $desc = strtolower($r['desc'] ?? '');
-                            if (str_contains($desc, 'airfare')) {
-                                $rates['air'] += $val;
-                                $grandTotals['air'] += $val;
-                            } elseif (str_contains($desc, 'hangar')) {
-                                $rates['han'] += $val;
-                                $grandTotals['han'] += $val;
-                            } elseif (str_contains($desc, 'aviation')) {
-                                $rates['avi'] += $val;
-                                $grandTotals['avi'] += $val;
-                            } elseif (str_contains($desc, 'environmental')) {
-                                $rates['env'] += $val;
-                                $grandTotals['env'] += $val;
-                            } else {
-                                $rates['acc'] += $val;
-                                $grandTotals['acc'] += $val;
-                            }
+                        $grandTotals['acc'] += floor($rates['acc']);
+                        $grandTotals['air'] += floor($rates['air']);
+                        $grandTotals['han'] += floor($rates['han']);
+                        $grandTotals['avi'] += floor($rates['avi']);
+                        $grandTotals['env'] += floor($rates['env']);
+                    }
+
+                    // Build per-date accommodation breakdown
+                    $accLines = [];
+                    foreach ($res['rate'] ?? [] as $r) {
+                        $rDate = $r['date'] ?? '';
+                        $rVal = (float) ($r['val'] ?? 0);
+                        if ($rDate) {
+                            $dt = new \DateTime($rDate);
+                            $accLines[] = $dt->format('Y-m-d') . ' (' . $dt->format('D') . '): ' . number_format($rVal, 2);
                         }
                     }
+                    $accDisplay = implode("\n", $accLines);
                 @endphp
                 <tr>
                     <td>{{ $isFirst ? $resNo : '' }}</td>
@@ -176,7 +173,7 @@
                     <td>{{ $res['gstType'] ?? '' }}</td>
                     <td>{{ $res['arrdt'] ?? $res['arrDt'] ?? '' }}</td>
                     <td>{{ $res['depdt'] ?? $res['depDt'] ?? '' }}</td>
-                    <td class="num">{{ number_format($rates['acc'], 2) }}</td>
+                    <td class="acc">{{ $accDisplay ?? '' }}</td>
                     <td class="num">{{ number_format($rates['air'], 2) }}</td>
                     <td class="num">{{ number_format($rates['han'], 2) }}</td>
                     <td class="num">{{ number_format($rates['avi'], 2) }}</td>
