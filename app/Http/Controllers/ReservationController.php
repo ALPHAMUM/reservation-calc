@@ -9,10 +9,10 @@ use App\Exports\ReservationExport;
 
 class ReservationController extends Controller
 {
-    private $listApiUrl = 'https://intimusapi.balesinkey.com/api/upasdata/intimusapiservice/getreslist';
-    private $detailApiUrl = 'https://intimusapi.balesinkey.com/api/upasdata/intimusapiservice/getresdetforcalc';
-    // private $apiKey = '12A3A9C3-3D8F-4204-9737-3C4ADE94650F'; //Training
-    private $apiKey = 'A450BD7D-DD86-4A54-A6A5-A971B64CC7AB'; //Prod
+    private $listApiUrl = 'https://intimusapi.balesinkey.com/api/upastraindata/intimusapiservice/getreslist';
+    private $detailApiUrl = 'https://intimusapi.balesinkey.com/api/upastraindata/intimusapiservice/getresdetforcalc';
+    private $apiKey = '12A3A9C3-3D8F-4204-9737-3C4ADE94650F'; //Training
+    // private $apiKey = 'A450BD7D-DD86-4A54-A6A5-A971B64CC7AB'; //Prod
 
     public function index(Request $request)
     {
@@ -43,14 +43,18 @@ class ReservationController extends Controller
                 foreach ($chunks as $chunk) {
                     $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                         ->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
-                    if ($resp->successful()) {
-                        $msgs = $resp->json()['msg'] ?? [];
-                        $this->consolidateRates($msgs);
-                        foreach ($msgs as &$res) {
-                            $res['calculated_rates'] = $calculator->calculatePassengerRates($res);
-                        }
-                        $reservations = array_merge($reservations, $msgs);
+
+                    if (!$resp->successful()) {
+                        $error = "API Error (Detail): " . ($resp->status() == 404 ? "Endpoint not found." : "Status " . $resp->status());
+                        break;
                     }
+
+                    $msgs = $resp->json()['msg'] ?? [];
+                    $this->consolidateRates($msgs);
+                    foreach ($msgs as &$res) {
+                        $res['calculated_rates'] = $calculator->calculatePassengerRates($res);
+                    }
+                    $reservations = array_merge($reservations, $msgs);
                 }
                 $total = count($reservations);
                 $pagedReservations = array_slice($reservations, ($page - 1) * $perPage, $perPage);
@@ -58,7 +62,7 @@ class ReservationController extends Controller
                 $viewType = 'list';
                 $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                     ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
-                
+
                 if (!$resp->successful()) {
                     $error = "API Error (List): " . ($resp->status() == 404 ? "Endpoint not found." : "Status " . $resp->status());
                 } else {
@@ -91,11 +95,11 @@ class ReservationController extends Controller
             try {
                 $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                     ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
-                
+
                 if (!$resp->successful()) {
                     return back()->with('error', 'API List Error: ' . ($resp->status() == 404 ? "Endpoint not found." : "Status " . $resp->status()));
                 }
-                
+
                 $ids = collect($resp->json()['msg'] ?? [])->map(fn($i) => $i['conf'] ?? $i['resNo'] ?? null)->filter()->unique()->toArray();
             } catch (\Exception $e) {
                 return back()->with('error', 'Connection Error: ' . $e->getMessage());
