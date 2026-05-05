@@ -203,7 +203,7 @@
             @endif
         </div>
 
-        <form action="{{ route('dashboard') }}" method="GET" class="search-box" style="flex-direction: column;">
+        <form id="dashboardForm" action="{{ route('dashboard') }}" method="GET" class="search-box" style="flex-direction: column;">
             <!-- First Row: Show Selection and Actions -->
             <div style="display: flex; justify-content: space-between; align-items: flex-end; width: 100%; gap: 1rem;">
                 <div class="input-group" style="flex: 0 0 100px; min-width: 100px;">
@@ -328,12 +328,35 @@
             $('#resTable').DataTable({
                 "paging": false,
                 "info": false,
-                "searching": false,
+                "searching": true,
                 "ordering": true,
                 "order": [],
-                "columnDefs": [{ "orderable": false, "targets": "_all" }]
+                "columnDefs": [
+                    { "orderable": false, "targets": "_all" },
+                    { "searchable": false, "targets": "_all" },  // disable search on all by default
+                    { "searchable": true, "targets": 1 }          // enable search on column index 1 (Guest Name)
+                ],
+                "language": {
+                    "search": "Search Name:",
+                    "searchPlaceholder": "Type guest name..."
+                }
             });
         }
+
+        // Form validation: require dates if no resnolist
+        $('#dashboardForm').on('submit', function(e) {
+            const resNoList = $('input[name="resnolist"]').val().trim();
+            const fromDate = $('input[name="fromdate"]').val().trim();
+            const toDate = $('input[name="todate"]').val().trim();
+
+            // Only validate if not searching by Res No list
+            if (!resNoList && (!fromDate || !toDate)) {
+                e.preventDefault();
+                alert('Please select both a From Date and To Date before searching.');
+                $('input[name="fromdate"]').focus();
+                return false;
+            }
+        });
 
         // Function to update export/print links based on current inputs
         function updateLinks() {
