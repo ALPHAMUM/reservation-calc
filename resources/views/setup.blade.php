@@ -79,6 +79,74 @@
         border-radius: 0.5rem;
         margin-bottom: 2rem;
     }
+
+    .setup-section {
+        position: relative;
+    }
+
+    .info-btn {
+        position: absolute;
+        top: 1.5rem;
+        right: 1.5rem;
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: all 0.2s;
+        background: rgba(255,255,255,0.05);
+        border-radius: 50%;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--border);
+    }
+
+    .info-btn:hover {
+        color: var(--primary);
+        background: rgba(99, 102, 241, 0.1);
+        border-color: var(--primary);
+        transform: scale(1.1);
+    }
+
+    .help-box {
+        display: none;
+        position: absolute;
+        top: 3.5rem;
+        right: 1.5rem;
+        width: 320px;
+        background: rgba(30, 41, 59, 0.98);
+        backdrop-filter: blur(12px);
+        border: 1px solid var(--primary);
+        padding: 1.25rem;
+        border-radius: 1rem;
+        z-index: 100;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        animation: fadeIn 0.2s ease-out;
+    }
+
+    .help-box strong {
+        color: var(--primary);
+        display: block;
+        font-size: 0.9375rem;
+        margin-bottom: 0.5rem;
+        border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+        padding-bottom: 0.25rem;
+    }
+
+    .help-box div {
+        color: #e2e8f0;
+        font-size: 0.875rem;
+        line-height: 1.5;
+    }
+
+    .help-close {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.75rem;
+        color: var(--text-muted);
+        cursor: pointer;
+        font-size: 1.25rem;
+    }
 </style>
 @endsection
 
@@ -99,7 +167,15 @@
 
         <!-- Base Rates -->
         <div class="setup-section">
+            <div class="info-btn" onclick="toggleHelp('help-base')">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            </div>
             <h3 class="setup-title">Base Airfare Rates</h3>
+            <div id="help-base" class="help-box">
+                <span class="help-close" onclick="toggleHelp('help-base')">&times;</span>
+                <strong>Base Airfare Rates</strong>
+                <div>Configure the standard, year-round airfare rates for Members and Guests. Use the checkbox to define if infants (under 24 months) are billed or fly for free.</div>
+            </div>
             <div class="grid-2">
                 <div class="form-group">
                     <label class="form-label">Member Airfare Rate (₱)</label>
@@ -118,7 +194,16 @@
 
         <!-- Promo Rates -->
         <div class="setup-section">
+            <div class="info-btn" onclick="toggleHelp('help-promo')">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            </div>
             <h3 class="setup-title">Promo Rates</h3>
+            <div id="help-promo" class="help-box">
+                <span class="help-close" onclick="toggleHelp('help-promo')">&times;</span>
+                <strong>Promo Rates</strong>
+                <div>Set temporary rates for specific promotion dates. 
+                <br>• Peak Periods: Any dates added here will bypass promo rates and revert to Base Rates automatically (e.g., Christmas, New Year).</div>
+            </div>
             <div class="checkbox-wrap" style="margin-bottom: 1.5rem;">
                 <input type="checkbox" id="promo_active" name="promo_rates[active]" {{ !empty($settings['promo_rates']['active']) ? 'checked' : '' }}>
                 <label for="promo_active" class="form-label" style="margin:0">Enable Promo Rates</label>
@@ -172,7 +257,15 @@
 
         <!-- Discounts & VAT -->
         <div class="setup-section">
+            <div class="info-btn" onclick="toggleHelp('help-discounts')">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            </div>
             <h3 class="setup-title">Discounts & VAT</h3>
+            <div id="help-discounts" class="help-box">
+                <span class="help-close" onclick="toggleHelp('help-discounts')">&times;</span>
+                <strong>Discounts & VAT</strong>
+                <div>Manage tax rules. For Senior Citizens (SC) and PWDs, standard policy usually involves removing the 12% VAT first. The "Additional Discount" is applied after VAT removal if applicable.</div>
+            </div>
             <div class="grid-2">
                 <div class="form-group">
                     <label class="form-label">Standard VAT Rate (%)</label>
@@ -191,7 +284,18 @@
 
         <!-- Additional Fees -->
         <div class="setup-section">
+            <div class="info-btn" onclick="toggleHelp('help-fees')">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            </div>
             <h3 class="setup-title">Additional Fees</h3>
+            <div id="help-fees" class="help-box">
+                <span class="help-close" onclick="toggleHelp('help-fees')">&times;</span>
+                <strong>Additional Fees</strong>
+                <div>Configure mandatory surcharges. 
+                <br>• Hangar Fee: Per passenger fee for terminal usage.
+                <br>• AOF: Aviation Operational Fee, active only during selected months.
+                <br>• Environmental Fee: Island maintenance fee, typically applied to Guests.</div>
+            </div>
             
             <div class="form-group" style="padding-bottom: 1.5rem; border-bottom: 1px solid var(--border);">
                 <label class="form-label" style="font-size: 1rem; color: white;">Hangar Fee</label>
@@ -276,5 +380,25 @@
         `;
         container.appendChild(row);
     }
+
+    function toggleHelp(id) {
+        const el = document.getElementById(id);
+        const isOpen = el.style.display === 'block';
+        
+        // Hide all first
+        document.querySelectorAll('.help-box').forEach(box => box.style.display = 'none');
+
+        // Toggle this one
+        if (!isOpen) {
+            el.style.display = 'block';
+        }
+    }
+
+    // Close on click outside
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.setup-section')) {
+            document.querySelectorAll('.help-box').forEach(box => box.style.display = 'none');
+        }
+    });
 </script>
 @endsection

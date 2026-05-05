@@ -151,7 +151,7 @@
         </main>
 
         <footer>
-            &copy; {{ date('Y') }} Reservation Calculator Web App. Premium Edition.
+            &copy; {{ date('Y') }} Alphaland Corporation All Rights Reserved
         </footer>
     </div>
     @yield('scripts')

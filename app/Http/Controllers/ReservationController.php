@@ -170,25 +170,25 @@ class ReservationController extends Controller
             echo '</style></head><body><table border="1">';
 
             // Header Row 1: fixed cols (rowspan=2) + ACCOMMODATION (colspan = dateCount+1) + fee cols (rowspan=2)
-            echo '<tr class="hdr">';
-            echo '<td rowspan="2">RSVN#</td>';
-            echo '<td rowspan="2">VILLAGE</td>';
-            echo '<td rowspan="2">OCCUPANTS</td>';
-            echo '<td rowspan="2">RELATION</td>';
-            echo '<td rowspan="2">AGE</td>';
-            echo '<td rowspan="2">BIRTHDAY</td>';
-            echo '<td rowspan="2">NATIONALITY</td>';
-            echo '<td rowspan="2">CHECK-IN</td>';
-            echo '<td rowspan="2">CHECK-OUT</td>';
+            echo '<tr>';
+            echo '<td rowspan="2" class="hdr">RSVN#</td>';
+            echo '<td rowspan="2" class="hdr">VILLAGE</td>';
+            echo '<td rowspan="2" class="hdr">OCCUPANTS</td>';
+            echo '<td rowspan="2" class="hdr">RELATION</td>';
+            echo '<td rowspan="2" class="hdr">AGE</td>';
+            echo '<td rowspan="2" class="hdr">BIRTHDAY</td>';
+            echo '<td rowspan="2" class="hdr">NATIONALITY</td>';
+            echo '<td rowspan="2" class="hdr">CHECK-IN</td>';
+            echo '<td rowspan="2" class="hdr">CHECK-OUT</td>';
             echo '<td colspan="' . $dateCount . '" class="dh">ACCOMMODATION</td>';
-            echo '<td rowspan="2">AIRFARE</td>';
-            echo '<td rowspan="2">HANGAR</td>';
-            echo '<td rowspan="2">AVIATION</td>';
-            echo '<td rowspan="2">ENVIRONMENTAL</td>';
+            echo '<td rowspan="2" class="hdr">AIRFARE</td>';
+            echo '<td rowspan="2" class="hdr">HANGAR</td>';
+            echo '<td rowspan="2" class="hdr">AVIATION</td>';
+            echo '<td rowspan="2" class="hdr">ENVIRONMENTAL</td>';
             echo '</tr>';
 
             // Header Row 2: date sub-columns + TOTAL
-            echo '<tr class="hdr">';
+            echo '<tr>';
             foreach ($dateCols as $d) {
                 $label = $d;
                 try {
