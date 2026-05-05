@@ -146,9 +146,10 @@ class ReservationController extends Controller
             echo '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
             echo '<head><meta http-equiv="Content-type" content="text/html;charset=utf-8" />';
             echo '<style>';
-            echo 'td, th { border: 0.5pt solid #ccc; vertical-align: middle; font-size: 10pt; }';
-            echo '.hdr  { background-color: #e2e8f0; font-weight: bold; text-align: center; }';
-            echo '.dh   { background-color: #dbeafe; font-weight: bold; text-align: center; }';
+            echo 'body { font-family: sans-serif; }';
+            echo 'td, th { border: 0.5pt solid #b4c6e7; vertical-align: middle; font-size: 8pt; padding: 5pt; }';
+            echo '.hdr  { background-color: #bcd2ee; font-weight: bold; text-align: center; color: #1e293b; }';
+            echo '.dh   { background-color: #bcd2ee; font-weight: bold; text-align: center; color: #1e293b; }';
             echo '.num  { mso-number-format:"\#\,\#\#0\.00"; text-align: right; }';
             echo '</style></head><body><table border="1">';
 
@@ -157,10 +158,10 @@ class ReservationController extends Controller
             echo '<td rowspan="2">RSVN#</td>';
             echo '<td rowspan="2">VILLAGE</td>';
             echo '<td rowspan="2">OCCUPANTS</td>';
+            echo '<td rowspan="2">RELATION</td>';
             echo '<td rowspan="2">AGE</td>';
             echo '<td rowspan="2">BIRTHDAY</td>';
             echo '<td rowspan="2">NATIONALITY</td>';
-            echo '<td rowspan="2">RELATION</td>';
             echo '<td rowspan="2">CHECK-IN</td>';
             echo '<td rowspan="2">CHECK-OUT</td>';
             echo '<td colspan="' . $dateCount . '" class="dh">ACCOMMODATION</td>';
@@ -177,9 +178,10 @@ class ReservationController extends Controller
                 try {
                     if (!str_contains($d, ' to ')) {
                         $dt = new \DateTime($d);
-                        $label = $dt->format('M-d, D');
+                        $label = strtoupper($dt->format('M-d, D'));
                     }
-                } catch (\Exception $e) {}
+                } catch (\Exception $e) {
+                }
                 echo '<td class="dh">' . htmlspecialchars($label) . '</td>';
             }
             echo '</tr>';
@@ -209,8 +211,6 @@ class ReservationController extends Controller
                 echo '<td>' . ($isFirst ? htmlspecialchars($resNo) : '') . '</td>';
                 echo '<td>' . ($isFirst ? htmlspecialchars($res['roomtyp'] ?? $res['roomType'] ?? '') : '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['gstName'] ?? $res['guestName'] ?? '') . '</td>';
-                echo '<td>' . htmlspecialchars($res['age'] ?? '') . '</td>';
-
                 $privCard = trim((string) ($res['privCard'] ?? $res['privcard'] ?? ''));
                 $privCardLower = strtolower($privCard);
                 $isValidCard = $privCard !== '' && !in_array($privCardLower, ['n', 'no', 'false', '0', 'none', 'null']);
@@ -219,9 +219,11 @@ class ReservationController extends Controller
                 if ($isValidCard) {
                     $relation .= ' (' . htmlspecialchars($privCard) . ')';
                 }
+
+                echo '<td>' . $relation . '</td>';
+                echo '<td>' . htmlspecialchars($res['age'] ?? '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['dateOfBirth'] ?? '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['nationality'] ?? '') . '</td>';
-                echo '<td>' . $relation . '</td>';
                 echo '<td>' . htmlspecialchars($res['arrdt'] ?? $res['arrDt'] ?? '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['depdt'] ?? $res['depDt'] ?? '') . '</td>';
 
@@ -248,7 +250,7 @@ class ReservationController extends Controller
 
             // Grand totals row
             echo '<tr style="font-weight:bold;background:#f1f5f9">';
-            echo '<td colspan="6" style="text-align:right">GRAND TOTALS:</td>';
+            echo '<td colspan="9" style="text-align:right">GRAND TOTALS:</td>';
             foreach ($dateCols as $d) {
                 echo '<td class="num">' . number_format($dateTotals[$d], 2) . '</td>';
             }
@@ -288,7 +290,6 @@ class ReservationController extends Controller
             $resp = Http::withHeaders(['Authorization' => $apiKey])->withoutVerifying()->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
             if ($resp->successful()) {
                 $msgs = $resp->json()['msg'] ?? [];
-                $this->consolidateRates($msgs);
                 foreach ($msgs as &$res) {
                     $res['calculated_rates'] = $calculator->calculatePassengerRates($res);
                 }

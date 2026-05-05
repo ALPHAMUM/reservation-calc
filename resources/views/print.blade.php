@@ -53,24 +53,29 @@
         }
 
         th {
-            background: #f8fafc;
+            background: #f1f5f9;
             font-weight: bold;
             text-transform: uppercase;
             font-size: 10px;
-            color: #64748b;
+            color: #475569;
+            border: 1px solid #b4c6e7;
+        }
+
+        .dh {
+            background: #f1f5f9 !important;
         }
 
         .num {
             text-align: right;
         }
 
-        <<<<<<< HEAD=======.acc {
+        .acc {
             vertical-align: top;
             font-size: 11px;
             white-space: pre-line;
         }
 
-        >>>>>>>bff847e8ffb91697e80f215d04cec1693947c9b6 .total-row {
+        .total-row {
             font-weight: bold;
             background: #f8fafc;
         }
@@ -114,30 +119,59 @@
         <div><strong>Generated:</strong> {{ date('F j, Y, g:i a') }}</div>
     </div>
 
+    @php
+        // PASS 1: Collect all unique dates across all reservations
+        $allDates = [];
+        foreach($reservations as $res) {
+            foreach($res['rate'] ?? [] as $r) {
+                $d = $r['date'] ?? '';
+                if ($d && !str_contains($d, ' to ')) {
+                    $allDates[$d] = true;
+                }
+            }
+        }
+        ksort($allDates);
+        $dateCols = array_keys($allDates);
+        $dateCount = count($dateCols);
+        
+        $grandTotals = ['air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0];
+        $dateTotals = array_fill_keys($dateCols, 0);
+        $accGrandTotal = 0;
+        $lastResNo = null;
+    @endphp
+
     <table>
         <thead>
-            <tr>
-                <th>RSVN#</th>
-                <th>Village</th>
-                <th>Guest Name</th>
-                <th>Age</th>
-                <th>Birthday</th>
-                <th>Nationality</th>
-                <th>Relation</th>
-                <th>Check-In</th>
-                <th>Check-Out</th>
-                <th>Accommodation</th>
-                <th>Airfare</th>
-                <th>Hangar</th>
-                <th>Aviation</th>
-                <th>Env.</th>
+            <tr class="hdr">
+                <th rowspan="2">RSVN#</th>
+                <th rowspan="2">VILLAGE</th>
+                <th rowspan="2">OCCUPANTS</th>
+                <th rowspan="2">RELATION</th>
+                <th rowspan="2">AGE</th>
+                <th rowspan="2">BIRTHDAY</th>
+                <th rowspan="2">NATIONALITY</th>
+                <th rowspan="2">CHECK-IN</th>
+                <th rowspan="2">CHECK-OUT</th>
+                <th colspan="{{ $dateCount }}" class="dh" style="text-align: center;">ACCOMMODATION</th>
+                <th rowspan="2">AIRFARE</th>
+                <th rowspan="2">HANGAR</th>
+                <th rowspan="2">AVIATION</th>
+                <th rowspan="2">ENVIRONMENTAL</th>
+            </tr>
+            <tr class="hdr">
+                @foreach($dateCols as $d)
+                    @php
+                        $label = $d;
+                        try {
+                            $dt = new \DateTime($d);
+                            $label = strtoupper($dt->format('M-d, D'));
+                        } catch(\Exception $e) {}
+                    @endphp
+                    <th class="dh" style="font-size: 9px; min-width: 60px;">{{ $label }}</th>
+                @endforeach
             </tr>
         </thead>
         <tbody>
-            @php
-                $grandTotals = ['acc' => 0, 'air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0];
-                $lastResNo = null;
-            @endphp
             @foreach($reservations as $res)
                 @php
                     $resNo = $res['resNo'] ?? $res['conf'] ?? '';
@@ -148,7 +182,6 @@
                     $rates = ['acc' => 0, 'air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0];
                     if (isset($res['calculated_rates'])) {
                         $rates = $res['calculated_rates'];
-                        $grandTotals['acc'] += floor($rates['acc']);
                         $grandTotals['air'] += floor($rates['air']);
                         $grandTotals['han'] += floor($rates['han']);
                         $grandTotals['avi'] += floor($rates['avi']);
@@ -159,37 +192,38 @@
                     $privCardLower = strtolower($privCard);
                     $isValidCard = $privCard !== '' && !in_array($privCardLower, ['n', 'no', 'false', '0', 'none', 'null']);
 
-                    // Build per-date accommodation breakdown
-                    $accLines = [];
-                    foreach ($res['rate'] ?? [] as $r) {
-                        $rDate = $r['date'] ?? '';
-                        $rVal = (float) ($r['val'] ?? 0);
-                        if ($rDate) {
-                            if (str_contains($rDate, ' to ')) {
-                                $accLines[] = $rDate . ': ' . number_format($rVal, 2);
-                            } else {
-                                try {
-                                    $dt = new \DateTime($rDate);
-                                    $accLines[] = $dt->format('Y-m-d') . ' (' . $dt->format('D') . '): ' . number_format($rVal, 2);
-                                } catch (\Exception $e) {
-                                    $accLines[] = $rDate . ': ' . number_format($rVal, 2);
-                                }
-                            }
+                    // Index rates by date for this passenger
+                    $rateMap = [];
+                    foreach($res['rate'] ?? [] as $r) {
+                        $d = $r['date'] ?? '';
+                        if ($d) {
+                            $rateMap[$d] = (float)($r['val'] ?? 0);
                         }
                     }
-                    $accDisplay = implode("\n", $accLines);
                 @endphp
                 <tr>
                     <td>{{ $isFirst ? $resNo : '' }}</td>
                     <td>{{ $isFirst ? ($res['roomtyp'] ?? $res['roomType'] ?? '') : '' }}</td>
                     <td>{{ $res['gstName'] ?? $res['guestName'] ?? '' }}</td>
+                    <td>{{ $res['gstType'] ?? '' }}{{ $isValidCard ? ' (' . $privCard . ')' : '' }}</td>
                     <td>{{ $res['age'] ?? '' }}</td>
                     <td>{{ $res['dateOfBirth'] ?? '' }}</td>
                     <td>{{ $res['nationality'] ?? '' }}</td>
-                    <td>{{ $res['gstType'] ?? '' }}{{ $isValidCard ? ' - ' . '(' . $privCard . ')' : '' }}</td>
                     <td>{{ $res['arrdt'] ?? $res['arrDt'] ?? '' }}</td>
                     <td>{{ $res['depdt'] ?? $res['depDt'] ?? '' }}</td>
-                    <td class="acc">{{ $accDisplay ?? '' }}</td>
+                    
+                    @php $passengerAccTotal = 0; @endphp
+                    @foreach($dateCols as $d)
+                        @php 
+                            $val = $rateMap[$d] ?? 0; 
+                            $valFloor = floor($val);
+                            $dateTotals[$d] += $valFloor;
+                            $passengerAccTotal += $valFloor;
+                        @endphp
+                        <td class="num">{{ $val > 0 ? number_format($val, 2) : '' }}</td>
+                    @endforeach
+                    @php $accGrandTotal += $passengerAccTotal; @endphp
+
                     <td class="num">{{ number_format($rates['air'], 2) }}</td>
                     <td class="num">{{ number_format($rates['han'], 2) }}</td>
                     <td class="num">{{ number_format($rates['avi'], 2) }}</td>
@@ -199,8 +233,10 @@
         </tbody>
         <tfoot>
             <tr class="total-row">
-                <td colspan="7" style="text-align: right;">GRAND TOTALS:</td>
-                <td class="num">{{ number_format($grandTotals['acc'], 2) }}</td>
+                <td colspan="9" style="text-align: right;">GRAND TOTALS:</td>
+                @foreach($dateCols as $d)
+                    <td class="num">{{ number_format($dateTotals[$d], 2) }}</td>
+                @endforeach
                 <td class="num">{{ number_format($grandTotals['air'], 2) }}</td>
                 <td class="num">{{ number_format($grandTotals['han'], 2) }}</td>
                 <td class="num">{{ number_format($grandTotals['avi'], 2) }}</td>
