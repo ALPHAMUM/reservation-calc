@@ -30,8 +30,9 @@ class RateCalculatorService
         $isMember = in_array($gstType, ['member', 'spouse', 'dependent']); // Generic check
         if ($gstType === 'member') $isMember = true; // explicitly
 
-        $isInfant = !empty($passenger['pup']);
-        $hasPrivCard = !empty($passenger['privCard']);
+        $isInfant = strtolower(trim((string)($passenger['pup'] ?? ''))) === 'y';
+        $privCardStr = strtolower(trim((string)($passenger['privCard'] ?? '')));
+        $hasPrivCard = !empty($privCardStr) && !in_array($privCardStr, ['n', 'no', 'false', '0', 'none', 'null']);
         $arrDate = $passenger['arrdt'] ?? $passenger['arrDt'] ?? null;
 
         // Base Airfare
