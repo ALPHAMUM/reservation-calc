@@ -9,8 +9,10 @@ use App\Exports\ReservationExport;
 
 class ReservationController extends Controller
 {
-    private $listApiUrl = 'https://intimusapi.balesinkey.com/api/upastraindata/intimusapiservice/getreslist';
-    private $detailApiUrl = 'https://intimusapi.balesinkey.com/api/upastraindata/intimusapiservice/getresdetforcalc';
+    private $listApiUrl = 'https://intimusapi.balesinkey.com/api/upasdata/intimusapiservice/getreslist';
+    private $detailApiUrl = 'https://intimusapi.balesinkey.com/api/upasdata/intimusapiservice/getresdetforcalc';
+    // private $apiKey = '12A3A9C3-3D8F-4204-9737-3C4ADE94650F'; //Training
+    private $apiKey = 'A450BD7D-DD86-4A54-A6A5-A971B64CC7AB'; //Prod
 
     public function index(Request $request)
     {
@@ -22,7 +24,6 @@ class ReservationController extends Controller
         if ($perPage > 100)
             $perPage = 100;
 
-        $apiKey = '12A3A9C3-3D8F-4204-9737-3C4ADE94650F';
         $reservations = [];
         $total = 0;
         $viewType = 'summary';
@@ -40,7 +41,7 @@ class ReservationController extends Controller
                 $chunks = array_chunk($allConfIds, 25);
                 $calculator = app(\App\Services\RateCalculatorService::class);
                 foreach ($chunks as $chunk) {
-                    $resp = Http::withHeaders(['Authorization' => $apiKey])->withoutVerifying()
+                    $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                         ->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
                     if ($resp->successful()) {
                         $msgs = $resp->json()['msg'] ?? [];
@@ -55,16 +56,21 @@ class ReservationController extends Controller
                 $pagedReservations = array_slice($reservations, ($page - 1) * $perPage, $perPage);
             } else {
                 $viewType = 'list';
-                $resp = Http::withHeaders(['Authorization' => $apiKey])->withoutVerifying()
+                $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                     ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
-                if ($resp->successful()) {
+                
+                if (!$resp->successful()) {
+                    $error = "API Error (List): " . ($resp->status() == 404 ? "Endpoint not found." : "Status " . $resp->status());
+                } else {
                     $all = $resp->json()['msg'] ?? [];
                     $total = count($all);
                     $pagedReservations = array_slice($all, ($page - 1) * $perPage, $perPage);
                 }
             }
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            $error = "Connection Error: Could not reach the API server. Please check your internet or the endpoint URL.";
         } catch (\Exception $e) {
-            $error = $e->getMessage();
+            $error = "System Error: " . $e->getMessage();
         }
 
         $paginator = new \Illuminate\Pagination\LengthAwarePaginator($pagedReservations ?? [], $total, $perPage, $page, ['path' => $request->url(), 'query' => $request->query()]);
@@ -77,16 +83,22 @@ class ReservationController extends Controller
         $resNoList = $request->get('resnolist');
         $fromDate = $request->get('fromdate');
         $toDate = $request->get('todate');
-        $apiKey = '12A3A9C3-3D8F-4204-9737-3C4ADE94650F';
 
         $ids = [];
         if ($resNoList) {
             $ids = array_filter(explode(',', $resNoList));
         } elseif ($fromDate && $toDate) {
-            $resp = Http::withHeaders(['Authorization' => $apiKey])->withoutVerifying()
-                ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
-            if ($resp->successful()) {
+            try {
+                $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
+                    ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
+                
+                if (!$resp->successful()) {
+                    return back()->with('error', 'API List Error: ' . ($resp->status() == 404 ? "Endpoint not found." : "Status " . $resp->status()));
+                }
+                
                 $ids = collect($resp->json()['msg'] ?? [])->map(fn($i) => $i['conf'] ?? $i['resNo'] ?? null)->filter()->unique()->toArray();
+            } catch (\Exception $e) {
+                return back()->with('error', 'Connection Error: ' . $e->getMessage());
             }
         }
 
@@ -103,7 +115,7 @@ class ReservationController extends Controller
         $calculator = app(\App\Services\RateCalculatorService::class);
 
         foreach (array_chunk($ids, 40) as $chunk) {
-            $resp = Http::withHeaders(['Authorization' => $apiKey])->withoutVerifying()
+            $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                 ->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
             if ($resp->successful()) {
                 foreach ($resp->json()['msg'] ?? [] as $res) {
@@ -270,15 +282,20 @@ class ReservationController extends Controller
         $resNoList = $request->get('resnolist');
         $fromDate = $request->get('fromdate');
         $toDate = $request->get('todate');
-        $apiKey = '12A3A9C3-3D8F-4204-9737-3C4ADE94650F';
 
         $ids = [];
         if ($resNoList) {
             $ids = array_filter(explode(',', $resNoList));
         } elseif ($fromDate && $toDate) {
-            $resp = Http::withHeaders(['Authorization' => $apiKey])->withoutVerifying()->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
-            if ($resp->successful())
+            try {
+                $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
+                if (!$resp->successful()) {
+                    return back()->with('error', 'API Print List Error: ' . ($resp->status() == 404 ? "Endpoint not found." : "Status " . $resp->status()));
+                }
                 $ids = collect($resp->json()['msg'] ?? [])->map(fn($i) => $i['conf'] ?? $i['resNo'] ?? null)->filter()->unique()->toArray();
+            } catch (\Exception $e) {
+                return back()->with('error', 'Connection Error: ' . $e->getMessage());
+            }
         }
 
         if (empty($ids))
@@ -287,7 +304,7 @@ class ReservationController extends Controller
         $reservations = [];
         $calculator = app(\App\Services\RateCalculatorService::class);
         foreach (array_chunk(array_slice($ids, 0, 1000), 50) as $chunk) {
-            $resp = Http::withHeaders(['Authorization' => $apiKey])->withoutVerifying()->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
+            $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
             if ($resp->successful()) {
                 $msgs = $resp->json()['msg'] ?? [];
                 foreach ($msgs as &$res) {
