@@ -282,31 +282,38 @@ class ReservationController extends Controller
 
             $overallGrandTotal = $accGrandTotal + $totals['air'] + $totals['han'] + $totals['avi'] + $totals['env'];
 
-            echo '<tr><td colspan="' . (9 + $dateCount + 4) . '" style="border:none;">&nbsp;</td></tr>';
+            $fullColspan = 9 + $dateCount + 4;
+            $labelColspan = 9 + $dateCount + 3;
+
+            echo '<tr><td colspan="' . $fullColspan . '" style="border:none;">&nbsp;</td></tr>';
             echo '<tr>';
-            echo '<td colspan="' . (9 + $dateCount + 3) . '" style="border:none; font-weight:bold; text-align:right;">TOTAL AMOUNT DUE:</td>';
-            echo '<td class="num" style="border:none; font-weight:bold; text-align:right;">&#8369;' . number_format($overallGrandTotal, 2) . '</td>';
+            echo '<td colspan="9" style="border:none; font-weight:bold; text-align:right;">TOTAL AMOUNT DUE:</td>';
+            echo '<td colspan="' . $dateCount . '" style="border:none;"></td>';
+            echo '<td colspan="4" class="num" style="border:none; font-weight:bold; text-align:right;">&#8369;' . number_format($overallGrandTotal, 2) . '</td>';
             echo '</tr>';
             echo '<tr>';
-            echo '<td colspan="' . (9 + $dateCount + 4) . '" style="border:none; font-style:italic; text-align:right;">Room Rates include service charge (10%) and VAT (12%)</td>';
-            echo '</tr>';
-            echo '<tr><td colspan="' . (9 + $dateCount + 4) . '" style="border:none;">&nbsp;</td></tr>';
-            echo '<tr>';
-            echo '<td colspan="' . (9 + $dateCount + 3) . '" style="border:none; font-weight:bold; text-align:right;">LESS PAYMENT/S:</td>';
-            echo '<td style="border:none;"></td>';
+            echo '<td colspan="9" style="border:none; font-style:italic; text-align:right;">Room Rates include service charge (10%) and VAT (12%)</td>';
+            echo '<td colspan="' . ($dateCount + 4) . '" style="border:none;"></td>';
             echo '</tr>';
             echo '<tr>';
-            echo '<td colspan="' . (9 + $dateCount + 3) . '" style="border:none; text-align:right;">OVERPAYMENT/CREDIT FROM FOLIO</td>';
-            echo '<td class="num" style="border:none; text-align:right;">&#8369;0.00</td>';
+            echo '<td colspan="9" style="border:none; font-weight:bold; text-align:right;">LESS PAYMENT/S:</td>';
+            echo '<td colspan="' . $dateCount . '" style="border:none;"></td>';
+            echo '<td colspan="4" style="border:none;"></td>';
             echo '</tr>';
             echo '<tr>';
-            echo '<td colspan="' . (9 + $dateCount + 3) . '" style="border:none; text-align:right;">COLLECTION RECEIPT</td>';
-            echo '<td class="num" style="border:none; text-align:right;">&#8369;0.00</td>';
+            echo '<td colspan="9" style="border:none; text-align:right;">OVERPAYMENT/CREDIT FROM FOLIO</td>';
+            echo '<td colspan="' . $dateCount . '" style="border:none;"></td>';
+            echo '<td colspan="4" class="num" style="border:none; text-align:right;">&#8369;0.00</td>';
             echo '</tr>';
-            echo '<tr><td colspan="' . (9 + $dateCount + 4) . '" style="border:none;">&nbsp;</td></tr>';
             echo '<tr>';
-            echo '<td colspan="' . (9 + $dateCount + 3) . '" style="border:none; font-weight:bold; text-align:right;">BALANCE TO SETTLE</td>';
-            echo '<td class="num" style="border:none; font-weight:bold; text-align:right; border-top:0.5pt solid #000;">&#8369;' . number_format($overallGrandTotal, 2) . '</td>';
+            echo '<td colspan="9" style="border:none; text-align:right;">COLLECTION RECEIPT</td>';
+            echo '<td colspan="' . $dateCount . '" style="border:none;"></td>';
+            echo '<td colspan="4" class="num" style="border:none; text-align:right;">&#8369;0.00</td>';
+            echo '</tr>';
+            echo '<tr>';
+            echo '<td colspan="9" style="border:none; font-weight:bold; text-align:right;">BALANCE TO SETTLE</td>';
+            echo '<td colspan="' . $dateCount . '" style="border:none;"></td>';
+            echo '<td colspan="4" class="num" style="border:none; font-weight:bold; text-align:right; border-top:0.5pt solid #000;">&#8369;' . number_format($overallGrandTotal, 2) . '</td>';
             echo '</tr>';
 
             echo '</table></body></html>';
