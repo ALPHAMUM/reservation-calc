@@ -245,6 +245,14 @@
             </div>
         </form>
 
+        <!-- Name Search (Client-side DataTable filter) -->
+        <div style="margin-top: 1rem; margin-bottom: 0.5rem;">
+            <div class="input-group" style="max-width: 320px;">
+                <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Search by Guest Name</label>
+                <input type="text" id="nameSearchInput" placeholder="Type guest name..." autocomplete="off">
+            </div>
+        </div>
+
         <div class="table-container">
             <table id="resTable" class="table table-dark table-hover">
                 <thead>
@@ -324,8 +332,9 @@
 <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
 <script>
     $(document).ready(function() {
+        var table;
         if (!$.fn.DataTable.isDataTable('#resTable')) {
-            $('#resTable').DataTable({
+            table = $('#resTable').DataTable({
                 "paging": false,
                 "info": false,
                 "searching": true,
@@ -333,15 +342,20 @@
                 "order": [],
                 "columnDefs": [
                     { "orderable": false, "targets": "_all" },
-                    { "searchable": false, "targets": "_all" },  // disable search on all by default
-                    { "searchable": true, "targets": 1 }          // enable search on column index 1 (Guest Name)
-                ],
-                "language": {
-                    "search": "Search Name:",
-                    "searchPlaceholder": "Type guest name..."
-                }
+                    { "searchable": false, "targets": "_all" },
+                    { "searchable": true, "targets": 1 }
+                ]
             });
+            // Hide the built-in DataTable search box (we use our own)
+            $('.dataTables_filter').hide();
+        } else {
+            table = $('#resTable').DataTable();
         }
+
+        // Wire our custom name search input to DataTable column 1
+        $('#nameSearchInput').on('keyup input', function() {
+            table.column(1).search(this.value).draw();
+        });
 
         // Form validation: require dates if no resnolist
         $('#dashboardForm').on('submit', function(e) {
@@ -349,7 +363,6 @@
             const fromDate = $('input[name="fromdate"]').val().trim();
             const toDate = $('input[name="todate"]').val().trim();
 
-            // Only validate if not searching by Res No list
             if (!resNoList && (!fromDate || !toDate)) {
                 e.preventDefault();
                 alert('Please select both a From Date and To Date before searching.');
@@ -376,7 +389,7 @@
             $('.btn-export-pdf').attr('href', "{{ route('print') }}?" + params);
         }
 
-        $('input, select').on('change input', updateLinks);
+        $('input[name], select[name]').on('change input', updateLinks);
         updateLinks(); // Initialize
     });
 </script>
