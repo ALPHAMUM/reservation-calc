@@ -264,7 +264,8 @@
                 <td colspan="9" style="text-align: right; border: none; font-style: italic; color: #64748b; padding-bottom: 15px;">Room Rates include service charge (10%) and VAT (12%)</td>
                 <td colspan="{{ $dateCount + 4 }}" style="border: none;"></td>
             </tr>
-            <tr>
+            
+            <!-- <tr>
                 <td colspan="9" style="text-align: right; border: none; font-weight: bold;">LESS PAYMENT/S:</td>
                 <td colspan="{{ $dateCount }}" style="border: none;"></td>
                 <td colspan="4" style="border: none;"></td>
@@ -283,7 +284,7 @@
                 <td colspan="9" style="text-align: right; border: none; font-weight: bold;">BALANCE TO SETTLE</td>
                 <td colspan="{{ $dateCount }}" style="border: none;"></td>
                 <td colspan="4" class="num" style="border: none; font-weight: bold; border-top: 1px solid #000;">&#8369;{{ number_format($overallGrandTotal, 2) }}</td>
-            </tr>
+            </tr> -->
         </tfoot>
     </table>
 </body>

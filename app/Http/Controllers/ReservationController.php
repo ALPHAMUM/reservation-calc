@@ -35,42 +35,133 @@ class ReservationController extends Controller
     ];
 
     private $nationalityMap = [
-        '2' => 'Afghanistani', '3' => 'Albaniaian', '4' => 'Algeriaian', '5' => 'Andorreaian',
-        '8' => 'Angolese', '10' => 'Argentinaian', '11' => 'Australiaian', '13' => 'Austriaian',
-        '14' => 'Bahamaian', '15' => 'Bahraini', '16' => 'Bangladeshi', '17' => 'Barbados',
-        '18' => 'Belgian', '19' => 'Bhutanese', '20' => 'Bosniaian', '21' => 'Brazilian',
-        '22' => 'Brunei', '23' => 'Bulgarian', '24' => 'Burmese', '25' => 'Camarooni',
-        '26' => 'Canadian', '27' => 'Indian', '28' => 'Indonesian', '29' => 'Iranian',
-        '30' => 'Iraqi', '31' => 'Irish', '32' => 'Italian', '33' => 'Jamaican',
-        '34' => 'Japanese', '35' => 'Jordanian', '36' => 'Kenyan', '37' => 'Korean',
-        '38' => 'Kuwaiti', '39' => 'Lebanese', '40' => 'Libyan', '41' => 'Luxemborg',
-        '43' => 'Maldives', '44' => 'Maltese', '45' => 'Mauritian', '46' => 'Mexican',
-        '47' => 'Moroccon', '48' => 'Mozambique', '49' => 'Nepali', '50' => 'Dutch',
-        '51' => 'New Zealand', '52' => 'Chilean', '53' => 'Chinese', '54' => 'Colombian',
-        '55' => 'Congolese', '56' => 'Costa Rican', '57' => 'Croatian', '58' => 'Cuban',
-        '59' => 'Cypriot', '60' => 'Czechoslovakian', '62' => 'Danish', '63' => 'Ecuadorian',
-        '64' => 'Egyptian', '65' => 'El Salvador', '66' => 'Ethiopian', '67' => 'Fijian',
-        '68' => 'Finnish', '69' => 'French', '70' => 'German', '72' => 'Ghanaian',
-        '74' => 'Hong Kong', '75' => 'Hungarian', '76' => 'Nigerian', '77' => 'Norwegian',
-        '78' => 'Omani', '79' => 'Pakistani', '80' => 'Panama', '81' => 'Peruvian',
-        '82' => 'Filipino', '83' => 'Polish', '84' => 'Portugese', '85' => 'Qatari',
-        '86' => 'Romanian', '87' => 'Russian', '88' => 'Saudi Arabian', '89' => 'Scottish',
-        '90' => 'English', '91' => 'Singaporean', '92' => 'Slovakian', '93' => 'Somalian',
-        '94' => 'South African', '95' => 'Spainish', '96' => 'Sri Lankan', '97' => 'Sudani',
-        '98' => 'Swedish', '99' => 'Swiss', '100' => 'Syrian', '101' => 'Taiwanese',
-        '102' => 'Tanzanian', '103' => 'Thai', '104' => 'Tunisian', '105' => 'Turkish',
-        '106' => 'USA', '107' => 'Ugandan', '108' => 'Ukrainian', '109' => 'UAE',
-        '110' => 'Uruguay', '111' => 'Venenzuela', '112' => 'Vietnamese', '113' => 'Yemeni',
-        '115' => 'Zambian', '116' => 'Zimbabwe', '117' => 'Others', '121' => 'Madagascar',
-        '122' => 'Yugoslavian', '123' => 'Palestine', '137' => 'NONE', '138' => 'Greek',
-        '140' => 'Icelandic', '142' => 'Malaysian', '143' => 'Myanmar', '144' => 'Greenlandian',
-        '146' => 'Guamese', '147' => 'Hawaiian', '150' => 'Timor Leste', '151' => 'Laos',
+        '2' => 'Afghanistani',
+        '3' => 'Albaniaian',
+        '4' => 'Algeriaian',
+        '5' => 'Andorreaian',
+        '8' => 'Angolese',
+        '10' => 'Argentinaian',
+        '11' => 'Australiaian',
+        '13' => 'Austriaian',
+        '14' => 'Bahamaian',
+        '15' => 'Bahraini',
+        '16' => 'Bangladeshi',
+        '17' => 'Barbados',
+        '18' => 'Belgian',
+        '19' => 'Bhutanese',
+        '20' => 'Bosniaian',
+        '21' => 'Brazilian',
+        '22' => 'Brunei',
+        '23' => 'Bulgarian',
+        '24' => 'Burmese',
+        '25' => 'Camarooni',
+        '26' => 'Canadian',
+        '27' => 'Indian',
+        '28' => 'Indonesian',
+        '29' => 'Iranian',
+        '30' => 'Iraqi',
+        '31' => 'Irish',
+        '32' => 'Italian',
+        '33' => 'Jamaican',
+        '34' => 'Japanese',
+        '35' => 'Jordanian',
+        '36' => 'Kenyan',
+        '37' => 'Korean',
+        '38' => 'Kuwaiti',
+        '39' => 'Lebanese',
+        '40' => 'Libyan',
+        '41' => 'Luxemborg',
+        '43' => 'Maldives',
+        '44' => 'Maltese',
+        '45' => 'Mauritian',
+        '46' => 'Mexican',
+        '47' => 'Moroccon',
+        '48' => 'Mozambique',
+        '49' => 'Nepali',
+        '50' => 'Dutch',
+        '51' => 'New Zealand',
+        '52' => 'Chilean',
+        '53' => 'Chinese',
+        '54' => 'Colombian',
+        '55' => 'Congolese',
+        '56' => 'Costa Rican',
+        '57' => 'Croatian',
+        '58' => 'Cuban',
+        '59' => 'Cypriot',
+        '60' => 'Czechoslovakian',
+        '62' => 'Danish',
+        '63' => 'Ecuadorian',
+        '64' => 'Egyptian',
+        '65' => 'El Salvador',
+        '66' => 'Ethiopian',
+        '67' => 'Fijian',
+        '68' => 'Finnish',
+        '69' => 'French',
+        '70' => 'German',
+        '72' => 'Ghanaian',
+        '74' => 'Hong Kong',
+        '75' => 'Hungarian',
+        '76' => 'Nigerian',
+        '77' => 'Norwegian',
+        '78' => 'Omani',
+        '79' => 'Pakistani',
+        '80' => 'Panama',
+        '81' => 'Peruvian',
+        '82' => 'Filipino',
+        '83' => 'Polish',
+        '84' => 'Portugese',
+        '85' => 'Qatari',
+        '86' => 'Romanian',
+        '87' => 'Russian',
+        '88' => 'Saudi Arabian',
+        '89' => 'Scottish',
+        '90' => 'English',
+        '91' => 'Singaporean',
+        '92' => 'Slovakian',
+        '93' => 'Somalian',
+        '94' => 'South African',
+        '95' => 'Spainish',
+        '96' => 'Sri Lankan',
+        '97' => 'Sudani',
+        '98' => 'Swedish',
+        '99' => 'Swiss',
+        '100' => 'Syrian',
+        '101' => 'Taiwanese',
+        '102' => 'Tanzanian',
+        '103' => 'Thai',
+        '104' => 'Tunisian',
+        '105' => 'Turkish',
+        '106' => 'USA',
+        '107' => 'Ugandan',
+        '108' => 'Ukrainian',
+        '109' => 'UAE',
+        '110' => 'Uruguay',
+        '111' => 'Venenzuela',
+        '112' => 'Vietnamese',
+        '113' => 'Yemeni',
+        '115' => 'Zambian',
+        '116' => 'Zimbabwe',
+        '117' => 'Others',
+        '121' => 'Madagascar',
+        '122' => 'Yugoslavian',
+        '123' => 'Palestine',
+        '137' => 'NONE',
+        '138' => 'Greek',
+        '140' => 'Icelandic',
+        '142' => 'Malaysian',
+        '143' => 'Myanmar',
+        '144' => 'Greenlandian',
+        '146' => 'Guamese',
+        '147' => 'Hawaiian',
+        '150' => 'Timor Leste',
+        '151' => 'Laos',
         '152' => 'United Kingdom',
     ];
 
     private function getNationalityName($code)
     {
-        if (!$code) return '';
+        if (!$code)
+            return '';
         $code = trim($code);
         return $this->nationalityMap[$code] ?? $code;
     }
@@ -135,10 +226,10 @@ class ReservationController extends Controller
                     }
                     $reservations = array_merge($reservations, $msgs);
                 }
-                
+
                 // Apply Status Filter
                 if ($statusFilter) {
-                    $reservations = array_filter($reservations, function($res) use ($statusFilter) {
+                    $reservations = array_filter($reservations, function ($res) use ($statusFilter) {
                         return strtoupper(trim($res['status'] ?? '')) === strtoupper(trim($statusFilter));
                     });
                 }
@@ -157,7 +248,7 @@ class ReservationController extends Controller
 
                     // Apply Status Filter
                     if ($statusFilter) {
-                        $all = array_filter($all, function($res) use ($statusFilter) {
+                        $all = array_filter($all, function ($res) use ($statusFilter) {
                             return strtoupper(trim($res['status'] ?? '')) === strtoupper(trim($statusFilter));
                         });
                     }
@@ -197,10 +288,10 @@ class ReservationController extends Controller
                 }
 
                 $all = $resp->json()['msg'] ?? [];
-                
+
                 // Apply Status Filter
                 if ($statusFilter) {
-                    $all = array_filter($all, function($res) use ($statusFilter) {
+                    $all = array_filter($all, function ($res) use ($statusFilter) {
                         return strtoupper(trim($res['status'] ?? '')) === strtoupper(trim($statusFilter));
                     });
                 }
@@ -402,26 +493,26 @@ class ReservationController extends Controller
             echo '<td colspan="9" style="border:none; font-style:italic; text-align:right;">Room Rates include service charge (10%) and VAT (12%)</td>';
             echo '<td colspan="' . ($dateCount + 4) . '" style="border:none;"></td>';
             echo '</tr>';
-            echo '<tr>';
-            echo '<td colspan="9" style="border:none; font-weight:bold; text-align:right;">LESS PAYMENT/S:</td>';
-            echo '<td colspan="' . $dateCount . '" style="border:none;"></td>';
-            echo '<td colspan="4" style="border:none;"></td>';
-            echo '</tr>';
-            echo '<tr>';
-            echo '<td colspan="9" style="border:none; text-align:right;">OVERPAYMENT/CREDIT FROM FOLIO</td>';
-            echo '<td colspan="' . $dateCount . '" style="border:none;"></td>';
-            echo '<td colspan="4" class="num" style="border:none; text-align:right;">&#8369;0.00</td>';
-            echo '</tr>';
-            echo '<tr>';
-            echo '<td colspan="9" style="border:none; text-align:right;">COLLECTION RECEIPT</td>';
-            echo '<td colspan="' . $dateCount . '" style="border:none;"></td>';
-            echo '<td colspan="4" class="num" style="border:none; text-align:right;">&#8369;0.00</td>';
-            echo '</tr>';
-            echo '<tr>';
-            echo '<td colspan="9" style="border:none; font-weight:bold; text-align:right;">BALANCE TO SETTLE</td>';
-            echo '<td colspan="' . $dateCount . '" style="border:none;"></td>';
-            echo '<td colspan="4" class="num" style="border:none; font-weight:bold; text-align:right; border-top:0.5pt solid #000;">&#8369;' . number_format($overallGrandTotal, 2) . '</td>';
-            echo '</tr>';
+            // echo '<tr>';
+            // echo '<td colspan="9" style="border:none; font-weight:bold; text-align:right;">LESS PAYMENT/S:</td>';
+            // echo '<td colspan="' . $dateCount . '" style="border:none;"></td>';
+            // echo '<td colspan="4" style="border:none;"></td>';
+            // echo '</tr>';
+            // echo '<tr>';
+            // echo '<td colspan="9" style="border:none; text-align:right;">OVERPAYMENT/CREDIT FROM FOLIO</td>';
+            // echo '<td colspan="' . $dateCount . '" style="border:none;"></td>';
+            // echo '<td colspan="4" class="num" style="border:none; text-align:right;">&#8369;0.00</td>';
+            // echo '</tr>';
+            // echo '<tr>';
+            // echo '<td colspan="9" style="border:none; text-align:right;">COLLECTION RECEIPT</td>';
+            // echo '<td colspan="' . $dateCount . '" style="border:none;"></td>';
+            // echo '<td colspan="4" class="num" style="border:none; text-align:right;">&#8369;0.00</td>';
+            // echo '</tr>';
+            // echo '<tr>';
+            // echo '<td colspan="9" style="border:none; font-weight:bold; text-align:right;">BALANCE TO SETTLE</td>';
+            // echo '<td colspan="' . $dateCount . '" style="border:none;"></td>';
+            // echo '<td colspan="4" class="num" style="border:none; font-weight:bold; text-align:right; border-top:0.5pt solid #000;">&#8369;' . number_format($overallGrandTotal, 2) . '</td>';
+            // echo '</tr>';
 
             echo '</table></body></html>';
         }, 200, ['Content-Type' => 'application/vnd.ms-excel', 'Content-Disposition' => 'attachment; filename="' . $filename . '"']);
@@ -444,12 +535,12 @@ class ReservationController extends Controller
                 if (!$resp->successful()) {
                     return back()->with('error', 'API Print List Error: ' . ($resp->status() == 404 ? "Endpoint not found." : "Status " . $resp->status()));
                 }
-                
+
                 $all = $resp->json()['msg'] ?? [];
 
                 // Apply Status Filter
                 if ($statusFilter) {
-                    $all = array_filter($all, function($res) use ($statusFilter) {
+                    $all = array_filter($all, function ($res) use ($statusFilter) {
                         return strtoupper(trim($res['status'] ?? '')) === strtoupper(trim($statusFilter));
                     });
                 }
