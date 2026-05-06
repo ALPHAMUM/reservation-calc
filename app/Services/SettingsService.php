@@ -32,7 +32,7 @@ class SettingsService
             'fees' => [
                 'hangar' => [
                     'amount' => 400,
-                    'apply_to' => ['member', 'guest', 'employee'], // exclude infant
+                'apply_to' => ['member', 'guest'], // exclude infant, employee, others
                 ],
                 'aof' => [
                     'amount' => 2000,
@@ -40,7 +40,7 @@ class SettingsService
                 ],
                 'environmental' => [
                     'amount' => 200,
-                    'apply_to' => ['guest', 'employee', 'infant'], // applies to guest (including infants) and employees, exclude member/spouse/dependent
+                    'apply_to' => ['guest', 'infant'], // applies to guest (including infants), exclude member/spouse/dependent, employee, others
                 ]
             ],
             'discounts' => [

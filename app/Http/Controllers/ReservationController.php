@@ -284,13 +284,17 @@ class ReservationController extends Controller
             $error = "System Error: " . $e->getMessage();
         }
 
+        $settingsService = app(\App\Services\SettingsService::class);
+        $settings = $settingsService->getSettings();
+
         return view('dashboard', [
             'reservations' => $pagedReservations ?? [], 
             'resNoList' => $resNoList, 
             'fromDate' => $fromDate, 
             'toDate' => $toDate, 
             'viewType' => $viewType, 
-            'error' => $error
+            'error' => $error,
+            'settings' => $settings
         ]);
     }
 

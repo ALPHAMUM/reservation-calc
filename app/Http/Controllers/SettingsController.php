@@ -28,11 +28,14 @@ class SettingsController extends Controller
         // Update Base Rates
         $settings['base_rates']['member'] = (float)($input['base_rates']['member'] ?? $settings['base_rates']['member']);
         $settings['base_rates']['guest'] = (float)($input['base_rates']['guest'] ?? $settings['base_rates']['guest']);
+        $settings['base_rates']['employee'] = (float)($input['base_rates']['employee'] ?? $settings['base_rates']['employee'] ?? 2800);
 
         // Update Promo Rates
         $settings['promo_rates']['active'] = isset($input['promo_rates']['active']);
+        $settings['promo_rates']['description'] = $input['promo_rates']['description'] ?? '';
         $settings['promo_rates']['member'] = (float)($input['promo_rates']['member'] ?? $settings['promo_rates']['member']);
         $settings['promo_rates']['guest'] = (float)($input['promo_rates']['guest'] ?? $settings['promo_rates']['guest']);
+        $settings['promo_rates']['employee'] = (float)($input['promo_rates']['employee'] ?? $settings['promo_rates']['employee'] ?? 2800);
         $settings['promo_rates']['start_date'] = $input['promo_rates']['start_date'] ?? $settings['promo_rates']['start_date'];
         $settings['promo_rates']['end_date'] = $input['promo_rates']['end_date'] ?? $settings['promo_rates']['end_date'];
         
@@ -42,6 +45,7 @@ class SettingsController extends Controller
             foreach ($input['peak_periods']['start'] as $index => $start) {
                 if (!empty($start) && !empty($input['peak_periods']['end'][$index])) {
                     $peakPeriods[] = [
+                        'label' => $input['peak_periods']['label'][$index] ?? '',
                         'start' => $start,
                         'end' => $input['peak_periods']['end'][$index],
                     ];

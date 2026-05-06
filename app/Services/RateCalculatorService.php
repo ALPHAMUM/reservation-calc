@@ -42,12 +42,15 @@ class RateCalculatorService
 
         $custName = strtoupper($passenger['custName'] ?? $passenger['custname'] ?? $passenger['customer'] ?? '');
         
+        $isOthers = false;
         if (str_contains($gstType, 'member') || str_contains($gstType, 'spouse') || str_contains($gstType, 'dependent')) {
             $isMember = true;
         } elseif (str_contains($gstType, 'employee') || 
                  (isset($passenger['rate_metadata']) && str_contains(strtoupper($passenger['rate_metadata']), 'EMPLOYEE')) ||
                  str_contains($custName, 'ALPHALAND EMPLOYEE')) {
             $isEmployee = true;
+        } elseif (str_contains($gstType, 'others') || str_contains($gstType, 'authorized') || str_contains($gstType, 'priest') || str_contains($gstType, 'contractor')) {
+            $isOthers = true;
         }
 
         if (str_contains($gstType, 'infant')) {
@@ -105,10 +108,13 @@ class RateCalculatorService
         $hangar = 0;
         $hangarApplyTo = $this->settings['fees']['hangar']['apply_to'] ?? [];
         $passClass = $isEmployee ? 'employee' : ($isMember ? 'member' : 'guest');
+        if ($isOthers) $passClass = 'others';
         
-        if (($isInfant && in_array('infant', $hangarApplyTo)) || 
-            (!$isInfant && in_array($passClass, $hangarApplyTo))) {
-            $hangar = (float)($this->settings['fees']['hangar']['amount'] ?? 0);
+        // Rules: Infants and Others are always EXEMPT. Members, Guests, and Employees follow settings.
+        if (!$isInfant && !$isOthers) {
+            if (in_array($passClass, $hangarApplyTo)) {
+                $hangar = (float)($this->settings['fees']['hangar']['amount'] ?? 0);
+            }
         }
 
         // AOF Fee
@@ -131,9 +137,14 @@ class RateCalculatorService
         // Environmental Fee
         $env = 0;
         $envApplyTo = $this->settings['fees']['environmental']['apply_to'] ?? [];
-        if (($isInfant && in_array('infant', $envApplyTo)) || 
-            (!$isInfant && in_array($passClass, $envApplyTo))) {
-            $env = (float)($this->settings['fees']['environmental']['amount'] ?? 0);
+        
+        // Rules: Members and Others are always EXEMPT. Guests, Infants, and Employees follow settings.
+        if (!$isMember && !$isOthers) {
+            // Check if infants are included in settings, or if it's a regular guest/employee
+            if (($isInfant && in_array('infant', $envApplyTo)) || 
+                (!$isInfant && in_array($passClass, $envApplyTo))) {
+                $env = (float)($this->settings['fees']['environmental']['amount'] ?? 0);
+            }
         }
 
         return [

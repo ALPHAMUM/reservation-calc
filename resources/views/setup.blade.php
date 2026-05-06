@@ -179,11 +179,15 @@
             <div class="grid-2">
                 <div class="form-group">
                     <label class="form-label">Member Airfare Rate (₱)</label>
-                    <input type="number" step="0.01" name="base_rates[member]" class="form-control" value="{{ $settings['base_rates']['member'] ?? 4200 }}">
+                    <input type="number" step="0.01" name="base_rates[member]" class="form-control" value="{{ $settings['base_rates']['member'] ?? 5600 }}">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Guest Airfare Rate (₱)</label>
-                    <input type="number" step="0.01" name="base_rates[guest]" class="form-control" value="{{ $settings['base_rates']['guest'] ?? 6200 }}">
+                    <input type="number" step="0.01" name="base_rates[guest]" class="form-control" value="{{ $settings['base_rates']['guest'] ?? 12320 }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Employee Airfare Rate (₱)</label>
+                    <input type="number" step="0.01" name="base_rates[employee]" class="form-control" value="{{ $settings['base_rates']['employee'] ?? 2800 }}">
                 </div>
             </div>
             <div class="checkbox-wrap">
@@ -208,6 +212,11 @@
                 <input type="checkbox" id="promo_active" name="promo_rates[active]" {{ !empty($settings['promo_rates']['active']) ? 'checked' : '' }}>
                 <label for="promo_active" class="form-label" style="margin:0">Enable Promo Rates</label>
             </div>
+
+            <div class="form-group" style="margin-bottom: 1.5rem;">
+                <label class="form-label">Promo Description</label>
+                <textarea name="promo_rates[description]" class="form-control" rows="2" placeholder="Enter promotion description (e.g. Summer Promo 2024)">{{ $settings['promo_rates']['description'] ?? '' }}</textarea>
+            </div>
             
             <div class="grid-2">
                 <div class="form-group">
@@ -218,6 +227,13 @@
                     <label class="form-label">Promo Guest Rate (₱)</label>
                     <input type="number" step="0.01" name="promo_rates[guest]" class="form-control" value="{{ $settings['promo_rates']['guest'] ?? 6200 }}">
                 </div>
+                <div class="form-group">
+                    <label class="form-label">Promo Employee Rate (₱)</label>
+                    <input type="number" step="0.01" name="promo_rates[employee]" class="form-control" value="{{ $settings['promo_rates']['employee'] ?? 2800 }}">
+                </div>
+            </div>
+
+            <div class="grid-2" style="margin-top: 1rem;">
                 <div class="form-group">
                     <label class="form-label">Promo Start Date</label>
                     <input type="date" name="promo_rates[start_date]" class="form-control" value="{{ $settings['promo_rates']['start_date'] ?? '' }}">
@@ -233,6 +249,9 @@
                 <div id="peak-periods-container">
                     @forelse($settings['promo_rates']['peak_periods'] ?? [] as $period)
                         <div class="peak-period-row">
+                            <div style="flex:1.5">
+                                <input type="text" name="peak_periods[label][]" class="form-control" placeholder="Description (e.g. Holy Week)" value="{{ $period['label'] ?? '' }}">
+                            </div>
                             <div style="flex:1">
                                 <input type="date" name="peak_periods[start][]" class="form-control" value="{{ $period['start'] }}">
                             </div>
@@ -244,6 +263,7 @@
                         </div>
                     @empty
                         <div class="peak-period-row">
+                            <div style="flex:1.5"><input type="text" name="peak_periods[label][]" class="form-control" placeholder="Description"></div>
                             <div style="flex:1"><input type="date" name="peak_periods[start][]" class="form-control"></div>
                             <div style="color:var(--text-muted)">to</div>
                             <div style="flex:1"><input type="date" name="peak_periods[end][]" class="form-control"></div>
@@ -309,6 +329,7 @@
                         @php $hangarApplies = $settings['fees']['hangar']['apply_to'] ?? ['member', 'guest']; @endphp
                         <div class="checkbox-wrap"><input type="checkbox" name="fees[hangar][apply_to][]" value="member" {{ in_array('member', $hangarApplies) ? 'checked' : '' }}> Members</div>
                         <div class="checkbox-wrap"><input type="checkbox" name="fees[hangar][apply_to][]" value="guest" {{ in_array('guest', $hangarApplies) ? 'checked' : '' }}> Guests</div>
+                        <div class="checkbox-wrap"><input type="checkbox" name="fees[hangar][apply_to][]" value="employee" {{ in_array('employee', $hangarApplies) ? 'checked' : '' }}> Employees</div>
                         <div class="checkbox-wrap"><input type="checkbox" name="fees[hangar][apply_to][]" value="infant" {{ in_array('infant', $hangarApplies) ? 'checked' : '' }}> Infants</div>
                     </div>
                 </div>
@@ -334,6 +355,7 @@
                         @php $aofApplies = $settings['fees']['aof']['apply_to'] ?? ['member', 'guest']; @endphp
                         <div class="checkbox-wrap"><input type="checkbox" name="fees[aof][apply_to][]" value="member" {{ in_array('member', $aofApplies) ? 'checked' : '' }}> Members</div>
                         <div class="checkbox-wrap"><input type="checkbox" name="fees[aof][apply_to][]" value="guest" {{ in_array('guest', $aofApplies) ? 'checked' : '' }}> Guests</div>
+                        <div class="checkbox-wrap"><input type="checkbox" name="fees[aof][apply_to][]" value="employee" {{ in_array('employee', $aofApplies) ? 'checked' : '' }}> Employees</div>
                         <div class="checkbox-wrap"><input type="checkbox" name="fees[aof][apply_to][]" value="infant" {{ in_array('infant', $aofApplies) ? 'checked' : '' }}> Infants</div>
                     </div>
                 </div>
@@ -351,6 +373,7 @@
                         @php $envApplies = $settings['fees']['environmental']['apply_to'] ?? ['guest']; @endphp
                         <div class="checkbox-wrap"><input type="checkbox" name="fees[environmental][apply_to][]" value="member" {{ in_array('member', $envApplies) ? 'checked' : '' }}> Members</div>
                         <div class="checkbox-wrap"><input type="checkbox" name="fees[environmental][apply_to][]" value="guest" {{ in_array('guest', $envApplies) ? 'checked' : '' }}> Guests</div>
+                        <div class="checkbox-wrap"><input type="checkbox" name="fees[environmental][apply_to][]" value="employee" {{ in_array('employee', $envApplies) ? 'checked' : '' }}> Employees</div>
                         <div class="checkbox-wrap"><input type="checkbox" name="fees[environmental][apply_to][]" value="infant" {{ in_array('infant', $envApplies) ? 'checked' : '' }}> Infants</div>
                     </div>
                 </div>
@@ -373,6 +396,7 @@
         const row = document.createElement('div');
         row.className = 'peak-period-row';
         row.innerHTML = `
+            <div style="flex:1.5"><input type="text" name="peak_periods[label][]" class="form-control" placeholder="Description"></div>
             <div style="flex:1"><input type="date" name="peak_periods[start][]" class="form-control"></div>
             <div style="color:var(--text-muted)">to</div>
             <div style="flex:1"><input type="date" name="peak_periods[end][]" class="form-control"></div>
