@@ -204,6 +204,23 @@ class ReservationController extends Controller
         }
 
         try {
+            // ALWAYS fetch List API first to get metadata like 'rate' (Employee Discount ref)
+            $rateMap = [];
+            if ($fromDate && $toDate) {
+                $listResp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
+                    ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
+                if ($listResp->successful()) {
+                    $listData = $listResp->json()['msg'] ?? [];
+                    foreach($listData as $lr) {
+                        $c = trim($lr['conf'] ?? $lr['resNo'] ?? $lr['resno'] ?? '');
+                        $rateVal = strtoupper(trim($lr['rate'] ?? ''));
+                        $cust = strtoupper($lr['customer'] ?? $lr['custName'] ?? '');
+                        if (str_contains($cust, 'ALPHALAND EMPLOYEE')) $rateVal = 'EMPLOYEE';
+                        if ($c !== '') $rateMap[$c] = $rateVal;
+                    }
+                }
+            }
+
             if ($resNoList) {
                 $viewType = 'detail';
                 $allConfIds = array_filter(explode(',', $resNoList));
@@ -221,6 +238,8 @@ class ReservationController extends Controller
                     $msgs = $resp->json()['msg'] ?? [];
                     $this->consolidateRates($msgs);
                     foreach ($msgs as &$res) {
+                        $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
+                        $res['rate_metadata'] = $rateMap[$resNo] ?? '';
                         $res['calculated_rates'] = $calculator->calculatePassengerRates($res);
                         $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
                         $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
@@ -246,21 +265,17 @@ class ReservationController extends Controller
                 }
                 
                 $total = count($reservations);
-                $pagedReservations = $reservations; // Pass all
+                $pagedReservations = $reservations; 
             } else {
                 $viewType = 'list';
-                $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
-                    ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
-
-                if (!$resp->successful()) {
-                    $error = "API Error (List): " . ($resp->status() == 404 ? "Endpoint not found." : "Status " . $resp->status());
-                } else {
-                    $all = $resp->json()['msg'] ?? [];
-
-                    $all = $resp->json()['msg'] ?? [];
-                    
-                    $total = count($all);
-                    $pagedReservations = $all; // Pass all
+                // If we didn't fetch listResp above or it failed, we might need to handle it, 
+                // but usually $fromDate/$toDate are there.
+                $all = $listData ?? [];
+                $total = count($all);
+                $pagedReservations = $all;
+                
+                foreach($pagedReservations as &$res) {
+                    $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
                 }
             }
         } catch (\Illuminate\Http\Client\ConnectionException $e) {
@@ -288,20 +303,29 @@ class ReservationController extends Controller
         $statusFilter = $request->get('status_filter');
         $search = $request->get('search');
 
-        $ids = [];
-        if ($resNoList) {
-            $ids = array_filter(explode(',', $resNoList));
-        } elseif ($fromDate && $toDate) {
-            try {
-                $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
+        try {
+            // ALWAYS fetch List API first to get metadata like 'rate' (Employee Discount ref)
+            $rateMap = [];
+            if ($fromDate && $toDate) {
+                $listResp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                     ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
-
-                if (!$resp->successful()) {
-                    return back()->with('error', 'API List Error: ' . ($resp->status() == 404 ? "Endpoint not found." : "Status " . $resp->status()));
+                if ($listResp->successful()) {
+                    $listData = $listResp->json()['msg'] ?? [];
+                    foreach($listData as $lr) {
+                        $c = trim($lr['conf'] ?? $lr['resNo'] ?? $lr['resno'] ?? '');
+                        $rateVal = strtoupper(trim($lr['rate'] ?? ''));
+                        $cust = strtoupper($lr['customer'] ?? $lr['custName'] ?? '');
+                        if (str_contains($cust, 'ALPHALAND EMPLOYEE')) $rateVal = 'EMPLOYEE';
+                        if ($c !== '') $rateMap[$c] = $rateVal;
+                    }
                 }
+            }
 
-                $all = $resp->json()['msg'] ?? [];
-
+            if ($resNoList) {
+                $ids = array_filter(explode(',', $resNoList));
+            } elseif ($fromDate && $toDate) {
+                $all = $listData ?? [];
+                
                 // Apply Status Filter
                 if ($statusFilter) {
                     $all = array_filter($all, function ($res) use ($statusFilter) {
@@ -320,9 +344,9 @@ class ReservationController extends Controller
                 }
 
                 $ids = collect($all)->map(fn($i) => $i['conf'] ?? $i['resNo'] ?? $i['resno'] ?? null)->filter()->unique()->toArray();
-            } catch (\Exception $e) {
-                return back()->with('error', 'Connection Error: ' . $e->getMessage());
             }
+        } catch (\Exception $e) {
+            return back()->with('error', 'Connection Error: ' . $e->getMessage());
         }
 
         if (empty($ids))
@@ -341,36 +365,29 @@ class ReservationController extends Controller
             $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                 ->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
             if ($resp->successful()) {
-                foreach ($resp->json()['msg'] ?? [] as $res) {
-                    $depdt = $res['depdt'] ?? $res['depDt'] ?? '';
-                    $rateDates = [];
-
-                    // Filter out dates beyond depdt from the rates array so they don't affect sums or columns
-                    $filteredRates = [];
-                    foreach ($res['rate'] ?? [] as $r) {
-                        $d = $r['date'] ?? '';
-                        if ($d && $depdt !== '' && strcmp($d, $depdt) >= 0) {
-                            continue;
+                $msgs = $resp->json()['msg'] ?? [];
+                $this->consolidateRates($msgs);
+                    foreach ($msgs as &$res) {
+                        $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
+                        $res['rate_metadata'] = $rateMap[$resNo] ?? '';
+                        $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
+                        $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
+                        
+                        $rd = [];
+                        foreach ($res['rate'] as $r) {
+                            $d = $r['date'] ?? '';
+                            if ($d) {
+                                $rd[$d] = (float)($r['val'] ?? 0);
+                                $allDates[$d] = true;
+                            }
                         }
-                        $filteredRates[] = $r;
-                    }
-                    $res['rate'] = $filteredRates;
 
-                    foreach ($res['rate'] as $r) {
-                        $d = $r['date'] ?? '';
-                        if ($d) {
-                            $rateDates[$d] = (float) ($r['val'] ?? 0);
-                            $allDates[$d] = true;
-                        }
+                        $allRows[] = [
+                            'res' => $res,
+                            'rates' => $calculator->calculatePassengerRates($res),
+                            'rateDates' => $rd,
+                        ];
                     }
-                    $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
-                    $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
-                    $allRows[] = [
-                        'res' => $res,
-                        'rates' => $calculator->calculatePassengerRates($res),
-                        'rateDates' => $rateDates,
-                    ];
-                }
             }
         }
 
@@ -550,17 +567,28 @@ class ReservationController extends Controller
         $statusFilter = $request->get('status_filter');
         $search = $request->get('search');
 
-        $ids = [];
-        if ($resNoList) {
-            $ids = array_filter(explode(',', $resNoList));
-        } elseif ($fromDate && $toDate) {
-            try {
-                $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
-                if (!$resp->successful()) {
-                    return back()->with('error', 'API Print List Error: ' . ($resp->status() == 404 ? "Endpoint not found." : "Status " . $resp->status()));
+        try {
+            // ALWAYS fetch List API first to get metadata like 'rate' (Employee Discount ref)
+            $rateMap = [];
+            if ($fromDate && $toDate) {
+                $listResp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
+                    ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
+                if ($listResp->successful()) {
+                    $listData = $listResp->json()['msg'] ?? [];
+                    foreach($listData as $lr) {
+                        $c = trim($lr['conf'] ?? $lr['resNo'] ?? $lr['resno'] ?? '');
+                        $rateVal = strtoupper(trim($lr['rate'] ?? ''));
+                        $cust = strtoupper($lr['customer'] ?? $lr['custName'] ?? '');
+                        if (str_contains($cust, 'ALPHALAND EMPLOYEE')) $rateVal = 'EMPLOYEE';
+                        if ($c !== '') $rateMap[$c] = $rateVal;
+                    }
                 }
+            }
 
-                $all = $resp->json()['msg'] ?? [];
+            if ($resNoList) {
+                $ids = array_filter(explode(',', $resNoList));
+            } elseif ($fromDate && $toDate) {
+                $all = $listData ?? [];
 
                 // Apply Status Filter
                 if ($statusFilter) {
@@ -580,9 +608,9 @@ class ReservationController extends Controller
                 }
 
                 $ids = collect($all)->map(fn($i) => $i['conf'] ?? $i['resNo'] ?? $i['resno'] ?? null)->filter()->unique()->toArray();
-            } catch (\Exception $e) {
-                return back()->with('error', 'Connection Error: ' . $e->getMessage());
             }
+        } catch (\Exception $e) {
+            return back()->with('error', 'Connection Error: ' . $e->getMessage());
         }
 
         if (empty($ids))
@@ -594,7 +622,10 @@ class ReservationController extends Controller
             $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
             if ($resp->successful()) {
                 $msgs = $resp->json()['msg'] ?? [];
+                $this->consolidateRates($msgs);
                 foreach ($msgs as &$res) {
+                    $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
+                    $res['rate_metadata'] = $rateMap[$resNo] ?? '';
                     $res['calculated_rates'] = $calculator->calculatePassengerRates($res);
                     $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
                     $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');

@@ -26,59 +26,77 @@ class RateCalculatorService
             }
         }
 
-        $gstType = strtolower($passenger['gstType'] ?? 'guest');
-        $isMember = in_array($gstType, ['member', 'spouse', 'dependent']); // Generic check
-        if ($gstType === 'member') $isMember = true; // explicitly
-
-        // TODO: Infant (pup) logic temporarily disabled - data being verified
-        // $isInfant = strtolower(trim((string)($passenger['pup'] ?? ''))) === 'y';
-        $isInfant = false; // Force all passengers as non-infant for now
+        $gstTypeRaw = trim($passenger['gstType'] ?? $passenger['gst_type'] ?? 'Guest');
+        $gstType = strtolower($gstTypeRaw);
+        
+        $isMember = false;
+        $isEmployee = false;
+        $isInfant = false;
 
         $privCardStr = strtolower(trim((string)($passenger['privCard'] ?? '')));
         $hasPrivCard = !empty($privCardStr) && !in_array($privCardStr, ['n', 'no', 'false', '0', 'none', 'null']);
-        $arrDate = $passenger['arrdt'] ?? $passenger['arrDt'] ?? null;
+        
+        if (str_contains($gstType, 'senior') || str_contains($gstType, 'pwd')) {
+            $hasPrivCard = true;
+        }
 
+        $custName = strtoupper($passenger['custName'] ?? $passenger['custname'] ?? $passenger['customer'] ?? '');
+        
+        if (str_contains($gstType, 'member') || str_contains($gstType, 'spouse') || str_contains($gstType, 'dependent')) {
+            $isMember = true;
+        } elseif (str_contains($gstType, 'employee') || 
+                 (isset($passenger['rate_metadata']) && str_contains(strtoupper($passenger['rate_metadata']), 'EMPLOYEE')) ||
+                 str_contains($custName, 'ALPHALAND EMPLOYEE')) {
+            $isEmployee = true;
+        }
+
+        if (str_contains($gstType, 'infant')) {
+            $isInfant = true;
+        }
+
+        $arrDate = $passenger['arrdt'] ?? $passenger['arrDt'] ?? null;
+        
         // Base Airfare
         $airfare = 0;
-        if ($isInfant && !empty($this->settings['infants']['airfare_free'])) {
+        if ($isInfant) {
             $airfare = 0;
         } else {
-            $passengerClass = $isMember ? 'member' : 'guest';
+            $isPeak = true; 
             
-            // Determine if promo applies
-            $usePromo = false;
             if (!empty($this->settings['promo_rates']['active']) && $arrDate) {
                 $promoStart = $this->settings['promo_rates']['start_date'] ?? '';
                 $promoEnd = $this->settings['promo_rates']['end_date'] ?? '';
                 
                 if ($arrDate >= $promoStart && $arrDate <= $promoEnd) {
-                    $usePromo = true;
-                    // Check if in peak period
+                    $isPeak = false;
                     foreach ($this->settings['promo_rates']['peak_periods'] ?? [] as $peak) {
                         if ($arrDate >= $peak['start'] && $arrDate <= $peak['end']) {
-                            $usePromo = false;
+                            $isPeak = true;
                             break;
                         }
                     }
                 }
             }
 
-            if ($usePromo) {
-                $airfare = (float)($this->settings['promo_rates'][$passengerClass] ?? 0);
-            } else {
+            $passengerClass = 'guest';
+            if ($isEmployee) $passengerClass = 'employee';
+            elseif ($isMember) $passengerClass = 'member';
+
+            if ($isPeak) {
                 $airfare = (float)($this->settings['base_rates'][$passengerClass] ?? 0);
+            } else {
+                $airfare = (float)($this->settings['promo_rates'][$passengerClass] ?? 0);
             }
 
-            // Apply SC/PWD Discounts
-            if ($hasPrivCard) {
+            // Apply SC/PWD Discounts (Only if not employee)
+            if ($hasPrivCard && !$isEmployee) {
                 $vatRate = (float)($this->settings['discounts']['vat_rate'] ?? 12);
-                if (!empty($this->settings['discounts']['sc_pwd']['remove_vat'])) {
-                    $airfare = $airfare / (1 + ($vatRate / 100));
-                }
+                // VAT removal
+                $airfare = $airfare / (1 + ($vatRate / 100));
                 
-                $additionalDiscount = (float)($this->settings['discounts']['sc_pwd']['additional_discount_percent'] ?? 0);
-                if ($additionalDiscount > 0) {
-                    $airfare = $airfare * (1 - ($additionalDiscount / 100));
+                // Additional 20% only for GUESTS during PEAK
+                if ($passengerClass === 'guest' && $isPeak) {
+                    $airfare = $airfare * 0.8; 
                 }
             }
         }
@@ -86,9 +104,10 @@ class RateCalculatorService
         // Hangar Fee
         $hangar = 0;
         $hangarApplyTo = $this->settings['fees']['hangar']['apply_to'] ?? [];
+        $passClass = $isEmployee ? 'employee' : ($isMember ? 'member' : 'guest');
+        
         if (($isInfant && in_array('infant', $hangarApplyTo)) || 
-            (!$isInfant && $isMember && in_array('member', $hangarApplyTo)) || 
-            (!$isInfant && !$isMember && in_array('guest', $hangarApplyTo))) {
+            (!$isInfant && in_array($passClass, $hangarApplyTo))) {
             $hangar = (float)($this->settings['fees']['hangar']['amount'] ?? 0);
         }
 
@@ -99,10 +118,12 @@ class RateCalculatorService
         
         $arrMonth = $arrDate ? (int)date('n', strtotime($arrDate)) : 0;
         
-        if (in_array($arrMonth, $activeMonths)) {
+        // If activeMonths is empty, assume it applies to all months (unless specifically restricted)
+        $monthApplies = empty($activeMonths) || in_array($arrMonth, $activeMonths);
+        
+        if ($monthApplies) {
             if (($isInfant && in_array('infant', $aofApplyTo)) || 
-                (!$isInfant && $isMember && in_array('member', $aofApplyTo)) || 
-                (!$isInfant && !$isMember && in_array('guest', $aofApplyTo))) {
+                (!$isInfant && in_array($passClass, $aofApplyTo))) {
                 $aof = (float)($this->settings['fees']['aof']['amount'] ?? 0);
             }
         }
@@ -111,8 +132,7 @@ class RateCalculatorService
         $env = 0;
         $envApplyTo = $this->settings['fees']['environmental']['apply_to'] ?? [];
         if (($isInfant && in_array('infant', $envApplyTo)) || 
-            (!$isInfant && $isMember && in_array('member', $envApplyTo)) || 
-            (!$isInfant && !$isMember && in_array('guest', $envApplyTo))) {
+            (!$isInfant && in_array($passClass, $envApplyTo))) {
             $env = (float)($this->settings['fees']['environmental']['amount'] ?? 0);
         }
 
