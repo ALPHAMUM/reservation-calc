@@ -176,6 +176,72 @@
         transition: all 0.2s;
     }
 
+    /* DataTables Specific Pagination Fixes */
+    #paginationContainer {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        margin-top: 1.5rem;
+    }
+    .dataTables_paginate {
+        display: flex !important;
+        gap: 0.5rem !important;
+        background: transparent !important;
+        padding: 0 !important;
+    }
+    /* Reset DataTables default padding/border on the <a> tags */
+    .dataTables_wrapper .dataTables_paginate .paginate_button {
+        padding: 0 !important;
+        margin: 0 !important;
+        border: none !important;
+        background: transparent !important;
+    }
+    .dataTables_paginate .paginate_button {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        min-width: 40px;
+        height: 40px;
+        background: var(--glass-bg) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 0.75rem !important;
+        cursor: pointer !important;
+        color: var(--text) !important;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        text-decoration: none !important;
+        font-size: 0.9rem !important;
+        box-shadow: none !important;
+    }
+    .dataTables_paginate .paginate_button:hover {
+        background: var(--primary) !important;
+        border-color: var(--primary) !important;
+        color: #fff !important;
+        transform: translateY(-2px);
+    }
+    .dataTables_paginate .paginate_button.current {
+        background: var(--primary) !important;
+        border-color: var(--primary) !important;
+        color: #fff !important;
+        font-weight: bold !important;
+    }
+    .dataTables_paginate .paginate_button.disabled {
+        opacity: 0.2 !important;
+        cursor: not-allowed !important;
+        transform: none !important;
+    }
+    .dataTables_paginate span {
+        display: flex !important;
+        gap: 0.5rem;
+    }
+    .dataTables_info {
+        color: var(--text-muted) !important;
+        font-size: 0.85rem !important;
+        text-align: center;
+        margin-top: 0.5rem;
+        width: 100%;
+    }
+
     .page-item.active .page-link {
         z-index: 3;
         color: #fff !important;
@@ -240,16 +306,32 @@
 <div class="animate-in" style="animation-delay: 0.1s">
     <div class="stats-grid">
         <div class="stat-card">
-            <div class="stat-label">Total Records Found</div>
-            <div class="stat-value">{{ $reservations->total() }}</div>
+            <div class="stat-label">Total Reservations</div>
+            <div class="stat-value" id="stat-total-res">{{ count($reservations) }}</div>
         </div>
         <div class="stat-card">
-            <div class="stat-label">Showing Page</div>
-            <div class="stat-value">{{ $reservations->currentPage() }} of {{ $reservations->lastPage() }}</div>
+            <div class="stat-label">Total Pax</div>
+            <div class="stat-value" id="stat-total-pax">
+                @php 
+                    $totalPax = 0;
+                    foreach($reservations as $r) $totalPax += (int)($r['noPax'] ?? $r['noOfPax'] ?? 0);
+                    echo $totalPax;
+                @endphp
+            </div>
         </div>
         <div class="stat-card">
-            <div class="stat-label">Results on Page</div>
-            <div class="stat-value">{{ $reservations->count() }}</div>
+            <div class="stat-label">Total Pax Arrived</div>
+            <div class="stat-value" id="stat-total-arrived">
+                @php 
+                    $arrivedPax = 0;
+                    foreach($reservations as $r) {
+                        if(strtoupper(trim($r['status'] ?? '')) === 'ARRIVED') {
+                            $arrivedPax += (int)($r['noPax'] ?? $r['noOfPax'] ?? 0);
+                        }
+                    }
+                    echo $arrivedPax;
+                @endphp
+            </div>
         </div>
     </div>
 
@@ -313,10 +395,12 @@
                 @endif
                 <div class="input-group" style="max-width: 320px;">
                     <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Search (Name, Res No...)</label>
-                    <input type="text" id="nameSearchInput" placeholder="Filter current page..." autocomplete="off">
+                    <input type="text" name="search" value="{{ request('search') }}" placeholder="Search all records..." autocomplete="off">
                 </div>
-                {{-- Res No List Hidden --}}
-                <input type="hidden" name="resnolist" value="{{ $resNoList }}">
+                <div class="input-group" style="max-width: 320px;">
+                    <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Res No List</label>
+                    <input type="text" name="resnolist" value="{{ $resNoList }}" placeholder="IDs separated by comma...">
+                </div>
             </div>
         </form>
 
@@ -428,9 +512,7 @@
                                         $statusRaw = $res['status'] ?? 'PENDING';
                                         $statusClass = str_replace([' ', '_'], '-', strtolower($statusRaw));
                                     @endphp
-                                    <span class="status-badge status-{{ $statusClass }}">
-                                        {{ $statusRaw }}
-                                    </span>
+                                    <span class="status-badge status-{{ $statusClass }}">{{ trim($statusRaw) }}</span>
                                 </td>
                             @endif
                         </tr>
@@ -439,8 +521,8 @@
             </table>
         </div>
 
-        <div class="mt-4 d-flex justify-content-center">
-            {{ $reservations->appends(request()->query())->links('pagination::bootstrap-4') }}
+        {{-- Client-side pagination handled by DataTables --}}
+        <div class="mt-4 d-flex justify-content-center" id="paginationContainer">
         </div>
     </div>
 </div>
@@ -455,38 +537,65 @@
         var table;
         if (!$.fn.DataTable.isDataTable('#resTable')) {
             table = $('#resTable').DataTable({
-                "paging": false,
-                "info": false,
-                "searching": true,
+                "paging": true,
+                "pageLength": {{ request('per_page', 10) }},
+                "lengthChange": false, // Disable "Show X entries"
+                "info": true,
+                "searching": true, 
                 "ordering": true,
                 "order": [],
+                "language": {
+                    "search": "",
+                    "searchPlaceholder": "Search all records...",
+                    "paginate": {
+                        "previous": "&laquo;",
+                        "next": "&raquo;"
+                    }
+                },
                 "columnDefs": [
-                    { "orderable": false, "targets": "_all" }
-                ]
+                    { "orderable": false, "targets": [0] } // Disable ordering on checkbox
+                ],
+                "dom": 'rt<"bottom"ip><"clear">'
             });
-            // Hide the built-in DataTable search box (we use our own)
+            // Hide the default DataTables search box and use ours
             $('.dataTables_filter').hide();
+            // Move DataTables pagination and info to our container
+            const info = $('.dataTables_info').detach();
+            const paginate = $('.dataTables_paginate').detach();
+            $('#paginationContainer').append(paginate).after(info);
         } else {
             table = $('#resTable').DataTable();
         }
 
-        // Wire our custom search input to global DataTable search
-        $('#nameSearchInput').on('keyup input', function() {
+        // Live Search logic
+        $('input[name="search"]').on('keyup input', function() {
             table.search(this.value).draw();
         });
 
-        // Form validation: require dates if no resnolist
-        $('#dashboardForm').on('submit', function(e) {
-            const resNoList = $('input[name="resnolist"]').val().trim();
-            const fromDate = $('input[name="fromdate"]').val().trim();
-            const toDate = $('input[name="todate"]').val().trim();
-
-            if (!resNoList && (!fromDate || !toDate)) {
-                e.preventDefault();
-                alert('Please select both a From Date and To Date before searching.');
-                $('input[name="fromdate"]').focus();
-                return false;
+        // Live Status Filter logic
+        $('select[name="status_filter"]').on('change', function() {
+            const val = $(this).val();
+            // Status is column index 9 in Summary view
+            if ("{{ $viewType }}" !== 'detail') {
+                table.column(9).search(val ? '^\\s*' + val + '\\s*$' : '', true, false).draw();
             }
+            updateLinks();
+        });
+
+        // Apply initial filters if present
+        if ($('input[name="search"]').val()) {
+            table.search($('input[name="search"]').val()).draw();
+        }
+        if ($('select[name="status_filter"]').val()) {
+            const val = $('select[name="status_filter"]').val();
+            if ("{{ $viewType }}" !== 'detail') {
+                table.column(9).search(val ? '^\\s*' + val + '\\s*$' : '', true, false).draw();
+            }
+        }
+
+        // Form submit should only happen for new date/status range
+        $('#dashboardForm').on('submit', function(e) {
+            // No changes needed here, just ensures date range is valid
         });
 
         // Reset Res No List when Date or Status Filter changes
@@ -503,6 +612,7 @@
             const toDate = $('input[name="todate"]').val() || '';
             const resNoList = $('input[name="resnolist"]').val() || '';
             const statusFilter = $('select[name="status_filter"]').val() || '';
+            const search = $('input[name="search"]').val() || '';
             const perPage = $('select[name="per_page"]').val() || '10';
 
             const params = new URLSearchParams({
@@ -510,6 +620,7 @@
                 todate: toDate,
                 resnolist: resNoList,
                 status_filter: statusFilter,
+                search: search,
                 per_page: perPage
             }).toString();
 

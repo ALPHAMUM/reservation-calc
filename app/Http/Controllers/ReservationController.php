@@ -187,6 +187,7 @@ class ReservationController extends Controller
         $fromDate = $request->get('fromdate');
         $toDate = $request->get('todate');
         $statusFilter = $request->get('status_filter');
+        $search = $request->get('search');
         $page = $request->get('page', 1);
         $perPage = $request->get('per_page', 10);
         if ($perPage > 100)
@@ -234,8 +235,18 @@ class ReservationController extends Controller
                     });
                 }
 
+                // Apply Global Search
+                if ($search) {
+                    $search = strtolower(trim($search));
+                    $reservations = array_filter($reservations, function($res) use ($search) {
+                        $resNo = strtolower($res['resNo'] ?? $res['conf'] ?? '');
+                        $name = strtolower($res['gstName'] ?? $res['guestName'] ?? $res['custName'] ?? $res['customer'] ?? '');
+                        return str_contains($resNo, $search) || str_contains($name, $search);
+                    });
+                }
+                
                 $total = count($reservations);
-                $pagedReservations = array_slice($reservations, ($page - 1) * $perPage, $perPage);
+                $pagedReservations = $reservations; // Pass all
             } else {
                 $viewType = 'list';
                 $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
@@ -246,15 +257,10 @@ class ReservationController extends Controller
                 } else {
                     $all = $resp->json()['msg'] ?? [];
 
-                    // Apply Status Filter
-                    if ($statusFilter) {
-                        $all = array_filter($all, function ($res) use ($statusFilter) {
-                            return strtoupper(trim($res['status'] ?? '')) === strtoupper(trim($statusFilter));
-                        });
-                    }
-
+                    $all = $resp->json()['msg'] ?? [];
+                    
                     $total = count($all);
-                    $pagedReservations = array_slice($all, ($page - 1) * $perPage, $perPage);
+                    $pagedReservations = $all; // Pass all
                 }
             }
         } catch (\Illuminate\Http\Client\ConnectionException $e) {
@@ -263,8 +269,14 @@ class ReservationController extends Controller
             $error = "System Error: " . $e->getMessage();
         }
 
-        $paginator = new \Illuminate\Pagination\LengthAwarePaginator($pagedReservations ?? [], $total, $perPage, $page, ['path' => $request->url(), 'query' => $request->query()]);
-        return view('dashboard', ['reservations' => $paginator, 'resNoList' => $resNoList, 'fromDate' => $fromDate, 'toDate' => $toDate, 'viewType' => $viewType, 'error' => $error]);
+        return view('dashboard', [
+            'reservations' => $pagedReservations ?? [], 
+            'resNoList' => $resNoList, 
+            'fromDate' => $fromDate, 
+            'toDate' => $toDate, 
+            'viewType' => $viewType, 
+            'error' => $error
+        ]);
     }
 
     public function export(Request $request)
@@ -274,6 +286,7 @@ class ReservationController extends Controller
         $fromDate = $request->get('fromdate');
         $toDate = $request->get('todate');
         $statusFilter = $request->get('status_filter');
+        $search = $request->get('search');
 
         $ids = [];
         if ($resNoList) {
@@ -296,7 +309,17 @@ class ReservationController extends Controller
                     });
                 }
 
-                $ids = collect($all)->map(fn($i) => $i['conf'] ?? $i['resNo'] ?? null)->filter()->unique()->toArray();
+                // Apply Global Search
+                if ($search) {
+                    $search = strtolower(trim($search));
+                    $all = array_filter($all, function($res) use ($search) {
+                        $resNo = strtolower($res['resNo'] ?? $res['conf'] ?? $res['resno'] ?? '');
+                        $name = strtolower($res['gstName'] ?? $res['guestName'] ?? $res['custName'] ?? $res['customer'] ?? $res['custname'] ?? $res['guestname'] ?? '');
+                        return str_contains($resNo, $search) || str_contains($name, $search);
+                    });
+                }
+
+                $ids = collect($all)->map(fn($i) => $i['conf'] ?? $i['resNo'] ?? $i['resno'] ?? null)->filter()->unique()->toArray();
             } catch (\Exception $e) {
                 return back()->with('error', 'Connection Error: ' . $e->getMessage());
             }
@@ -525,6 +548,7 @@ class ReservationController extends Controller
         $fromDate = $request->get('fromdate');
         $toDate = $request->get('todate');
         $statusFilter = $request->get('status_filter');
+        $search = $request->get('search');
 
         $ids = [];
         if ($resNoList) {
@@ -545,7 +569,17 @@ class ReservationController extends Controller
                     });
                 }
 
-                $ids = collect($all)->map(fn($i) => $i['conf'] ?? $i['resNo'] ?? null)->filter()->unique()->toArray();
+                // Apply Global Search
+                if ($search) {
+                    $search = strtolower(trim($search));
+                    $all = array_filter($all, function($res) use ($search) {
+                        $resNo = strtolower($res['resNo'] ?? $res['conf'] ?? $res['resno'] ?? '');
+                        $name = strtolower($res['gstName'] ?? $res['guestName'] ?? $res['custName'] ?? $res['customer'] ?? $res['custname'] ?? $res['guestname'] ?? '');
+                        return str_contains($resNo, $search) || str_contains($name, $search);
+                    });
+                }
+
+                $ids = collect($all)->map(fn($i) => $i['conf'] ?? $i['resNo'] ?? $i['resno'] ?? null)->filter()->unique()->toArray();
             } catch (\Exception $e) {
                 return back()->with('error', 'Connection Error: ' . $e->getMessage());
             }
