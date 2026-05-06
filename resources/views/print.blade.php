@@ -209,7 +209,7 @@
                     <td>{{ $res['gstType'] ?? '' }}{{ $isValidCard ? ' (' . $privCard . ')' : '' }}</td>
                     <td>{{ $res['age'] ?? '' }}</td>
                     <td>{{ $res['dateOfBirth'] ?? '' }}</td>
-                    <td>{{ $res['nationality'] ?? '' }}</td>
+                    <td>{{ $res['nationality_name'] ?? $res['nationality'] ?? '' }}</td>
                     <td>{{ $res['arrdt'] ?? $res['arrDt'] ?? '' }}</td>
                     <td>{{ $res['depdt'] ?? $res['depDt'] ?? '' }}</td>
 

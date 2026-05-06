@@ -34,16 +34,58 @@ class ReservationController extends Controller
         'TCNA' => 'TOSCANA',
     ];
 
+    private $nationalityMap = [
+        '2' => 'Afghanistani', '3' => 'Albaniaian', '4' => 'Algeriaian', '5' => 'Andorreaian',
+        '8' => 'Angolese', '10' => 'Argentinaian', '11' => 'Australiaian', '13' => 'Austriaian',
+        '14' => 'Bahamaian', '15' => 'Bahraini', '16' => 'Bangladeshi', '17' => 'Barbados',
+        '18' => 'Belgian', '19' => 'Bhutanese', '20' => 'Bosniaian', '21' => 'Brazilian',
+        '22' => 'Brunei', '23' => 'Bulgarian', '24' => 'Burmese', '25' => 'Camarooni',
+        '26' => 'Canadian', '27' => 'Indian', '28' => 'Indonesian', '29' => 'Iranian',
+        '30' => 'Iraqi', '31' => 'Irish', '32' => 'Italian', '33' => 'Jamaican',
+        '34' => 'Japanese', '35' => 'Jordanian', '36' => 'Kenyan', '37' => 'Korean',
+        '38' => 'Kuwaiti', '39' => 'Lebanese', '40' => 'Libyan', '41' => 'Luxemborg',
+        '43' => 'Maldives', '44' => 'Maltese', '45' => 'Mauritian', '46' => 'Mexican',
+        '47' => 'Moroccon', '48' => 'Mozambique', '49' => 'Nepali', '50' => 'Dutch',
+        '51' => 'New Zealand', '52' => 'Chilean', '53' => 'Chinese', '54' => 'Colombian',
+        '55' => 'Congolese', '56' => 'Costa Rican', '57' => 'Croatian', '58' => 'Cuban',
+        '59' => 'Cypriot', '60' => 'Czechoslovakian', '62' => 'Danish', '63' => 'Ecuadorian',
+        '64' => 'Egyptian', '65' => 'El Salvador', '66' => 'Ethiopian', '67' => 'Fijian',
+        '68' => 'Finnish', '69' => 'French', '70' => 'German', '72' => 'Ghanaian',
+        '74' => 'Hong Kong', '75' => 'Hungarian', '76' => 'Nigerian', '77' => 'Norwegian',
+        '78' => 'Omani', '79' => 'Pakistani', '80' => 'Panama', '81' => 'Peruvian',
+        '82' => 'Filipino', '83' => 'Polish', '84' => 'Portugese', '85' => 'Qatari',
+        '86' => 'Romanian', '87' => 'Russian', '88' => 'Saudi Arabian', '89' => 'Scottish',
+        '90' => 'English', '91' => 'Singaporean', '92' => 'Slovakian', '93' => 'Somalian',
+        '94' => 'South African', '95' => 'Spainish', '96' => 'Sri Lankan', '97' => 'Sudani',
+        '98' => 'Swedish', '99' => 'Swiss', '100' => 'Syrian', '101' => 'Taiwanese',
+        '102' => 'Tanzanian', '103' => 'Thai', '104' => 'Tunisian', '105' => 'Turkish',
+        '106' => 'USA', '107' => 'Ugandan', '108' => 'Ukrainian', '109' => 'UAE',
+        '110' => 'Uruguay', '111' => 'Venenzuela', '112' => 'Vietnamese', '113' => 'Yemeni',
+        '115' => 'Zambian', '116' => 'Zimbabwe', '117' => 'Others', '121' => 'Madagascar',
+        '122' => 'Yugoslavian', '123' => 'Palestine', '137' => 'NONE', '138' => 'Greek',
+        '140' => 'Icelandic', '142' => 'Malaysian', '143' => 'Myanmar', '144' => 'Greenlandian',
+        '146' => 'Guamese', '147' => 'Hawaiian', '150' => 'Timor Leste', '151' => 'Laos',
+        '152' => 'United Kingdom',
+    ];
+
+    private function getNationalityName($code)
+    {
+        if (!$code) return '';
+        $code = trim($code);
+        return $this->nationalityMap[$code] ?? $code;
+    }
+
     private function getVillageName($code)
     {
-        if (!$code) return 'N/A';
+        if (!$code)
+            return 'N/A';
         $searchCode = strtoupper(trim($code));
-        
+
         // If it exists in our map, return the "actual name"
         if (isset($this->villageMap[$searchCode])) {
             return $this->villageMap[$searchCode];
         }
-        
+
         // Otherwise, return the original code/name as provided
         return $code;
     }
@@ -88,6 +130,7 @@ class ReservationController extends Controller
                     foreach ($msgs as &$res) {
                         $res['calculated_rates'] = $calculator->calculatePassengerRates($res);
                         $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
+                        $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
                     }
                     $reservations = array_merge($reservations, $msgs);
                 }
@@ -180,6 +223,7 @@ class ReservationController extends Controller
                         }
                     }
                     $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
+                    $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
                     $allRows[] = [
                         'res' => $res,
                         'rates' => $calculator->calculatePassengerRates($res),
@@ -275,7 +319,7 @@ class ReservationController extends Controller
                 echo '<td>' . $relation . '</td>';
                 echo '<td>' . htmlspecialchars($res['age'] ?? '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['dateOfBirth'] ?? '') . '</td>';
-                echo '<td>' . htmlspecialchars($res['nationality'] ?? '') . '</td>';
+                echo '<td>' . htmlspecialchars($res['nationality_name'] ?? $res['nationality'] ?? '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['arrdt'] ?? $res['arrDt'] ?? '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['depdt'] ?? $res['depDt'] ?? '') . '</td>';
 
@@ -390,6 +434,7 @@ class ReservationController extends Controller
                 foreach ($msgs as &$res) {
                     $res['calculated_rates'] = $calculator->calculatePassengerRates($res);
                     $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
+                    $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
                 }
                 $reservations = array_merge($reservations, $msgs);
             }

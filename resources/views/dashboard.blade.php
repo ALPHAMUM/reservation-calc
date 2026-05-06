@@ -302,6 +302,7 @@
                         <th>Res No</th>
                         <th>Guest Name</th>
                         @if($viewType === 'detail')
+                            <th>Nationality</th>
                             <th>Type</th>
                             <th>Room</th>
                             <th>Dates</th>
@@ -341,6 +342,7 @@
                                 <div style="font-size: 0.75rem; color: var(--text-muted)">{{ $res['custName'] ?? $res['customer'] ?? '' }}</div>
                             </td>
                             @if($viewType === 'detail')
+                                <td>{{ $res['nationality_name'] ?? $res['nationality'] ?? '' }}</td>
                                 <td>
                                     <span class="badge {{ ($res['gstType'] ?? '') === 'Member' ? 'badge-member' : 'badge-guest' }}">
                                         {{ $res['gstType'] ?? 'Guest' }}
