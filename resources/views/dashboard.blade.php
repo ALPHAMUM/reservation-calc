@@ -99,6 +99,29 @@
         border-radius: 0.5rem;
     }
 
+    /* Status Badges */
+    .status-badge {
+        padding: 0.25rem 0.6rem;
+        border-radius: 9999px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        display: inline-block;
+        white-space: nowrap;
+    }
+    /* Confirmed - Green */
+    .status-confirmed, .status-active { background: rgba(34, 197, 94, 0.2); color: #4ade80; }
+    /* Pending/Not-Confirmed - Yellow/Orange */
+    .status-not-confirmed, .status-pending, .status-tentative { background: rgba(234, 179, 8, 0.2); color: #facc15; }
+    /* Arrived - Blue */
+    .status-arrived, .status-in-house, .status-checkedin, .status-partly-arrived { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+    /* Cancelled - Red */
+    .status-cancelled, .status-system-cancelled, .status-partial-sys-cancelled, .status-partly-cancelled, .status-nc-sys-cancelled, .status-deleted { 
+        background: rgba(239, 68, 68, 0.2); color: #f87171; 
+    }
+    /* Completed - Slate */
+    .status-checkout, .status-completed { background: rgba(148, 163, 184, 0.2); color: #94a3b8; }
+
     .badge-guest { background: rgba(14, 165, 233, 0.15); color: #38bdf8; }
     .badge-member { background: rgba(16, 185, 129, 0.15); color: #34d399; }
 
@@ -277,6 +300,15 @@
                         <input type="date" name="todate" value="{{ $toDate }}">
                     </div>
                 @endif
+                <div class="input-group">
+                    <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Status Filter</label>
+                    <select name="status_filter" class="form-select bg-dark text-white border-secondary">
+                        <option value="">ALL STATUS</option>
+                        @foreach(['CONFIRMED', 'NOT-CONFIRMED', 'ARRIVED', 'CANCELLED', 'SYSTEM CANCELLED', 'PARTLY ARRIVED', 'PARTIAL SYS CANCELLED', 'PARTLY CANCELLED', 'NC-SYS CANCELLED'] as $st)
+                            <option value="{{ $st }}" {{ request('status_filter') == $st ? 'selected' : '' }}>{{ $st }}</option>
+                        @endforeach
+                    </select>
+                </div>
                 <div class="input-group" style="flex: 2;">
                     <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Res No List</label>
                     <input type="text" name="resnolist" value="{{ $resNoList }}" placeholder="114481,114475...">
@@ -284,11 +316,11 @@
             </div>
         </form>
 
-        <!-- Name Search (Client-side DataTable filter) -->
-        <div style="margin-top: 1rem; margin-bottom: 0.5rem;">
+        <!-- Filters & Search -->
+        <div style="margin-top: 1rem; margin-bottom: 0.5rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
             <div class="input-group" style="max-width: 320px;">
-                <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Search (Name, Res No, Type...)</label>
-                <input type="text" id="nameSearchInput" placeholder="Type to filter results..." autocomplete="off">
+                <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Search (Name, Res No...)</label>
+                <input type="text" id="nameSearchInput" placeholder="Filter current page..." autocomplete="off">
             </div>
         </div>
 
@@ -306,10 +338,18 @@
                             <th>Type</th>
                             <th>Room</th>
                             <th>Dates</th>
-                            <th>Total Rate</th>
+                            <th>
+                                Total Rate
+                                <div style="font-size: 0.65rem; font-weight: normal; opacity: 0.7; margin-top: 2px;">(Accommodation + Fees)</div>
+                            </th>
                         @else
+                            <th>Rooms</th>
+                            <th>Pax</th>
+                            <th>Rate</th>
+                            <th>Rate Code</th>
                             <th>Arrival</th>
                             <th>Departure</th>
+                            <th>Status</th>
                         @endif
                     </tr>
                 </thead>
@@ -357,16 +397,45 @@
                                     @php
                                         $total = 0;
                                         if (isset($res['calculated_rates'])) {
-                                            $total = array_sum($res['calculated_rates']);
+                                            $r = $res['calculated_rates'];
+                                            // Match export logic: floor each component
+                                            $total = floor($r['acc'] ?? 0) + 
+                                                     floor($r['air'] ?? 0) + 
+                                                     floor($r['han'] ?? 0) + 
+                                                     floor($r['avi'] ?? 0) + 
+                                                     floor($r['env'] ?? 0);
                                         } elseif (isset($res['rate']) && is_array($res['rate'])) {
-                                            foreach($res['rate'] as $r) $total += (float)($r['val'] ?? 0);
+                                            foreach($res['rate'] as $rateItem) $total += floor((float)($rateItem['val'] ?? 0));
                                         }
                                     @endphp
                                     {{ number_format($total, 2) }}
                                 </td>
                             @else
-                                <td>{{ $res['arrdt'] ?? $res['arrDt'] ?? '' }}</td>
-                                <td>{{ $res['depdt'] ?? $res['depDt'] ?? '' }}</td>
+                                <td>{{ $res['noRooms'] ?? $res['noOfRooms'] ?? '0' }}</td>
+                                <td>{{ $res['noPax'] ?? $res['noOfPax'] ?? '0' }}</td>
+                                <td>
+                                    @php
+                                        if (isset($res['rate']) && is_array($res['rate'])) {
+                                            $rateVal = 0;
+                                            foreach($res['rate'] as $r) $rateVal += (float)($r['val'] ?? 0);
+                                            echo number_format($rateVal, 2);
+                                        } else {
+                                            echo htmlspecialchars($res['rate'] ?? 'N/A');
+                                        }
+                                    @endphp
+                                </td>
+                                <td>{{ $res['rateCode'] ?? $res['ratecode'] ?? 'N/A' }}</td>
+                                <td style="white-space: nowrap;">{{ $res['arrdt'] ?? $res['arrDt'] ?? '' }}</td>
+                                <td style="white-space: nowrap;">{{ $res['depdt'] ?? $res['depDt'] ?? '' }}</td>
+                                <td>
+                                    @php
+                                        $statusRaw = $res['status'] ?? 'PENDING';
+                                        $statusClass = str_replace([' ', '_'], '-', strtolower($statusRaw));
+                                    @endphp
+                                    <span class="status-badge status-{{ $statusClass }}">
+                                        {{ $statusRaw }}
+                                    </span>
+                                </td>
                             @endif
                         </tr>
                     @endforeach
@@ -424,17 +493,27 @@
             }
         });
 
+        // Reset Res No List when Date or Status Filter changes
+        $('input[name="fromdate"], input[name="todate"], select[name="status_filter"]').on('change', function() {
+            $('input[name="resnolist"]').val('');
+            $('.res-checkbox').prop('checked', false);
+            $('#selectAllRes').prop('checked', false);
+            updateLinks();
+        });
+
         // Function to update export/print links based on current inputs
         function updateLinks() {
             const fromDate = $('input[name="fromdate"]').val() || '';
             const toDate = $('input[name="todate"]').val() || '';
             const resNoList = $('input[name="resnolist"]').val() || '';
+            const statusFilter = $('select[name="status_filter"]').val() || '';
             const perPage = $('select[name="per_page"]').val() || '10';
 
             const params = new URLSearchParams({
                 fromdate: fromDate,
                 todate: toDate,
                 resnolist: resNoList,
+                status_filter: statusFilter,
                 per_page: perPage
             }).toString();
 

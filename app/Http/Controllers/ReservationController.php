@@ -95,6 +95,7 @@ class ReservationController extends Controller
         $resNoList = $request->get('resnolist');
         $fromDate = $request->get('fromdate');
         $toDate = $request->get('todate');
+        $statusFilter = $request->get('status_filter');
         $page = $request->get('page', 1);
         $perPage = $request->get('per_page', 10);
         if ($perPage > 100)
@@ -134,6 +135,14 @@ class ReservationController extends Controller
                     }
                     $reservations = array_merge($reservations, $msgs);
                 }
+                
+                // Apply Status Filter
+                if ($statusFilter) {
+                    $reservations = array_filter($reservations, function($res) use ($statusFilter) {
+                        return strtoupper(trim($res['status'] ?? '')) === strtoupper(trim($statusFilter));
+                    });
+                }
+
                 $total = count($reservations);
                 $pagedReservations = array_slice($reservations, ($page - 1) * $perPage, $perPage);
             } else {
@@ -145,6 +154,14 @@ class ReservationController extends Controller
                     $error = "API Error (List): " . ($resp->status() == 404 ? "Endpoint not found." : "Status " . $resp->status());
                 } else {
                     $all = $resp->json()['msg'] ?? [];
+
+                    // Apply Status Filter
+                    if ($statusFilter) {
+                        $all = array_filter($all, function($res) use ($statusFilter) {
+                            return strtoupper(trim($res['status'] ?? '')) === strtoupper(trim($statusFilter));
+                        });
+                    }
+
                     $total = count($all);
                     $pagedReservations = array_slice($all, ($page - 1) * $perPage, $perPage);
                 }
@@ -165,6 +182,7 @@ class ReservationController extends Controller
         $resNoList = $request->get('resnolist');
         $fromDate = $request->get('fromdate');
         $toDate = $request->get('todate');
+        $statusFilter = $request->get('status_filter');
 
         $ids = [];
         if ($resNoList) {
@@ -178,7 +196,16 @@ class ReservationController extends Controller
                     return back()->with('error', 'API List Error: ' . ($resp->status() == 404 ? "Endpoint not found." : "Status " . $resp->status()));
                 }
 
-                $ids = collect($resp->json()['msg'] ?? [])->map(fn($i) => $i['conf'] ?? $i['resNo'] ?? null)->filter()->unique()->toArray();
+                $all = $resp->json()['msg'] ?? [];
+                
+                // Apply Status Filter
+                if ($statusFilter) {
+                    $all = array_filter($all, function($res) use ($statusFilter) {
+                        return strtoupper(trim($res['status'] ?? '')) === strtoupper(trim($statusFilter));
+                    });
+                }
+
+                $ids = collect($all)->map(fn($i) => $i['conf'] ?? $i['resNo'] ?? null)->filter()->unique()->toArray();
             } catch (\Exception $e) {
                 return back()->with('error', 'Connection Error: ' . $e->getMessage());
             }
@@ -406,6 +433,7 @@ class ReservationController extends Controller
         $resNoList = $request->get('resnolist');
         $fromDate = $request->get('fromdate');
         $toDate = $request->get('todate');
+        $statusFilter = $request->get('status_filter');
 
         $ids = [];
         if ($resNoList) {
@@ -416,7 +444,17 @@ class ReservationController extends Controller
                 if (!$resp->successful()) {
                     return back()->with('error', 'API Print List Error: ' . ($resp->status() == 404 ? "Endpoint not found." : "Status " . $resp->status()));
                 }
-                $ids = collect($resp->json()['msg'] ?? [])->map(fn($i) => $i['conf'] ?? $i['resNo'] ?? null)->filter()->unique()->toArray();
+                
+                $all = $resp->json()['msg'] ?? [];
+
+                // Apply Status Filter
+                if ($statusFilter) {
+                    $all = array_filter($all, function($res) use ($statusFilter) {
+                        return strtoupper(trim($res['status'] ?? '')) === strtoupper(trim($statusFilter));
+                    });
+                }
+
+                $ids = collect($all)->map(fn($i) => $i['conf'] ?? $i['resNo'] ?? null)->filter()->unique()->toArray();
             } catch (\Exception $e) {
                 return back()->with('error', 'Connection Error: ' . $e->getMessage());
             }
