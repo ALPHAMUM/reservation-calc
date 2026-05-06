@@ -198,7 +198,7 @@ class ReservationController extends Controller
         $error = null;
 
         if (!$resNoList && !$fromDate) {
-            $fromDate = date('Y-m-d', strtotime('-1 month'));
+            $fromDate = date('Y-m-d');
             $toDate = date('Y-m-d');
         }
 
@@ -371,7 +371,7 @@ class ReservationController extends Controller
             echo '<tr>';
             echo '<td rowspan="2" class="hdr">RSVN#</td>';
             echo '<td rowspan="2" class="hdr">VILLAGE</td>';
-            echo '<td rowspan="2" class="hdr">OCCUPANTS</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 150px;">OCCUPANTS</td>';
             echo '<td rowspan="2" class="hdr">RELATION</td>';
             echo '<td rowspan="2" class="hdr">AGE</td>';
             echo '<td rowspan="2" class="hdr">BIRTHDAY</td>';
@@ -382,7 +382,7 @@ class ReservationController extends Controller
             echo '<td rowspan="2" class="hdr">AIRFARE</td>';
             echo '<td rowspan="2" class="hdr">HANGAR</td>';
             echo '<td rowspan="2" class="hdr">AVIATION</td>';
-            echo '<td rowspan="2" class="hdr">ENVIRONMENTAL</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 100px;">ENVIRONMENTAL</td>';
             echo '</tr>';
 
             // Header Row 2: date sub-columns + TOTAL
