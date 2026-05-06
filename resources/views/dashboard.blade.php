@@ -397,10 +397,14 @@
                     <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Search (Name, Res No...)</label>
                     <input type="text" name="search" value="{{ request('search') }}" placeholder="Search all records..." autocomplete="off">
                 </div>
+                @if($viewType !== 'detail')
                 <div class="input-group" style="max-width: 320px;">
                     <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Res No List</label>
                     <input type="text" name="resnolist" value="{{ $resNoList }}" placeholder="IDs separated by comma...">
                 </div>
+                @else
+                    <input type="hidden" name="resnolist" value="{{ $resNoList }}">
+                @endif
             </div>
         </form>
 
