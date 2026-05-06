@@ -300,6 +300,7 @@
                         <input type="date" name="todate" value="{{ $toDate }}">
                     </div>
                 @endif
+                @if($viewType !== 'detail')
                 <div class="input-group">
                     <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Status Filter</label>
                     <select name="status_filter" class="form-select bg-dark text-white border-secondary">
@@ -309,20 +310,15 @@
                         @endforeach
                     </select>
                 </div>
-                <div class="input-group" style="flex: 2;">
-                    <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Res No List</label>
-                    <input type="text" name="resnolist" value="{{ $resNoList }}" placeholder="114481,114475...">
+                @endif
+                <div class="input-group" style="max-width: 320px;">
+                    <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Search (Name, Res No...)</label>
+                    <input type="text" id="nameSearchInput" placeholder="Filter current page..." autocomplete="off">
                 </div>
+                {{-- Res No List Hidden --}}
+                <input type="hidden" name="resnolist" value="{{ $resNoList }}">
             </div>
         </form>
-
-        <!-- Filters & Search -->
-        <div style="margin-top: 1rem; margin-bottom: 0.5rem; display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
-            <div class="input-group" style="max-width: 320px;">
-                <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Search (Name, Res No...)</label>
-                <input type="text" id="nameSearchInput" placeholder="Filter current page..." autocomplete="off">
-            </div>
-        </div>
 
         <div class="table-container">
             <table id="resTable" class="table table-dark table-hover">
