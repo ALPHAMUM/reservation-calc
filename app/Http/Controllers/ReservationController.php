@@ -15,7 +15,6 @@ class ReservationController extends Controller
     // private $apiKey = 'A450BD7D-DD86-4A54-A6A5-A971B64CC7AB'; //Prod
 
     private $villageMap = [
-        'ATNS' => 'ZZ-ATTACHED ROOM',
         'BALI' => 'BALI',
         'BLSN' => 'BALESIN',
         'CDSL' => 'COSTA DEL SOL',
@@ -37,8 +36,16 @@ class ReservationController extends Controller
 
     private function getVillageName($code)
     {
-        $code = strtoupper(trim($code));
-        return $this->villageMap[$code] ?? $code;
+        if (!$code) return 'N/A';
+        $searchCode = strtoupper(trim($code));
+        
+        // If it exists in our map, return the "actual name"
+        if (isset($this->villageMap[$searchCode])) {
+            return $this->villageMap[$searchCode];
+        }
+        
+        // Otherwise, return the original code/name as provided
+        return $code;
     }
 
     public function index(Request $request)
