@@ -153,6 +153,7 @@ class RateCalculatorService
             'han' => $hangar,
             'avi' => $aof,
             'env' => $env,
+            'is_employee' => $isEmployee
         ];
     }
 }

@@ -247,6 +247,7 @@ class ReservationController extends Controller
                         $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
                         $res['rate_metadata'] = $rateMap[$resNo] ?? '';
                         $res['calculated_rates'] = $calculator->calculatePassengerRates($res);
+                        $res['is_employee'] = $res['calculated_rates']['is_employee'] ?? false;
                         $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
                         $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
                     }
@@ -392,9 +393,12 @@ class ReservationController extends Controller
                             }
                         }
 
+                        $calcResult = $calculator->calculatePassengerRates($res);
+                        $res['is_employee'] = $calcResult['is_employee'] ?? false;
+                        
                         $allRows[] = [
                             'res' => $res,
-                            'rates' => $calculator->calculatePassengerRates($res),
+                            'rates' => $calcResult,
                             'rateDates' => $rd,
                         ];
                     }
@@ -480,6 +484,9 @@ class ReservationController extends Controller
                 $isValidCard = $privCard !== '' && !in_array($privCardLower, ['n', 'no', 'false', '0', 'none', 'null']);
 
                 $relation = htmlspecialchars($res['gstType'] ?? '');
+                if (!empty($res['is_employee'])) {
+                    $relation .= ' (Employee)';
+                }
                 if ($isValidCard) {
                     $relation .= ' (' . htmlspecialchars($privCard) . ')';
                 }
@@ -637,6 +644,7 @@ class ReservationController extends Controller
                     $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
                     $res['rate_metadata'] = $rateMap[$resNo] ?? '';
                     $res['calculated_rates'] = $calculator->calculatePassengerRates($res);
+                    $res['is_employee'] = $res['calculated_rates']['is_employee'] ?? false;
                     $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
                     $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
                 }

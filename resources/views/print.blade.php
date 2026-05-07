@@ -206,7 +206,11 @@
                     <td>{{ $isFirst ? $resNo : '' }}</td>
                     <td>{{ $isFirst ? ($res['village_name'] ?? $res['roomtyp'] ?? $res['roomType'] ?? '') : '' }}</td>
                     <td>{{ $res['gstName'] ?? $res['guestName'] ?? '' }}</td>
-                    <td>{{ $res['gstType'] ?? '' }}{{ $isValidCard ? ' (' . $privCard . ')' : '' }}</td>
+                    <td>
+                        {{ $res['gstType'] ?? '' }}
+                        @if(!empty($res['is_employee'])) (Employee) @endif
+                        {{ $isValidCard ? ' (' . $privCard . ')' : '' }}
+                    </td>
                     <td>{{ $res['age'] ?? '' }}</td>
                     <td>{{ $res['dateOfBirth'] ?? '' }}</td>
                     <td>{{ $res['nationality_name'] ?? $res['nationality'] ?? '' }}</td>
@@ -221,7 +225,7 @@
                             $dateTotals[$d] += $valFloor;
                             $passengerAccTotal += $valFloor;
                         @endphp
-                            <td class="num">{{ $val > 0 ? number_format($val, 2) : '' }}</td>
+                            <td class="num">{{ isset($rateMap[$d]) ? number_format($val, 2) : '' }}</td>
                     @endforeach
                     @php $accGrandTotal += $passengerAccTotal; @endphp
                         <td class="num">{{ number_format($rates['air'], 2) }}</td>

@@ -488,6 +488,9 @@
                                 <td>
                                     <span class="badge {{ ($res['gstType'] ?? '') === 'Member' ? 'badge-member' : 'badge-guest' }}">
                                         {{ $res['gstType'] ?? 'Guest' }}
+                                        @if(!empty($res['is_employee']))
+                                            (Employee)
+                                        @endif
                                     </span>
                                 </td>
                                 <td>{{ $res['village_name'] ?? $res['roomtyp'] ?? $res['roomType'] ?? 'N/A' }}</td>
