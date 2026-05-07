@@ -61,7 +61,21 @@ class SettingsController extends Controller
         // Fees - AOF
         $settings['fees']['aof']['amount'] = (float)($input['fees']['aof']['amount'] ?? $settings['fees']['aof']['amount']);
         $settings['fees']['aof']['apply_to'] = $input['fees']['aof']['apply_to'] ?? [];
-        $settings['fees']['aof']['active_months'] = array_map('intval', $input['fees']['aof']['active_months'] ?? []);
+        
+        $aofPeriods = [];
+        if (isset($input['fees']['aof']['active_periods']['month']) && isset($input['fees']['aof']['active_periods']['year'])) {
+            foreach ($input['fees']['aof']['active_periods']['month'] as $idx => $m) {
+                if (!empty($m) && !empty($input['fees']['aof']['active_periods']['year'][$idx])) {
+                    $aofPeriods[] = [
+                        'month' => (int)$m,
+                        'year' => (int)$input['fees']['aof']['active_periods']['year'][$idx]
+                    ];
+                }
+            }
+        }
+        $settings['fees']['aof']['active_periods'] = $aofPeriods;
+        // Clean up old active_months if it exists
+        unset($settings['fees']['aof']['active_months']);
 
         // Fees - Environmental
         $settings['fees']['environmental']['amount'] = (float)($input['fees']['environmental']['amount'] ?? $settings['fees']['environmental']['amount']);

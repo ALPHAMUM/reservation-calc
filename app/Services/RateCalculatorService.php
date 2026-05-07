@@ -118,18 +118,35 @@ class RateCalculatorService
         }
 
         // AOF Fee
+        // Exempt: Infants, Employees (all types), Others (ex-deals, priests, consultants, 
+        //         consignors, inspectors, authorized personnel)
+        // Applicable: Members and Guests only, during active periods
         $aof = 0;
-        $aofApplyTo = $this->settings['fees']['aof']['apply_to'] ?? [];
-        $activeMonths = $this->settings['fees']['aof']['active_months'] ?? [];
-        
-        $arrMonth = $arrDate ? (int)date('n', strtotime($arrDate)) : 0;
-        
-        // If activeMonths is empty, assume it applies to all months (unless specifically restricted)
-        $monthApplies = empty($activeMonths) || in_array($arrMonth, $activeMonths);
-        
-        if ($monthApplies) {
-            if (($isInfant && in_array('infant', $aofApplyTo)) || 
-                (!$isInfant && in_array($passClass, $aofApplyTo))) {
+        $aofApplyTo = $this->settings['fees']['aof']['apply_to'] ?? ['member', 'guest'];
+        $activePeriods = $this->settings['fees']['aof']['active_periods'] ?? [];
+
+        $arrTime  = $arrDate ? strtotime($arrDate) : 0;
+        $arrMonth = $arrTime ? (int)date('n', $arrTime) : 0;
+        $arrYear  = $arrTime ? (int)date('Y', $arrTime) : 0;
+
+        // Hardcoded exemptions — these are NEVER charged AOF regardless of settings
+        $aofExempt = $isInfant || $isEmployee || $isOthers;
+
+        if (!$aofExempt) {
+            // Check active periods: year=0 means any year for that month
+            $periodApplies = false;
+            if (!empty($activePeriods) && $arrMonth > 0) {
+                foreach ($activePeriods as $p) {
+                    $pMonth = (int)($p['month'] ?? 0);
+                    $pYear  = (int)($p['year']  ?? 0);
+                    if ($pMonth === $arrMonth && ($pYear === 0 || $pYear === $arrYear)) {
+                        $periodApplies = true;
+                        break;
+                    }
+                }
+            }
+
+            if ($periodApplies && in_array($passClass, $aofApplyTo)) {
                 $aof = (float)($this->settings['fees']['aof']['amount'] ?? 0);
             }
         }

@@ -46,6 +46,11 @@
         box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
     }
 
+    select.form-control option {
+        background-color: #1e293b;
+        color: white;
+    }
+
     .checkbox-wrap {
         display: flex;
         align-items: center;
@@ -313,7 +318,8 @@
                 <strong>Additional Fees</strong>
                 <div>Configure mandatory surcharges. 
                 <br>• Hangar Fee: Per passenger fee for terminal usage.
-                <br>• AOF: Aviation Operational Fee, active only during selected months.
+                <br>• AOF (₱2,000): Aviation Operational Fee. Applies to Members &amp; Guests during active periods.
+                <br>&nbsp;&nbsp;<strong>Always exempt:</strong> Infants, Employees, Ex-deals, Priests, Consultants, Consignors, Inspectors, and other Authorized Personnel.
                 <br>• Environmental Fee: Island maintenance fee, typically applied to Guests.</div>
             </div>
             
@@ -341,14 +347,34 @@
                     <div>
                         <label class="form-label">Amount (₱)</label>
                         <input type="number" step="0.01" name="fees[aof][amount]" class="form-control" value="{{ $settings['fees']['aof']['amount'] ?? 2000 }}">
-                        <label class="form-label" style="margin-top:1rem;">Active Months</label>
-                        <select name="fees[aof][active_months][]" class="form-control" multiple style="height: 120px;">
-                            @php $aofMonths = $settings['fees']['aof']['active_months'] ?? [4]; @endphp
-                            @foreach(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] as $i => $m)
-                                <option value="{{ $i+1 }}" {{ in_array($i+1, $aofMonths) ? 'selected' : '' }}>{{ $m }}</option>
+                        <label class="form-label" style="margin-top:1rem;">Active Periods
+                            <span style="color: var(--text-muted); font-size: 0.75rem;"> — Leave Year blank to apply every year for that month</span>
+                        </label>
+                        <div id="aof-periods-container" style="margin-top: 0.75rem;">
+                            @php $periods = $settings['fees']['aof']['active_periods'] ?? []; @endphp
+                            @if(count($periods) === 0)
+                                @php $periods = [['month' => 4, 'year' => date('Y')]]; @endphp
+                            @endif
+
+                            @foreach($periods as $period)
+                                <div class="peak-period-row">
+                                    <div style="flex:1.5">
+                                        <label class="form-label" style="font-size: 0.7rem; margin-bottom: 0.25rem;">Month</label>
+                                        <select name="fees[aof][active_periods][month][]" class="form-control">
+                                            @foreach(['January','February','March','April','May','June','July','August','September','October','November','December'] as $i => $m)
+                                                <option value="{{ $i+1 }}" {{ ($period['month'] ?? 0) == $i+1 ? 'selected' : '' }}>{{ $m }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div style="flex:1">
+                                        <label class="form-label" style="font-size: 0.7rem; margin-bottom: 0.25rem;">Year (blank = every year)</label>
+                                        <input type="number" name="fees[aof][active_periods][year][]" class="form-control" placeholder="Any year" value="{{ ($period['year'] ?? 0) > 0 ? $period['year'] : '' }}">
+                                    </div>
+                                    <button type="button" class="btn btn-primary btn-sm" onclick="this.parentElement.remove()" style="background: #ef4444; margin-bottom: 2px;">Remove</button>
+                                </div>
                             @endforeach
-                        </select>
-                        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Hold Ctrl/Cmd to select multiple.</div>
+                        </div>
+                        <button type="button" class="btn btn-primary btn-sm" onclick="addAofPeriod()" style="margin-top: 0.5rem; background: rgba(255,255,255,0.1)">+ Add Period</button>
                     </div>
                     <div>
                         <label class="form-label">Apply To</label>
@@ -401,6 +427,29 @@
             <div style="color:var(--text-muted)">to</div>
             <div style="flex:1"><input type="date" name="peak_periods[end][]" class="form-control"></div>
             <button type="button" class="btn btn-primary btn-sm" onclick="this.parentElement.remove()" style="background: #ef4444">Remove</button>
+        `;
+        container.appendChild(row);
+    }
+
+    function addAofPeriod() {
+        const container = document.getElementById('aof-periods-container');
+        const row = document.createElement('div');
+        row.className = 'peak-period-row';
+        row.innerHTML = `
+            <div style="flex:1.5">
+                <label class="form-label" style="font-size: 0.7rem; margin-bottom: 0.25rem;">Month</label>
+                <select name="fees[aof][active_periods][month][]" class="form-control">
+                    <option value="1">January</option><option value="2">February</option><option value="3">March</option>
+                    <option value="4" selected>April</option><option value="5">May</option><option value="6">June</option>
+                    <option value="7">July</option><option value="8">August</option><option value="9">September</option>
+                    <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+                </select>
+            </div>
+            <div style="flex:1">
+                <label class="form-label" style="font-size: 0.7rem; margin-bottom: 0.25rem;">Year (blank = every year)</label>
+                <input type="number" name="fees[aof][active_periods][year][]" class="form-control" placeholder="Any year" value="">
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" onclick="this.parentElement.remove()" style="background: #ef4444; margin-bottom: 2px;">Remove</button>
         `;
         container.appendChild(row);
     }

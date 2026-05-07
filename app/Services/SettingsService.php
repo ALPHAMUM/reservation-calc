@@ -36,7 +36,10 @@ class SettingsService
                 ],
                 'aof' => [
                     'amount' => 2000,
-                    'apply_to' => ['member', 'guest', 'employee'], // exclude infant
+                    'apply_to' => ['member', 'guest', 'employee'],
+                    'active_periods' => [
+                        ['month' => 4, 'year' => (int)date('Y')]
+                    ],
                 ],
                 'environmental' => [
                     'amount' => 200,
