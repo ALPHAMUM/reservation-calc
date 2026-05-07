@@ -2,75 +2,81 @@
 
 namespace App\Services;
 
-use Illuminate\Support\Facades\Storage;
+use App\Models\Setting;
 
 class SettingsService
 {
-    private $filename = 'settings.json';
+    private const KEY = 'app_settings';
 
-    public function getDefaultSettings()
+    public function getDefaultSettings(): array
     {
         return [
             'base_rates' => [
-                'member' => 5600, // Peak Regular
-                'guest' => 12320, // Peak Regular
+                'member'   => 5600,
+                'guest'    => 12320,
                 'employee' => 2800,
             ],
             'promo_rates' => [
-                'active' => true,
-                'member' => 4200, // Non-Peak Regular
-                'guest' => 6200, // Non-Peak Regular
-                'employee' => 2800,
-                'start_date' => '2026-02-23',
-                'end_date' => '2026-11-30',
+                'active'      => true,
+                'member'      => 4200,
+                'guest'       => 6200,
+                'employee'    => 2800,
+                'start_date'  => '2026-02-23',
+                'end_date'    => '2026-11-30',
+                'description' => '',
                 'peak_periods' => [
-                    ['start' => '2026-03-29', 'end' => '2026-04-05'], // Holy Week 2026 approx
-                    ['start' => '2026-10-30', 'end' => '2026-11-02'], // Halloween
-                    ['start' => '2026-12-20', 'end' => '2027-01-05'], // Christmas/New Year
-                ]
+                    ['label' => 'Holy Week',       'start' => '2026-03-29', 'end' => '2026-04-05'],
+                    ['label' => 'Halloween',        'start' => '2026-10-30', 'end' => '2026-11-02'],
+                    ['label' => 'Christmas/New Year','start' => '2026-12-20', 'end' => '2027-01-05'],
+                ],
             ],
             'fees' => [
                 'hangar' => [
-                    'amount' => 400,
-                'apply_to' => ['member', 'guest'], // exclude infant, employee, others
+                    'amount'   => 400,
+                    'apply_to' => ['member', 'guest'],
                 ],
                 'aof' => [
-                    'amount' => 2000,
-                    'apply_to' => ['member', 'guest', 'employee'],
+                    'amount'         => 2000,
+                    'apply_to'       => ['member', 'guest'],
                     'active_periods' => [
-                        ['month' => 4, 'year' => (int)date('Y')]
+                        ['month' => 4, 'year' => 0], // April, any year
                     ],
                 ],
                 'environmental' => [
-                    'amount' => 200,
-                    'apply_to' => ['guest', 'infant'], // applies to guest (including infants), exclude member/spouse/dependent, employee, others
-                ]
+                    'amount'   => 200,
+                    'apply_to' => ['guest', 'infant'],
+                ],
             ],
             'discounts' => [
                 'vat_rate' => 12,
-                'sc_pwd' => [
-                    'remove_vat' => true,
-                    'additional_discount_percent' => 20, // Guest peak discount
-                ]
+                'sc_pwd'   => [
+                    'remove_vat'                  => true,
+                    'additional_discount_percent' => 20,
+                ],
             ],
             'infants' => [
                 'max_age_months' => 23,
-                'airfare_free' => true,
-            ]
+                'airfare_free'   => true,
+            ],
         ];
     }
 
-    public function getSettings()
+    public function getSettings(): array
     {
-        if (Storage::exists($this->filename)) {
-            $json = Storage::get($this->filename);
-            return array_replace_recursive($this->getDefaultSettings(), json_decode($json, true) ?? []);
+        try {
+            $stored = Setting::getValue(self::KEY);
+            if ($stored && is_array($stored)) {
+                return array_replace_recursive($this->getDefaultSettings(), $stored);
+            }
+        } catch (\Exception $e) {
+            // DB not yet available (e.g. first migration) — fall back to defaults
         }
+
         return $this->getDefaultSettings();
     }
 
-    public function saveSettings(array $settings)
+    public function saveSettings(array $settings): void
     {
-        Storage::put($this->filename, json_encode($settings, JSON_PRETTY_PRINT));
+        Setting::setValue(self::KEY, $settings);
     }
 }
