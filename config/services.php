@@ -30,4 +30,10 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'balesin' => [
+        'list_url' => env('BALESIN_API_LIST_URL'),
+        'detail_url' => env('BALESIN_API_DETAIL_URL'),
+        'api_key' => env('BALESIN_API_KEY'),
+    ],
+
 ];

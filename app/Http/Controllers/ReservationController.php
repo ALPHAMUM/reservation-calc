@@ -9,10 +9,16 @@ use App\Exports\ReservationExport;
 
 class ReservationController extends Controller
 {
-    private $listApiUrl = 'https://intimusapi.balesinkey.com/api/upastraindata/intimusapiservice/getreslist';
-    private $detailApiUrl = 'https://intimusapi.balesinkey.com/api/upastraindata/intimusapiservice/getresdetforcalc';
-    private $apiKey = '12A3A9C3-3D8F-4204-9737-3C4ADE94650F'; //Training
-    // private $apiKey = 'A450BD7D-DD86-4A54-A6A5-A971B64CC7AB'; //Prod
+    private $listApiUrl;
+    private $detailApiUrl;
+    private $apiKey;
+
+    public function __construct()
+    {
+        $this->listApiUrl = config('services.balesin.list_url');
+        $this->detailApiUrl = config('services.balesin.detail_url');
+        $this->apiKey = config('services.balesin.api_key');
+    }
 
     private $villageMap = [
         'BALI' => 'BALI',
