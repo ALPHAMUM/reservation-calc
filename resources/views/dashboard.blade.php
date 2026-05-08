@@ -364,6 +364,197 @@
         height: 1.1rem;
         cursor: pointer;
     }
+
+    /* Timeline Scheduler UI */
+    .timeline-container {
+        border-radius: 1rem;
+        background: rgba(15, 23, 42, 0.4);
+        border: 1px solid var(--border);
+        overflow: hidden;
+        margin-top: 1rem;
+    }
+
+    .timeline-scroll {
+        overflow: auto;
+        max-height: 75vh;
+    }
+
+    .timeline-table {
+        border-collapse: separate;
+        border-spacing: 0;
+        width: 100%;
+        color: var(--text);
+    }
+
+    .timeline-table th, .timeline-table td {
+        padding: 0.75rem 1rem;
+        border-right: 1px solid rgba(255, 255, 255, 0.05);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        white-space: nowrap;
+    }
+
+    /* Sticky Headers */
+    .timeline-table thead tr:first-child th {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background: #1e293b;
+        border-bottom: 2px solid var(--border);
+    }
+
+    /* Sticky Columns with Locked Widths */
+    .timeline-table .sticky-col-1 { 
+        position: sticky; left: 0; z-index: 90; background: #0f172a; 
+        width: 90px; min-width: 90px; max-width: 90px;
+        border-right: 2px solid var(--border) !important; 
+    }
+    .timeline-table .sticky-col-2 { 
+        position: sticky; left: 90px; z-index: 90; background: #0f172a; 
+        width: 120px; min-width: 120px; max-width: 120px;
+        border-right: 2px solid var(--border) !important; 
+    }
+    .timeline-table .sticky-col-3 { 
+        position: sticky; left: 210px; z-index: 90; background: #0f172a; 
+        width: 280px; min-width: 280px; max-width: 280px;
+        border-right: 2px solid var(--border) !important; 
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Corner Cells (The intersection of sticky headers and columns) */
+    .timeline-table thead th.sticky-col-1,
+    .timeline-table thead th.sticky-col-2,
+    .timeline-table thead th.sticky-col-3 {
+        z-index: 120 !important;
+        background: #1e293b !important;
+    }
+
+    /* Ensure body columns stay above sliding date headers during horizontal scroll */
+    .timeline-table tbody td.sticky-col-1,
+    .timeline-table tbody td.sticky-col-2,
+    .timeline-table tbody td.sticky-col-3 {
+        z-index: 110;
+    }
+
+    /* Sticky Right (Total Rate) */
+    .timeline-table .row-total, .timeline-table .sticky-total-head {
+        position: sticky;
+        right: 0;
+        background: #0f172a;
+        border-left: 2px solid var(--border);
+    }
+
+    .timeline-table .row-total {
+        z-index: 95;
+    }
+
+    .timeline-table .sticky-total-head {
+        z-index: 105;
+        background: #1e293b !important;
+    }
+
+    .stay-block {
+        background: linear-gradient(90deg, var(--primary), #818cf8);
+        color: white;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        min-width: 90px;
+        transition: all 0.2s;
+    }
+
+    .stay-block:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+
+    .rate-input {
+        background: transparent;
+        border: none;
+        color: white;
+        font-size: 0.75rem;
+        font-weight: 700;
+        width: 100%;
+        text-align: center;
+        padding: 0;
+        outline: none;
+    }
+
+    .rate-input::-webkit-inner-spin-button,
+    .rate-input::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
+    .remove-btn {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        color: white;
+        border-radius: 50%;
+        width: 16px;
+        height: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        cursor: pointer;
+        transition: all 0.2s;
+        flex-shrink: 0;
+    }
+
+    .remove-btn:hover {
+        background: #ef4444;
+    }
+
+    .add-cell-btn {
+        display: none;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px dashed var(--border);
+        border-radius: 0.5rem;
+        color: var(--text-muted);
+        font-size: 1rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    td:hover .add-cell-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .add-cell-btn:hover {
+        background: rgba(99, 102, 241, 0.1);
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+
+    .btn-add-row {
+        background: rgba(16, 185, 129, 0.1);
+        border: 1px dashed #10b981;
+        color: #10b981;
+        width: 100%;
+        padding: 1rem;
+        margin-top: 1rem;
+        border-radius: 0.75rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .btn-add-row:hover {
+        background: rgba(16, 185, 129, 0.2);
+        transform: translateY(-2px);
+    }
 </style>
 @endsection
 
@@ -500,25 +691,108 @@
             </div>
         </form>
 
-        <div class="table-container">
-            <table id="resTable" class="table table-dark table-hover">
-                <thead>
-                    <tr>
-                        @if($viewType !== 'detail')
+        @if($viewType === 'detail')
+            <div class="timeline-container">
+                <div class="timeline-scroll">
+                    <table class="timeline-table">
+                        <thead>
+                            <tr>
+                                <th class="sticky-col-1" style="width: 100px;">RSVN#</th>
+                                <th class="sticky-col-2" style="width: 120px;">Village</th>
+                                <th class="sticky-col-3" style="width: 200px;">Occupant</th>
+                                @foreach($dateCols as $date)
+                                    <th class="date-header">
+                                        <span class="date-day">{{ \Carbon\Carbon::parse($date)->format('D') }}</span>
+                                        <span class="date-val">{{ \Carbon\Carbon::parse($date)->format('M d') }}</span>
+                                    </th>
+                                @endforeach
+                                <th class="sticky-total-head" style="color: var(--primary); font-weight: bold;">
+                                    Total Rate
+                                    <div style="font-size: 0.65rem; font-weight: normal; opacity: 0.7; margin-top: 2px; color: var(--text-muted)">(Accomodation + fees)</div>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @php 
+                                $resCounts = [];
+                                foreach($reservations as $r) {
+                                    $c = $r['resNo'] ?? $r['conf'] ?? 'N/A';
+                                    $resCounts[$c] = ($resCounts[$c] ?? 0) + 1;
+                                }
+                                $renderedRes = [];
+                            @endphp
+                            @foreach($reservations as $res)
+                                @php 
+                                    $resNo = $res['resNo'] ?? $res['conf'] ?? 'N/A';
+                                    $isFirstInGroup = !isset($renderedRes[$resNo]);
+                                    if($isFirstInGroup) $renderedRes[$resNo] = true;
+                                @endphp
+                                <tr class="{{ $isFirstInGroup ? 'res-group-header' : '' }}">
+                                    @if($isFirstInGroup)
+                                        <td rowspan="{{ $resCounts[$resNo] }}" class="sticky-col-1" style="vertical-align: top; padding-top: 1.5rem;">
+                                            <span class="res-no">#{{ $resNo }}</span>
+                                        </td>
+                                        <td rowspan="{{ $resCounts[$resNo] }}" class="sticky-col-2" style="vertical-align: top; padding-top: 1.5rem; font-weight: 600;">
+                                            {{ $res['village_name'] ?? 'N/A' }}
+                                        </td>
+                                    @endif
+                                    <td class="sticky-col-3" title="{{ $res['gstName'] ?? $res['guestName'] ?? '' }}">
+                                        <div style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: white;">
+                                            {{ $res['gstName'] ?? $res['guestName'] ?? 'Unknown' }}
+                                        </div>
+                                        <div style="font-size: 0.7rem; color: var(--text-muted)">
+                                            {{ $res['gstType'] ?? 'Guest' }}
+                                            @if(!empty($res['is_employee'])) (Emp) @endif
+                                        </div>
+                                    </td>
+                                    @foreach($dateCols as $date)
+                                        @php 
+                                            $dayRate = 0;
+                                            foreach($res['rate'] ?? [] as $r) {
+                                                if(($r['date'] ?? '') === $date) {
+                                                    $dayRate = (float)($r['val'] ?? 0);
+                                                    break;
+                                                }
+                                            }
+                                        @endphp
+                                        <td class="rate-cell" data-date="{{ $date }}">
+                                            @if($dayRate > 0)
+                                                <div class="stay-block">
+                                                    <input type="number" class="rate-input" value="{{ (int)$dayRate }}" step="100">
+                                                    <button type="button" class="remove-btn" onclick="removeRate(this)">&times;</button>
+                                                </div>
+                                            @else
+                                                <button type="button" class="add-cell-btn" onclick="addRate(this)">+</button>
+                                            @endif
+                                        </td>
+                                    @endforeach
+                                    <td class="row-total" style="text-align: right; font-weight: 700; color: var(--primary);">
+                                        @php
+                                            $r = $res['calculated_rates'] ?? [];
+                                            $total = floor($r['acc'] ?? 0) + floor($r['air'] ?? 0) + floor($r['han'] ?? 0) + floor($r['avi'] ?? 0) + floor($r['env'] ?? 0);
+                                            // Store base fees for live calc
+                                            $baseFees = floor($r['air'] ?? 0) + floor($r['han'] ?? 0) + floor($r['avi'] ?? 0) + floor($r['env'] ?? 0);
+                                        @endphp
+                                        <span class="total-val" data-base-fees="{{ $baseFees }}">{{ number_format($total, 2) }}</span>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+                <button type="button" class="btn-add-row" onclick="addNewRow()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    Add New Record Row
+                </button>
+            </div>
+        @else
+            <div class="table-container">
+                <table id="resTable" class="table table-dark table-hover">
+                    <thead>
+                        <tr>
                             <th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllRes" class="custom-checkbox"></th>
-                        @endif
-                        <th>Res No</th>
-                        <th>Guest Name</th>
-                        @if($viewType === 'detail')
-                            <th>Nationality</th>
-                            <th>Type</th>
-                            <th>Room</th>
-                            <th>Dates</th>
-                            <th>
-                                Total Rate
-                                <div style="font-size: 0.65rem; font-weight: normal; opacity: 0.7; margin-top: 2px;">(Accommodation + Fees)</div>
-                            </th>
-                        @else
+                            <th>Res No</th>
+                            <th>Guest Name</th>
                             <th>Rooms</th>
                             <th>Pax</th>
                             <th>Rate</th>
@@ -526,70 +800,30 @@
                             <th>Arrival</th>
                             <th>Departure</th>
                             <th>Status</th>
-                        @endif
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach($reservations as $res)
-                        @php $currentResNo = $res['resNo'] ?? $res['conf'] ?? null; @endphp
-                        <tr>
-                            @if($viewType !== 'detail')
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($reservations as $res)
+                            @php $currentResNo = $res['resNo'] ?? $res['conf'] ?? null; @endphp
+                            <tr>
                                 <td style="text-align: center;">
                                     @if($currentResNo)
                                         <input type="checkbox" class="res-checkbox custom-checkbox" value="{{ $currentResNo }}" {{ in_array($currentResNo, array_filter(explode(',', request('resnolist', '')))) ? 'checked' : '' }}>
                                     @endif
                                 </td>
-                            @endif
-                            <td>
-                                @if($currentResNo)
-                                    @if($viewType === 'detail')
-                                        <span class="res-no">#{{ $currentResNo }}</span>
-                                    @else
+                                <td>
+                                    @if($currentResNo)
                                         <a href="{{ route('dashboard', ['resnolist' => $currentResNo]) }}" style="text-decoration: none;">
                                             <span class="res-no">#{{ $currentResNo }}</span>
                                         </a>
+                                    @else
+                                        <span class="res-no">N/A</span>
                                     @endif
-                                @else
-                                    <span class="res-no">N/A</span>
-                                @endif
-                            </td>
-                            <td>
-                                <div>{{ $res['gstName'] ?? $res['guestName'] ?? $res['custName'] ?? $res['customer'] ?? 'Unknown' }}</div>
-                                <div style="font-size: 0.75rem; color: var(--text-muted)">{{ $res['custName'] ?? $res['customer'] ?? '' }}</div>
-                            </td>
-                            @if($viewType === 'detail')
-                                <td>{{ $res['nationality_name'] ?? $res['nationality'] ?? '' }}</td>
-                                <td>
-                                    <span class="badge {{ ($res['gstType'] ?? '') === 'Member' ? 'badge-member' : 'badge-guest' }}">
-                                        {{ $res['gstType'] ?? 'Guest' }}
-                                        @if(!empty($res['is_employee']))
-                                            (Employee)
-                                        @endif
-                                    </span>
-                                </td>
-                                <td>{{ $res['village_name'] ?? $res['roomtyp'] ?? $res['roomType'] ?? 'N/A' }}</td>
-                                <td>
-                                    <div style="font-size: 0.875rem">{{ $res['arrdt'] ?? $res['arrDt'] ?? '' }}</div>
-                                    <div style="font-size: 0.75rem; color: var(--text-muted)">to {{ $res['depdt'] ?? $res['depDt'] ?? '' }}</div>
                                 </td>
                                 <td>
-                                    @php
-                                        $total = 0;
-                                        if (isset($res['calculated_rates'])) {
-                                            $r = $res['calculated_rates'];
-                                            // Match export logic: floor each component
-                                            $total = floor($r['acc'] ?? 0) + 
-                                                     floor($r['air'] ?? 0) + 
-                                                     floor($r['han'] ?? 0) + 
-                                                     floor($r['avi'] ?? 0) + 
-                                                     floor($r['env'] ?? 0);
-                                        } elseif (isset($res['rate']) && is_array($res['rate'])) {
-                                            foreach($res['rate'] as $rateItem) $total += floor((float)($rateItem['val'] ?? 0));
-                                        }
-                                    @endphp
-                                    {{ number_format($total, 2) }}
+                                    <div>{{ $res['gstName'] ?? $res['guestName'] ?? $res['custName'] ?? $res['customer'] ?? 'Unknown' }}</div>
+                                    <div style="font-size: 0.75rem; color: var(--text-muted)">{{ $res['custName'] ?? $res['customer'] ?? '' }}</div>
                                 </td>
-                            @else
                                 <td>{{ $res['noRooms'] ?? $res['noOfRooms'] ?? '0' }}</td>
                                 <td>{{ $res['noPax'] ?? $res['noOfPax'] ?? '0' }}</td>
                                 <td>
@@ -613,12 +847,12 @@
                                     @endphp
                                     <span class="status-badge status-{{ $statusClass }}">{{ trim($statusRaw) }}</span>
                                 </td>
-                            @endif
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        </div>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endif
 
         {{-- Client-side pagination handled by DataTables --}}
         <div class="mt-4 d-flex justify-content-center" id="paginationContainer">
@@ -634,6 +868,7 @@
 <script>
     $(document).ready(function() {
         var table;
+        @if($viewType !== 'detail')
         if (!$.fn.DataTable.isDataTable('#resTable')) {
             table = $('#resTable').DataTable({
                 "paging": true,
@@ -654,6 +889,7 @@
                 "columnDefs": [
                     { "orderable": false, "targets": [0] } // Disable ordering on checkbox
                 ],
+                "scrollX": false,
                 "dom": 'rt<"bottom"ip><"clear">'
             });
             // Hide the default DataTables search box and use ours
@@ -670,6 +906,7 @@
         $('input[name="search"]').on('keyup input', function() {
             table.search(this.value).draw();
         });
+        @endif
 
         // Custom Multi-Select Logic
         const statusDisplay = $('#statusDisplay');
@@ -712,6 +949,86 @@
 
         $('.status-option-checkbox').on('change', updateStatusLabel);
         updateStatusLabel(); // Initial call
+
+        // Live Editing Functions
+        window.recalculateRow = function(row) {
+            let accTotal = 0;
+            $(row).find('.rate-input').each(function() {
+                accTotal += parseFloat($(this).val()) || 0;
+            });
+            
+            const totalSpan = $(row).find('.total-val');
+            const baseFees = parseFloat(totalSpan.data('base-fees')) || 0;
+            const grandTotal = accTotal + baseFees;
+            
+            totalSpan.text(grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+            updateGlobalStats();
+        };
+
+        window.updateGlobalStats = function() {
+            let totalPax = 0;
+            let totalArrived = 0;
+            
+            if ("{{ $viewType }}" === 'detail') {
+                totalPax = $('.timeline-table tbody tr').length;
+                // For simplicity in detail view, count all visible rows as pax
+                $('#stat-total-pax').text(totalPax);
+                // Total Rate stats could also be updated if we had a dedicated card for it
+            }
+        };
+
+        $(document).on('input', '.rate-input', function() {
+            recalculateRow($(this).closest('tr'));
+        });
+
+        window.removeRate = function(btn) {
+            const cell = $(btn).closest('td');
+            cell.html('<button type="button" class="add-cell-btn" onclick="addRate(this)">+</button>');
+            recalculateRow(cell.closest('tr'));
+        };
+
+        window.addRate = function(btn) {
+            const cell = $(btn).closest('td');
+            // Default rate from settings or 0
+            const defaultRate = 5000; 
+            cell.html(`
+                <div class="stay-block">
+                    <input type="number" class="rate-input" value="${defaultRate}" step="100">
+                    <button type="button" class="remove-btn" onclick="removeRate(this)">&times;</button>
+                </div>
+            `);
+            recalculateRow(cell.closest('tr'));
+            cell.find('.rate-input').focus().select();
+        };
+
+        window.addNewRow = function() {
+            const tbody = $('.timeline-table tbody');
+            const dateCount = {{ count($dateCols) }};
+            
+            let newRowHtml = `
+                <tr>
+                    <td class="sticky-col-1"><span class="text-primary" style="font-size: 0.8rem; font-weight: bold;">NEW</span></td>
+                    <td class="sticky-col-2"><span class="text-white" style="font-size: 0.8rem; opacity: 0.7;">MANUAL</span></td>
+                    <td class="sticky-col-3">
+                        <input type="text" placeholder="Guest Name" class="bg-transparent border-0 text-white w-100" style="font-weight: 500; outline: none;" autofocus>
+                        <div style="font-size: 0.7rem; color: var(--text-muted)">Manual Entry</div>
+                    </td>
+            `;
+            
+            for(let i=0; i<dateCount; i++) {
+                newRowHtml += `<td class="rate-cell"><button type="button" class="add-cell-btn" onclick="addRate(this)">+</button></td>`;
+            }
+            
+            newRowHtml += `
+                    <td class="row-total" style="text-align: right; font-weight: 700; color: var(--primary); position: sticky; right: 0; background: #0f172a; z-index: 10; border-left: 2px solid var(--border);">
+                        <span class="total-val" data-base-fees="0">0.00</span>
+                    </td>
+                </tr>
+            `;
+            
+            tbody.append(newRowHtml);
+            updateGlobalStats();
+        };
 
         // Apply initial filters if present
         if ($('input[name="search"]').val()) {

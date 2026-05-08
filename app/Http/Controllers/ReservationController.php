@@ -238,7 +238,7 @@ class ReservationController extends Controller
 
             if ($resNoList) {
                 $viewType = 'detail';
-                $allConfIds = array_filter(explode(',', $resNoList));
+                $allConfIds = array_unique(array_filter(explode(',', $resNoList)));
                 $chunks = array_chunk($allConfIds, 25);
                 $calculator = app(\App\Services\RateCalculatorService::class);
                 foreach ($chunks as $chunk) {
@@ -260,6 +260,7 @@ class ReservationController extends Controller
                         $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
                         $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
                     }
+                    unset($res); // Fix reference leak
                     $reservations = array_merge($reservations, $msgs);
                 }
 
@@ -293,6 +294,7 @@ class ReservationController extends Controller
                 foreach($pagedReservations as &$res) {
                     $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
                 }
+                unset($res); // Fix reference leak
             }
         } catch (\Illuminate\Http\Client\ConnectionException $e) {
             $error = "Connection Error: Could not reach the API server. Please check your internet or the endpoint URL.";
@@ -303,12 +305,34 @@ class ReservationController extends Controller
         $settingsService = app(\App\Services\SettingsService::class);
         $settings = $settingsService->getSettings();
 
+        $dateCols = [];
+        if ($viewType === 'detail') {
+            // Sort by Reservation Number first
+            usort($pagedReservations, function($a, $b) {
+                $resA = $a['resNo'] ?? $a['conf'] ?? '';
+                $resB = $b['resNo'] ?? $b['conf'] ?? '';
+                return strcmp($resA, $resB);
+            });
+
+            $allDates = [];
+            foreach ($pagedReservations as $res) {
+                foreach ($res['rate'] ?? [] as $r) {
+                    if ($d = ($r['date'] ?? null)) {
+                        $allDates[$d] = true;
+                    }
+                }
+            }
+            ksort($allDates);
+            $dateCols = array_keys($allDates);
+        }
+
         return view('dashboard', [
             'reservations' => $pagedReservations ?? [], 
             'resNoList' => $resNoList, 
             'fromDate' => $fromDate, 
             'toDate' => $toDate, 
             'statusFilter' => $statusFilter,
+            'dateCols' => $dateCols,
             'viewType' => $viewType, 
             'error' => $error,
             'settings' => $settings
@@ -660,6 +684,7 @@ class ReservationController extends Controller
                     $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
                     $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
                 }
+                unset($res); // Fix reference leak
                 $reservations = array_merge($reservations, $msgs);
             }
         }
@@ -668,24 +693,46 @@ class ReservationController extends Controller
 
     private function consolidateRates(array &$msgs)
     {
-        foreach ($msgs as &$res) {
-            $rates = $res['rate'] ?? [];
-            if (empty($rates))
-                continue;
+        $grouped = [];
+        foreach ($msgs as $res) {
+            $resNo = trim($res['resNo'] ?? $res['conf'] ?? 'N/A');
+            $gstName = trim($res['gstName'] ?? $res['guestName'] ?? $res['gstname'] ?? $res['guestname'] ?? 'Unknown');
+            $key = $resNo . '|' . $gstName;
 
-            $consolidated = [];
-            foreach ($rates as $r) {
-                $date = $r['date'] ?? '';
-                if ($date) {
-                    $consolidated[$date] = ($consolidated[$date] ?? 0) + (float) ($r['val'] ?? 0);
+            if (!isset($grouped[$key])) {
+                $grouped[$key] = $res;
+                // Initialize rate map for accumulation
+                $grouped[$key]['_rateMap'] = [];
+            } else {
+                // Thoroughly merge all fields (except rates which are handled below)
+                // This ensures components like airfare, hangar, etc. from secondary records are kept
+                foreach ($res as $k => $v) {
+                    if ($k !== 'rate' && (empty($grouped[$key][$k])) && !empty($v)) {
+                        $grouped[$key][$k] = $v;
+                    }
                 }
             }
 
+            // Consolidate rates from current record into the map
+            foreach ($res['rate'] ?? [] as $r) {
+                $date = $r['date'] ?? '';
+                if ($date) {
+                    $grouped[$key]['_rateMap'][$date] = ($grouped[$key]['_rateMap'][$date] ?? 0) + (float)($r['val'] ?? 0);
+                }
+            }
+        }
+
+        $final = [];
+        foreach ($grouped as $res) {
             $newRates = [];
-            foreach ($consolidated as $date => $val) {
+            ksort($res['_rateMap']);
+            foreach ($res['_rateMap'] as $date => $val) {
                 $newRates[] = ['date' => $date, 'val' => $val];
             }
             $res['rate'] = $newRates;
+            unset($res['_rateMap']);
+            $final[] = $res;
         }
+        $msgs = $final;
     }
 }
