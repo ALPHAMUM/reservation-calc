@@ -269,7 +269,7 @@
                 <td colspan="{{ $dateCount + 4 }}" style="border: none;"></td>
             </tr>
             
-            <!-- <tr>
+            <tr>
                 <td colspan="9" style="text-align: right; border: none; font-weight: bold;">LESS PAYMENT/S:</td>
                 <td colspan="{{ $dateCount }}" style="border: none;"></td>
                 <td colspan="4" style="border: none;"></td>
@@ -277,18 +277,18 @@
             <tr>
                 <td colspan="9" style="text-align: right; border: none;">OVERPAYMENT/CREDIT FROM FOLIO</td>
                 <td colspan="{{ $dateCount }}" style="border: none;"></td>
-                <td colspan="4" class="num" style="border: none;">&#8369;0.00</td>
+                <!-- <td colspan="4" class="num" style="border: none;">&#8369;0.00</td> -->
             </tr>
             <tr>
                 <td colspan="9" style="text-align: right; border: none; padding-bottom: 20px;">COLLECTION RECEIPT</td>
                 <td colspan="{{ $dateCount }}" style="border: none;"></td>
-                <td colspan="4" class="num" style="border: none; padding-bottom: 20px;">&#8369;0.00</td>
+                <!-- <td colspan="4" class="num" style="border: none; padding-bottom: 20px;">&#8369;0.00</td> -->
             </tr>
             <tr>
                 <td colspan="9" style="text-align: right; border: none; font-weight: bold;">BALANCE TO SETTLE</td>
                 <td colspan="{{ $dateCount }}" style="border: none;"></td>
                 <td colspan="4" class="num" style="border: none; font-weight: bold; border-top: 1px solid #000;">&#8369;{{ number_format($overallGrandTotal, 2) }}</td>
-            </tr> -->
+            </tr>
         </tfoot>
     </table>
 </body>
