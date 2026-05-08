@@ -133,21 +133,26 @@ class RateCalculatorService
         $aofExempt = $isInfant || $isEmployee || $isOthers;
 
         if (!$aofExempt) {
-            // Check active periods: year=0 means any year for that month
+            // Check active periods: date range
             $periodApplies = false;
-            if (!empty($activePeriods) && $arrMonth > 0) {
+            $aofAmount = (float)($this->settings['fees']['aof']['amount'] ?? 2000);
+            
+            if (!empty($activePeriods) && $arrDate) {
                 foreach ($activePeriods as $p) {
-                    $pMonth = (int)($p['month'] ?? 0);
-                    $pYear  = (int)($p['year']  ?? 0);
-                    if ($pMonth === $arrMonth && ($pYear === 0 || $pYear === $arrYear)) {
+                    $pStart = $p['start'] ?? '';
+                    $pEnd   = $p['end']   ?? '';
+                    if ($arrDate >= $pStart && $arrDate <= $pEnd) {
                         $periodApplies = true;
+                        if (isset($p['amount'])) {
+                            $aofAmount = (float)$p['amount'];
+                        }
                         break;
                     }
                 }
             }
-
+ 
             if ($periodApplies && in_array($passClass, $aofApplyTo)) {
-                $aof = (float)($this->settings['fees']['aof']['amount'] ?? 0);
+                $aof = $aofAmount;
             }
         }
 

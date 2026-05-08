@@ -299,6 +299,71 @@
         border-width: 0 2px 2px 0;
         transform: rotate(45deg);
     }
+
+    /* Custom Multi-Select Dropdown */
+    .multi-select-container {
+        position: relative;
+        width: 100%;
+    }
+
+    .multi-select-display {
+        width: 100%;
+        padding: 0.75rem 1.25rem;
+        background: var(--glass-bg);
+        border: 1px solid var(--border);
+        border-radius: 0.75rem;
+        color: white;
+        font-size: 1rem;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: all 0.2s;
+    }
+
+    .multi-select-display:hover {
+        border-color: var(--primary);
+    }
+
+    .multi-select-dropdown {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: #1e293b;
+        border: 1px solid var(--primary);
+        border-radius: 0.75rem;
+        margin-top: 0.5rem;
+        z-index: 1000;
+        max-height: 250px;
+        overflow-y: auto;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        padding: 0.5rem;
+    }
+
+    .multi-select-option {
+        padding: 0.6rem 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        cursor: pointer;
+        border-radius: 0.5rem;
+        transition: all 0.2s;
+        color: #e2e8f0;
+        font-size: 0.9rem;
+    }
+
+    .multi-select-option:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: white;
+    }
+
+    .multi-select-option input {
+        width: 1.1rem;
+        height: 1.1rem;
+        cursor: pointer;
+    }
 </style>
 @endsection
 
@@ -403,12 +468,21 @@
                 @if($viewType !== 'detail')
                 <div class="input-group">
                     <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Status Filter</label>
-                    <select name="status_filter" class="form-select bg-dark text-white border-secondary">
-                        <option value="">ALL STATUS</option>
-                        @foreach(['CONFIRMED', 'NOT-CONFIRMED', 'ARRIVED', 'CANCELLED', 'SYSTEM CANCELLED', 'PARTLY ARRIVED', 'PARTIAL SYS CANCELLED', 'PARTLY CANCELLED', 'NC-SYS CANCELLED'] as $st)
-                            <option value="{{ $st }}" {{ request('status_filter') == $st ? 'selected' : '' }}>{{ $st }}</option>
-                        @endforeach
-                    </select>
+                    <div class="multi-select-container">
+                        <div class="multi-select-display" id="statusDisplay">
+                            <span id="statusLabel">All Statuses</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                        </div>
+                        <div class="multi-select-dropdown" id="statusDropdown">
+                            @php $selectedStatuses = (array)($statusFilter ?? []); @endphp
+                            @foreach(['CONFIRMED', 'NOT-CONFIRMED', 'ARRIVED', 'CANCELLED', 'SYSTEM CANCELLED', 'PARTLY ARRIVED', 'PARTIAL SYS CANCELLED', 'PARTLY CANCELLED', 'NC-SYS CANCELLED'] as $st)
+                                <label class="multi-select-option">
+                                    <input type="checkbox" name="status_filter[]" value="{{ $st }}" {{ in_array($st, $selectedStatuses) ? 'checked' : '' }} class="status-option-checkbox">
+                                    <span>{{ $st }}</span>
+                                </label>
+                            @endforeach
+                        </div>
+                    </div>
                 </div>
                 @endif
                 <div class="input-group" style="max-width: 320px;">
@@ -597,26 +671,53 @@
             table.search(this.value).draw();
         });
 
-        // Live Status Filter logic
-        $('select[name="status_filter"]').on('change', function() {
-            const val = $(this).val();
-            // Status is column index 9 in Summary view
+        // Custom Multi-Select Logic
+        const statusDisplay = $('#statusDisplay');
+        const statusDropdown = $('#statusDropdown');
+        
+        statusDisplay.on('click', function(e) {
+            e.stopPropagation();
+            statusDropdown.toggle();
+        });
+
+        $(document).on('click', function(e) {
+            if (!$(e.target).closest('.multi-select-container').length) {
+                statusDropdown.hide();
+            }
+        });
+
+        function updateStatusLabel() {
+            const selected = [];
+            $('.status-option-checkbox:checked').each(function() {
+                selected.push($(this).val());
+            });
+            
+            if (selected.length === 0) {
+                $('#statusLabel').text('All Statuses').css('color', 'var(--text-muted)');
+            } else {
+                $('#statusLabel').text(selected.join(', ')).css('color', 'white');
+            }
+
+            // Update DataTables
             if ("{{ $viewType }}" !== 'detail') {
-                table.column(9).search(val ? '^\\s*' + val + '\\s*$' : '', true, false).draw();
+                if (selected.length === 0) {
+                    table.column(9).search('').draw();
+                } else {
+                    const regex = '^\\s*(' + selected.join('|').replace('-', '\\-') + ')\\s*$';
+                    table.column(9).search(regex, true, false).draw();
+                }
             }
             updateLinks();
-        });
+        }
+
+        $('.status-option-checkbox').on('change', updateStatusLabel);
+        updateStatusLabel(); // Initial call
 
         // Apply initial filters if present
         if ($('input[name="search"]').val()) {
             table.search($('input[name="search"]').val()).draw();
         }
-        if ($('select[name="status_filter"]').val()) {
-            const val = $('select[name="status_filter"]').val();
-            if ("{{ $viewType }}" !== 'detail') {
-                table.column(9).search(val ? '^\\s*' + val + '\\s*$' : '', true, false).draw();
-            }
-        }
+        // (Removed old status filter initializer as updateStatusLabel handles it)
 
         // Form submit should only happen for new date/status range
         $('#dashboardForm').on('submit', function(e) {
@@ -624,7 +725,7 @@
         });
 
         // Reset Res No List when Date or Status Filter changes
-        $('input[name="fromdate"], input[name="todate"], select[name="status_filter"]').on('change', function() {
+        $('input[name="fromdate"], input[name="todate"], .status-option-checkbox').on('change', function() {
             $('input[name="resnolist"]').val('');
             $('.res-checkbox').prop('checked', false);
             $('#selectAllRes').prop('checked', false);
@@ -636,21 +737,28 @@
             const fromDate = $('input[name="fromdate"]').val() || '';
             const toDate = $('input[name="todate"]').val() || '';
             const resNoList = $('input[name="resnolist"]').val() || '';
-            const statusFilter = $('select[name="status_filter"]').val() || '';
+            const statusFilter = [];
+            $('.status-option-checkbox:checked').each(function() { statusFilter.push($(this).val()); });
             const search = $('input[name="search"]').val() || '';
             const perPage = $('select[name="per_page"]').val() || '10';
 
-            const params = new URLSearchParams({
-                fromdate: fromDate,
-                todate: toDate,
-                resnolist: resNoList,
-                status_filter: statusFilter,
-                search: search,
-                per_page: perPage
-            }).toString();
+            const params = new URLSearchParams();
+            params.append('fromdate', fromDate);
+            params.append('todate', toDate);
+            params.append('resnolist', resNoList);
+            params.append('search', search);
+            params.append('per_page', perPage);
+            
+            if (Array.isArray(statusFilter)) {
+                statusFilter.forEach(s => params.append('status_filter[]', s));
+            } else if (statusFilter) {
+                params.append('status_filter[]', statusFilter);
+            }
+            
+            const paramsString = params.toString();
 
-            $('.btn-export-excel').attr('href', "{{ route('export') }}?" + params);
-            $('.btn-export-pdf').attr('href', "{{ route('print') }}?" + params);
+            $('.btn-export-excel').attr('href', "{{ route('export') }}?" + paramsString);
+            $('.btn-export-pdf').attr('href', "{{ route('print') }}?" + paramsString);
         }
 
         $('input[name], select[name]').on('change input', updateLinks);

@@ -207,6 +207,15 @@ class ReservationController extends Controller
         if (!$resNoList && !$fromDate) {
             $fromDate = date('Y-m-d');
             $toDate = date('Y-m-d');
+            // Default status filter for fresh dashboard
+            if (!$statusFilter) {
+                $statusFilter = ['CONFIRMED', 'PARTLY ARRIVED'];
+            }
+        }
+
+        // Ensure statusFilter is an array for consistent handling
+        if ($statusFilter && !is_array($statusFilter)) {
+            $statusFilter = [$statusFilter];
         }
 
         try {
@@ -254,10 +263,10 @@ class ReservationController extends Controller
                     $reservations = array_merge($reservations, $msgs);
                 }
 
-                // Apply Status Filter
-                if ($statusFilter) {
+                // Apply Status Filter (Array Support)
+                if ($statusFilter && is_array($statusFilter)) {
                     $reservations = array_filter($reservations, function ($res) use ($statusFilter) {
-                        return strtoupper(trim($res['status'] ?? '')) === strtoupper(trim($statusFilter));
+                        return in_array(strtoupper(trim($res['status'] ?? '')), array_map('strtoupper', $statusFilter));
                     });
                 }
 
@@ -299,6 +308,7 @@ class ReservationController extends Controller
             'resNoList' => $resNoList, 
             'fromDate' => $fromDate, 
             'toDate' => $toDate, 
+            'statusFilter' => $statusFilter,
             'viewType' => $viewType, 
             'error' => $error,
             'settings' => $settings
@@ -337,10 +347,11 @@ class ReservationController extends Controller
             } elseif ($fromDate && $toDate) {
                 $all = $listData ?? [];
                 
-                // Apply Status Filter
+                // Apply Status Filter (Array Support)
                 if ($statusFilter) {
+                    if (!is_array($statusFilter)) $statusFilter = [$statusFilter];
                     $all = array_filter($all, function ($res) use ($statusFilter) {
-                        return strtoupper(trim($res['status'] ?? '')) === strtoupper(trim($statusFilter));
+                        return in_array(strtoupper(trim($res['status'] ?? '')), array_map('strtoupper', $statusFilter));
                     });
                 }
 
@@ -607,10 +618,11 @@ class ReservationController extends Controller
             } elseif ($fromDate && $toDate) {
                 $all = $listData ?? [];
 
-                // Apply Status Filter
+                // Apply Status Filter (Array Support)
                 if ($statusFilter) {
+                    if (!is_array($statusFilter)) $statusFilter = [$statusFilter];
                     $all = array_filter($all, function ($res) use ($statusFilter) {
-                        return strtoupper(trim($res['status'] ?? '')) === strtoupper(trim($statusFilter));
+                        return in_array(strtoupper(trim($res['status'] ?? '')), array_map('strtoupper', $statusFilter));
                     });
                 }
 

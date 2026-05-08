@@ -63,12 +63,13 @@ class SettingsController extends Controller
         $settings['fees']['aof']['apply_to'] = $input['fees']['aof']['apply_to'] ?? [];
         
         $aofPeriods = [];
-        if (isset($input['fees']['aof']['active_periods']['month']) && isset($input['fees']['aof']['active_periods']['year'])) {
-            foreach ($input['fees']['aof']['active_periods']['month'] as $idx => $m) {
-                if (!empty($m) && !empty($input['fees']['aof']['active_periods']['year'][$idx])) {
+        if (isset($input['fees']['aof']['active_periods']['start']) && isset($input['fees']['aof']['active_periods']['end'])) {
+            foreach ($input['fees']['aof']['active_periods']['start'] as $idx => $start) {
+                if (!empty($start) && !empty($input['fees']['aof']['active_periods']['end'][$idx])) {
                     $aofPeriods[] = [
-                        'month' => (int)$m,
-                        'year' => (int)$input['fees']['aof']['active_periods']['year'][$idx]
+                        'start' => $start,
+                        'end' => $input['fees']['aof']['active_periods']['end'][$idx],
+                        'amount' => (float)($input['fees']['aof']['active_periods']['amount'][$idx] ?? $settings['fees']['aof']['amount'])
                     ];
                 }
             }

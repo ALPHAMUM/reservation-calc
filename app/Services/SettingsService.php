@@ -39,7 +39,7 @@ class SettingsService
                     'amount'         => 2000,
                     'apply_to'       => ['member', 'guest'],
                     'active_periods' => [
-                        ['month' => 4, 'year' => 0], // April, any year
+                        ['start' => '2026-04-01', 'end' => '2026-04-30', 'amount' => 2000], 
                     ],
                 ],
                 'environmental' => [
