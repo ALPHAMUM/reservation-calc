@@ -82,6 +82,8 @@ class RateCalculatorService
                     'vat' => 0
                 ];
 
+                $isFVN = false;
+                $unitRate = 0;
                 $originalVal = (float) ($r['val'] ?? 0);
                 $isVillaCode = (round($originalVal, 2) == 0.01);
                 $isSuiteCode = (round($originalVal, 2) == 0.02);

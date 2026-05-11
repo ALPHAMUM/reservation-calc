@@ -276,7 +276,8 @@ class ReservationController extends Controller
                         foreach ($msgs as $m) {
                             $arr = $m['arrdt'] ?? $m['arrDt'] ?? $m['arr_dt'] ?? null;
                             $dep = $m['depdt'] ?? $m['depDt'] ?? $m['dep_dt'] ?? null;
-                            if ($arr) $arrDates[$arr] = $dep ?? $arr;
+                            if ($arr)
+                                $arrDates[$arr] = $dep ?? $arr;
                         }
                         foreach ($arrDates as $arrDate => $depDate) {
                             try {
@@ -285,16 +286,21 @@ class ReservationController extends Controller
                                 if ($lr->successful()) {
                                     foreach ($lr->json()['msg'] ?? [] as $item) {
                                         $cn = trim($item['conf'] ?? $item['resNo'] ?? $item['resno'] ?? '');
-                                        if ($cn === '') continue;
+                                        if ($cn === '')
+                                            continue;
                                         $rv = strtoupper(trim($item['rate'] ?? ''));
                                         $rc = trim($item['rateCode'] ?? $item['rate_code'] ?? '');
-                                        if ($rc !== '') $rv .= ($rv ? '|' : '') . strtoupper($rc);
+                                        if ($rc !== '')
+                                            $rv .= ($rv ? '|' : '') . strtoupper($rc);
                                         $cust = strtoupper($item['customer'] ?? $item['custName'] ?? '');
-                                        if (str_contains($cust, 'ALPHALAND EMPLOYEE')) $rv = 'EMPLOYEE';
-                                        if ($cn !== '') $rateMap[$cn] = $rv;
+                                        if (str_contains($cust, 'ALPHALAND EMPLOYEE'))
+                                            $rv = 'EMPLOYEE';
+                                        if ($cn !== '')
+                                            $rateMap[$cn] = $rv;
                                     }
                                 }
-                            } catch (\Exception $e) { /* silently continue */ }
+                            } catch (\Exception $e) { /* silently continue */
+                            }
                         }
                     }
 
@@ -302,8 +308,10 @@ class ReservationController extends Controller
                     $localMetaMap = [];
                     foreach ($msgs as $m) {
                         $rn = trim($m['resNo'] ?? $m['conf'] ?? '');
-                        if ($rn === '') continue;
-                        if (!isset($localMetaMap[$rn])) $localMetaMap[$rn] = '';
+                        if ($rn === '')
+                            continue;
+                        if (!isset($localMetaMap[$rn]))
+                            $localMetaMap[$rn] = '';
                         $mCode = $m['rateCode'] ?? $m['rate_code'] ?? '';
                         if (is_string($mCode) && trim($mCode) !== '') {
                             $upper = strtoupper(trim($mCode));
@@ -315,16 +323,16 @@ class ReservationController extends Controller
 
                     foreach ($msgs as &$res) {
                         $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
-                        
+
                         // Combine List API metadata with any found in Detail API chunk
                         $metadata = $rateMap[$resNo] ?? '';
                         if (isset($localMetaMap[$resNo])) {
                             $metadata .= ($metadata ? '|' : '') . $localMetaMap[$resNo];
                         }
-                        
+
                         $res['rate_metadata'] = $metadata;
-                        
-                        $age = (int)($res['age'] ?? 99);
+
+                        $age = (int) ($res['age'] ?? 99);
                         $gstType = strtolower($res['gstType'] ?? '');
                         $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
 
@@ -454,7 +462,8 @@ class ReservationController extends Controller
                         $c = trim($lr['conf'] ?? $lr['resNo'] ?? $lr['resno'] ?? '');
                         $rateVal = strtoupper(trim($lr['rate'] ?? ''));
                         $rateCode = trim($lr['rateCode'] ?? $lr['rate_code'] ?? '');
-                        if ($rateCode !== '') $rateVal .= '|' . $rateCode;
+                        if ($rateCode !== '')
+                            $rateVal .= '|' . $rateCode;
 
                         $cust = strtoupper($lr['customer'] ?? $lr['custName'] ?? '');
                         if (str_contains($cust, 'ALPHALAND EMPLOYEE'))
@@ -532,13 +541,15 @@ class ReservationController extends Controller
                 $localMetaMap = [];
                 foreach ($msgs as $m) {
                     $rn = trim($m['resNo'] ?? $m['conf'] ?? '');
-                    if ($rn === '') continue;
-                    
+                    if ($rn === '')
+                        continue;
+
                     $mCode = $m['rateCode'] ?? $m['rate_code'] ?? '';
                     $mType = $m['rate'] ?? '';
-                    
-                    if (!isset($localMetaMap[$rn])) $localMetaMap[$rn] = '';
-                    
+
+                    if (!isset($localMetaMap[$rn]))
+                        $localMetaMap[$rn] = '';
+
                     if (is_string($mType) && trim($mType) !== '' && !str_contains($localMetaMap[$rn], strtoupper(trim($mType)))) {
                         $localMetaMap[$rn] .= ($localMetaMap[$rn] ? '|' : '') . strtoupper(trim($mType));
                     }
@@ -549,17 +560,6 @@ class ReservationController extends Controller
 
                 foreach ($msgs as &$res) {
                     $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
-<<<<<<< HEAD
-                    
-                    // Combine List API metadata with any found in Detail API chunk
-                    $metadata = $rateMap[$resNo] ?? '';
-                    if (isset($localMetaMap[$resNo])) {
-                        $metadata .= ($metadata ? '|' : '') . $localMetaMap[$resNo];
-                    }
-
-                    $res['rate_metadata'] = $metadata;
-                    
-=======
                     $res['rate_metadata'] = $rateMap[$resNo] ?? '';
 
                     // Detect COMP/PKG based on raw values
@@ -577,7 +577,6 @@ class ReservationController extends Controller
                     if ($isPkg)
                         $res['rate_metadata'] = trim(($res['rate_metadata'] ?? '') . ' PKG');
 
->>>>>>> 9ab0013dc47590ce58a2503eeb2a31766dec399a
                     $roomType = $res['roomtyp'] ?? $res['roomType'] ?? '';
                     $res['village_name'] = $this->getVillageName($roomType);
                     $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
@@ -710,7 +709,7 @@ class ReservationController extends Controller
                         foreach ($dateCols as $d) {
                             $rates[] = round((float) ($row['rateDates'][$d] ?? 0), 2);
                         }
-                        
+
                         return json_encode([$rateCode, $rates]);
                     };
 
@@ -753,9 +752,12 @@ class ReservationController extends Controller
                                 }
                                 $rows[$k]['accGroupTotals'][$d] = $sum;
                             }
-                            
+
                             $rows[$k]['feeGroupTotals'] = [
-                                'air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0
+                                'air' => 0,
+                                'han' => 0,
+                                'avi' => 0,
+                                'env' => 0
                             ];
                             for ($m = $startIdx; $m < $i; $m++) {
                                 $rows[$k]['feeGroupTotals']['air'] += (float) ($rows[$m]['res']['calculated_rates']['air'] ?? 0);
@@ -766,7 +768,10 @@ class ReservationController extends Controller
                         } else {
                             $rows[$k]['accRowSpan'] = 0;
                             $rows[$k]['feeGroupTotals'] = [
-                                'air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0
+                                'air' => 0,
+                                'han' => 0,
+                                'avi' => 0,
+                                'env' => 0
                             ];
                             for ($m = $startIdx; $m < $i; $m++) {
                                 $rows[$k]['feeGroupTotals']['air'] += (float) ($rows[$m]['res']['calculated_rates']['air'] ?? 0);
@@ -830,24 +835,15 @@ class ReservationController extends Controller
                 if ($accRowSpan > 0) {
                     foreach ($dateCols as $d) {
                         $val = $accGroupTotals[$d] ?? 0;
-<<<<<<< HEAD
-                        $formattedVal = ($val > 0 ? number_format($val, 2) : '');
-                        if ($val == 0.01 || $val == 0.02) {
-                            $formattedVal = number_format($val, 2) . ' FVN';
-                        }
-                        echo '<td class="num" rowspan="' . $accRowSpan . '">' . $formattedVal . '</td>';
-                        $dateTotals[$d] += (float)$val;
-=======
                         $style = $accRowSpan > 1 ? ' style="text-align: center;"' : '';
                         echo '<td class="num" rowspan="' . $accRowSpan . '"' . $style . '>' . ($val > 0 ? number_format($val, 2) : '') . '</td>';
                         $dateTotals[$d] += floor($val);
->>>>>>> 9ab0013dc47590ce58a2503eeb2a31766dec399a
                     }
                 }
 
                 $passengerAccTotal = 0;
                 foreach ($dateCols as $d) {
-                    $passengerAccTotal += (float)($rateDates[$d] ?? 0);
+                    $passengerAccTotal += (float) ($rateDates[$d] ?? 0);
                 }
                 $accGrandTotal += $passengerAccTotal;
 
