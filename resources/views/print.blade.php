@@ -165,7 +165,7 @@
             </tr>
         </thead>
         <tbody>
-            @foreach($reservations as $res)
+            @foreach($reservations as $idx => $res)
                 @php
                     $resNo = $res['resNo'] ?? $res['conf'] ?? '';
                     $isFirst = ($resNo !== $lastResNo);
@@ -175,10 +175,10 @@
                     $rates = ['acc' => 0, 'air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0];
                     if (isset($res['calculated_rates'])) {
                         $rates = $res['calculated_rates'];
-                        $grandTotals['air'] += floor($rates['air']);
-                        $grandTotals['han'] += floor($rates['han']);
-                        $grandTotals['avi'] += floor($rates['avi']);
-                        $grandTotals['env'] += floor($rates['env']);
+                        $grandTotals['air'] += (float)($rates['air']);
+                        $grandTotals['han'] += (float)($rates['han']);
+                        $grandTotals['avi'] += (float)($rates['avi']);
+                        $grandTotals['env'] += (float)($rates['env']);
                     }
 
                     $privCard = trim((string) ($res['privCard'] ?? $res['privcard'] ?? ''));
@@ -219,10 +219,13 @@
                         @foreach($dateCols as $d)
                             @php 
                                 $val = $spanInfo['totals'][$d] ?? 0;
-                                $dateTotals[$d] += (float)$val;
+                                $isWhole = (round($val, 2) == floor(round($val, 2)));
+                                // If it was already summed (whole number), just add the value. 
+                                // If it's a unit rate (FVN), multiply by the group size.
+                                $dateTotals[$d] += $isWhole ? (float)$val : ((float)$val * $spanInfo['span']);
                                 
                                 $displayVal = ($val > 0 ? number_format($val, 2) : '');
-                                if ($val == 0.01 || $val == 0.02) {
+                                if (!$isWhole && (round($val, 2) == 0.01 || round($val, 2) == 0.02)) {
                                     $displayVal = number_format($val, 2) . ' FVN';
                                 }
                             @endphp
@@ -238,10 +241,10 @@
                     @endforeach
 
                     @php $accGrandTotal += $passengerAccTotal; @endphp
-                        <td class="num">{{ number_format($res['calculated_rates']['air'] ?? 0, 2) }}</td>
-                        <td class="num">{{ number_format($res['calculated_rates']['han'] ?? 0, 2) }}</td>
-                        <td class="num">{{ number_format($res['calculated_rates']['avi'] ?? 0, 2) }}</td>
-                        <td class="num">{{ number_format($res['calculated_rates']['env'] ?? 0, 2) }}</td>
+                    <td class="num">{{ ($res['calculated_rates']['air'] ?? 0) > 0 ? number_format($res['calculated_rates']['air'], 2) : '' }}</td>
+                    <td class="num">{{ ($res['calculated_rates']['han'] ?? 0) > 0 ? number_format($res['calculated_rates']['han'], 2) : '' }}</td>
+                    <td class="num">{{ ($res['calculated_rates']['avi'] ?? 0) > 0 ? number_format($res['calculated_rates']['avi'], 2) : '' }}</td>
+                    <td class="num">{{ ($res['calculated_rates']['env'] ?? 0) > 0 ? number_format($res['calculated_rates']['env'], 2) : '' }}</td>
                     </tr>
             @endforeach
             <tr style="display: none;">

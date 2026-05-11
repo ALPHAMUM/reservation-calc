@@ -200,22 +200,23 @@ class RateCalculatorService
             }
         }
 
-        // Hangar Fee
+        // Hangar Fee - Applies to all except infants
         $hangar = 0;
         if (!$isInfant) {
-            $hangar = (float) ($this->settings['fees']['hangar']['amount'] ?? 0);
+            $hangar = (float) ($this->settings['fees']['hangar']['amount'] ?? 400);
         }
 
-        // AOF Fee
+        // AOF Fee - Applies to all except infants
         $aof = 0;
         if (!$isInfant) {
-            $aof = $this->calculateAof($date); // Use helper for date-based AOF
+            $checkInDate = $passenger['arrdt'] ?? $passenger['arrDt'] ?? null;
+            $aof = $this->calculateAof($checkInDate);
         }
 
-        // Environmental Fee
+        // Environmental Fee - Applies to all except infants
         $env = 0;
         if (!$isInfant) {
-            $env = (float) ($this->settings['fees']['environmental']['amount'] ?? 0);
+            $env = (float) ($this->settings['fees']['environmental']['amount'] ?? 200);
         }
 
         return [
