@@ -16,3 +16,4 @@ yarn-error.log
 /.idea
 /.vscode
 /database/database.sqlite
+/database/reservation.db
