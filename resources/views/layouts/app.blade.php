@@ -155,6 +155,7 @@
             &copy; {{ date('Y') }} Alphaland Corporation All Rights Reserved
         </footer>
     </div>
+    @yield('modals')
     @yield('scripts')
 </body>
 </html>

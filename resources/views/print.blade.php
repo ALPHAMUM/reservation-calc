@@ -212,17 +212,21 @@
                         @foreach($dateCols as $d)
                             @php 
                                 $val = $spanInfo['totals'][$d] ?? 0;
-                                $valFloor = floor($val);
-                                $dateTotals[$d] += $valFloor;
+                                $dateTotals[$d] += (float)$val;
+                                
+                                $displayVal = ($val > 0 ? number_format($val, 2) : '');
+                                if ($val == 0.01 || $val == 0.02) {
+                                    $displayVal = number_format($val, 2) . ' FVN';
+                                }
                             @endphp
-                            <td class="num" rowspan="{{ $spanInfo['span'] }}">{{ $val > 0 ? number_format($val, 2) : '' }}</td>
+                            <td class="num" rowspan="{{ $spanInfo['span'] }}">{{ $displayVal }}</td>
                         @endforeach
                     @endif
 
                     @foreach($dateCols as $d)
                         @php 
                             $val = $rateMap[$d] ?? 0;
-                            $passengerAccTotal += floor($val);
+                            $passengerAccTotal += (float)$val;
                         @endphp
                     @endforeach
 

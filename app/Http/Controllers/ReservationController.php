@@ -200,6 +200,7 @@ class ReservationController extends Controller
             $perPage = 100;
 
         $reservations = [];
+        $pagedReservations = [];
         $total = 0;
         $viewType = 'summary';
         $error = null;
@@ -264,9 +265,60 @@ class ReservationController extends Controller
                         if (!$isInfant) $reservationPaxCounts[$resNo]++;
                     }
 
+                    // If rateMap is empty (no fromDate, searching by resnolist only),
+                    // call the List API using arrival dates found in the detail chunk
+                    if (empty($rateMap)) {
+                        $arrDates = [];
+                        foreach ($msgs as $m) {
+                            $arr = $m['arrdt'] ?? $m['arrDt'] ?? $m['arr_dt'] ?? null;
+                            $dep = $m['depdt'] ?? $m['depDt'] ?? $m['dep_dt'] ?? null;
+                            if ($arr) $arrDates[$arr] = $dep ?? $arr;
+                        }
+                        foreach ($arrDates as $arrDate => $depDate) {
+                            try {
+                                $lr = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
+                                    ->get($this->listApiUrl, ['fromdate' => $arrDate, 'todate' => $depDate]);
+                                if ($lr->successful()) {
+                                    foreach ($lr->json()['msg'] ?? [] as $item) {
+                                        $cn = trim($item['conf'] ?? $item['resNo'] ?? $item['resno'] ?? '');
+                                        if ($cn === '') continue;
+                                        $rv = strtoupper(trim($item['rate'] ?? ''));
+                                        $rc = trim($item['rateCode'] ?? $item['rate_code'] ?? '');
+                                        if ($rc !== '') $rv .= ($rv ? '|' : '') . strtoupper($rc);
+                                        $cust = strtoupper($item['customer'] ?? $item['custName'] ?? '');
+                                        if (str_contains($cust, 'ALPHALAND EMPLOYEE')) $rv = 'EMPLOYEE';
+                                        if ($cn !== '') $rateMap[$cn] = $rv;
+                                    }
+                                }
+                            } catch (\Exception $e) { /* silently continue */ }
+                        }
+                    }
+
+                    // Build localMetaMap from rateCode in Detail records (rateCode is a string field)
+                    $localMetaMap = [];
+                    foreach ($msgs as $m) {
+                        $rn = trim($m['resNo'] ?? $m['conf'] ?? '');
+                        if ($rn === '') continue;
+                        if (!isset($localMetaMap[$rn])) $localMetaMap[$rn] = '';
+                        $mCode = $m['rateCode'] ?? $m['rate_code'] ?? '';
+                        if (is_string($mCode) && trim($mCode) !== '') {
+                            $upper = strtoupper(trim($mCode));
+                            if (!str_contains($localMetaMap[$rn], $upper)) {
+                                $localMetaMap[$rn] .= ($localMetaMap[$rn] ? '|' : '') . $upper;
+                            }
+                        }
+                    }
+
                     foreach ($msgs as &$res) {
                         $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
-                        $res['rate_metadata'] = $rateMap[$resNo] ?? '';
+                        
+                        // Combine List API metadata with any found in Detail API chunk
+                        $metadata = $rateMap[$resNo] ?? '';
+                        if (isset($localMetaMap[$resNo])) {
+                            $metadata .= ($metadata ? '|' : '') . $localMetaMap[$resNo];
+                        }
+                        
+                        $res['rate_metadata'] = $metadata;
                         
                         $age = (int)($res['age'] ?? 99);
                         $gstType = strtolower($res['gstType'] ?? '');
@@ -343,7 +395,7 @@ class ReservationController extends Controller
         $settings = $settingsService->getSettings();
 
         $dateCols = [];
-        if ($viewType === 'detail') {
+        if ($viewType === 'detail' && is_array($pagedReservations) && !empty($pagedReservations)) {
             // Sort by Reservation Number first
             usort($pagedReservations, function($a, $b) {
                 $resA = $a['resNo'] ?? $a['conf'] ?? '';
@@ -396,6 +448,9 @@ class ReservationController extends Controller
                     foreach($listData as $lr) {
                         $c = trim($lr['conf'] ?? $lr['resNo'] ?? $lr['resno'] ?? '');
                         $rateVal = strtoupper(trim($lr['rate'] ?? ''));
+                        $rateCode = trim($lr['rateCode'] ?? $lr['rate_code'] ?? '');
+                        if ($rateCode !== '') $rateVal .= '|' . $rateCode;
+
                         $cust = strtoupper($lr['customer'] ?? $lr['custName'] ?? '');
                         if (str_contains($cust, 'ALPHALAND EMPLOYEE')) $rateVal = 'EMPLOYEE';
                         if ($c !== '') $rateMap[$c] = $rateVal;
@@ -462,9 +517,35 @@ class ReservationController extends Controller
                     if (!$isInfant) $reservationPaxCounts[$resNo]++;
                 }
 
+                $localMetaMap = [];
+                foreach ($msgs as $m) {
+                    $rn = trim($m['resNo'] ?? $m['conf'] ?? '');
+                    if ($rn === '') continue;
+                    
+                    $mCode = $m['rateCode'] ?? $m['rate_code'] ?? '';
+                    $mType = $m['rate'] ?? '';
+                    
+                    if (!isset($localMetaMap[$rn])) $localMetaMap[$rn] = '';
+                    
+                    if (is_string($mType) && trim($mType) !== '' && !str_contains($localMetaMap[$rn], strtoupper(trim($mType)))) {
+                        $localMetaMap[$rn] .= ($localMetaMap[$rn] ? '|' : '') . strtoupper(trim($mType));
+                    }
+                    if (is_string($mCode) && trim($mCode) !== '' && !str_contains($localMetaMap[$rn], strtoupper(trim($mCode)))) {
+                        $localMetaMap[$rn] .= ($localMetaMap[$rn] ? '|' : '') . strtoupper(trim($mCode));
+                    }
+                }
+
                 foreach ($msgs as &$res) {
                     $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
-                    $res['rate_metadata'] = $rateMap[$resNo] ?? '';
+                    
+                    // Combine List API metadata with any found in Detail API chunk
+                    $metadata = $rateMap[$resNo] ?? '';
+                    if (isset($localMetaMap[$resNo])) {
+                        $metadata .= ($metadata ? '|' : '') . $localMetaMap[$resNo];
+                    }
+
+                    $res['rate_metadata'] = $metadata;
+                    
                     $roomType = $res['roomtyp'] ?? $res['roomType'] ?? '';
                     $res['village_name'] = $this->getVillageName($roomType);
                     $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
@@ -649,14 +730,18 @@ class ReservationController extends Controller
                 if ($accRowSpan > 0) {
                     foreach ($dateCols as $d) {
                         $val = $accGroupTotals[$d] ?? 0;
-                        echo '<td class="num" rowspan="' . $accRowSpan . '">' . ($val > 0 ? number_format($val, 2) : '') . '</td>';
-                        $dateTotals[$d] += floor($val);
+                        $formattedVal = ($val > 0 ? number_format($val, 2) : '');
+                        if ($val == 0.01 || $val == 0.02) {
+                            $formattedVal = number_format($val, 2) . ' FVN';
+                        }
+                        echo '<td class="num" rowspan="' . $accRowSpan . '">' . $formattedVal . '</td>';
+                        $dateTotals[$d] += (float)$val;
                     }
                 }
 
                 $passengerAccTotal = 0;
                 foreach ($dateCols as $d) {
-                    $passengerAccTotal += floor($rateDates[$d] ?? 0);
+                    $passengerAccTotal += (float)($rateDates[$d] ?? 0);
                 }
                 $accGrandTotal += $passengerAccTotal;
 

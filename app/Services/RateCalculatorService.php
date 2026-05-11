@@ -14,6 +14,7 @@ class RateCalculatorService
     public function calculatePassengerRates(array $passenger, $paxIndex = 0, $roomType = '', $totalBillable = 1)
     {
         $gstType = strtolower($passenger['gstType'] ?? $passenger['gsttype'] ?? '');
+        $rateMetadata = strtoupper($passenger['rate_metadata'] ?? '');
         $age = (int)($passenger['age'] ?? 99);
         $isInfant = str_contains($gstType, 'infant') || (isset($passenger['age']) && $age >= 0 && $age <= 1);
         
@@ -54,7 +55,7 @@ class RateCalculatorService
         $divisor = min($totalBillable, $basePax);
         if ($divisor < 1) $divisor = 1;
 
-        foreach ($passenger['rate'] ?? [] as $r) {
+        foreach ($passenger['rate'] ?? [] as $idx => $r) {
             $v = (float)($r['val'] ?? 0); 
             $d = strtolower($r['desc'] ?? '');
             $date = $r['date'] ?? null;
@@ -76,10 +77,35 @@ class RateCalculatorService
                     'vat' => 0
                 ];
 
+                $isFVN = false;
+                $unitRate = 0;
+
                 if (!$isInfant) {
                     $grossAmount = 0;
                     if (!$isExtra) {
-                        $unitRate = $this->getAccommodationUnitRate($date, $isVilla, $isMember);
+                        
+                        // Handle special FVN logic for day 1
+                        if ($idx === 0) {
+                            $rCodeRaw = $passenger['rateCode'] ?? $passenger['rate_code'] ?? '';
+                            $rCode = is_string($rCodeRaw) ? strtoupper($rCodeRaw) : '';
+                            
+                            $rNameRaw = $passenger['rate'] ?? '';
+                            $rName = is_string($rNameRaw) ? strtoupper($rNameRaw) : '';
+                            
+                            if (str_contains($rateMetadata, '.01') || str_contains($rateMetadata, 'KEY-VILLA') ||
+                                $rCode === '.01' || str_contains($rName, 'KEY-VILLA')) {
+                                $unitRate = 0.01;
+                                $isFVN = true;
+                            } elseif (str_contains($rateMetadata, '.02') || str_contains($rateMetadata, 'KEY-SUITE') ||
+                                $rCode === '.02' || str_contains($rName, 'KEY-SUITE')) {
+                                $unitRate = 0.02;
+                                $isFVN = true;
+                            }
+                        }
+
+                        if (!$isFVN) {
+                            $unitRate = $this->getAccommodationUnitRate($date, $isVilla, $isMember);
+                        }
                         $grossAmount = $unitRate / $divisor;
                     } else {
                         $grossAmount = $this->getExtraPersonRate($date, $isMember);
@@ -110,6 +136,11 @@ class RateCalculatorService
                     }
                 }
                 
+                if ($isFVN) {
+                    $breakdown['is_fvn'] = true;
+                    $breakdown['fvn_rate'] = $unitRate;
+                }
+
                 $acc += $dateRate;
                 $accDates[$date] = [
                     'val' => $dateRate,

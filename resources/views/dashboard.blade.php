@@ -489,6 +489,63 @@
         margin: 0;
     }
 
+    .rate-select {
+        background: transparent;
+        border: none;
+        color: white;
+        font-size: 0.72rem;
+        font-weight: 700;
+        width: 100%;
+        text-align: center;
+        padding: 0;
+        outline: none;
+        cursor: pointer;
+        appearance: none;
+        -webkit-appearance: none;
+    }
+
+    .rate-select option {
+        background: #1e293b;
+        color: white;
+        font-weight: 600;
+    }
+
+    .rate-display {
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: white;
+        cursor: pointer;
+        flex: 1;
+        text-align: center;
+    }
+
+    .fvn-display {
+        color: #ffffff;
+        font-size: 0.82rem;
+    }
+
+    .rate-editor {
+        display: flex;
+        align-items: center;
+        gap: 0.2rem;
+        flex: 1;
+    }
+
+    .stay-block.dragging {
+        opacity: 0.4;
+        cursor: grabbing;
+    }
+
+    .rate-cell.drag-over {
+        outline: 2px dashed #6366f1;
+        background: rgba(99, 102, 241, 0.12);
+        border-radius: 0.5rem;
+    }
+
+    .stay-block {
+        cursor: grab;
+    }
+
     .remove-btn {
         background: rgba(255, 255, 255, 0.2);
         border: none;
@@ -738,25 +795,68 @@
                         </thead>
                         <tbody>
                             @php 
-                                $resCounts = [];
+                                $reservations = array_values($reservations);
+                                $resDataForJs = [];
+                                $resGroups = [];
                                 foreach($reservations as $r) {
-                                    $c = $r['resNo'] ?? $r['conf'] ?? 'N/A';
-                                    $resCounts[$c] = ($resCounts[$c] ?? 0) + 1;
+                                    $c = trim($r['resNo'] ?? $r['conf'] ?? 'N/A');
+                                    $resGroups[$c][] = $r;
+                                }
+
+                                // Pre-calculate spans per reservation
+                                $accSpans = [];
+                                foreach($resGroups as $rn => $rows) {
+                                    $count = count($rows);
+                                    $basePax = $rows[0]['calculated_rates']['base_pax'] ?? 4;
+                                    $baseSize = min($count, $basePax);
+                                    
+                                    for ($i = 0; $i < $count; $i++) {
+                                        $span = 0;
+                                        $totals = [];
+                                        if ($i === 0) {
+                                            $span = $baseSize;
+                                            foreach($dateCols as $d) {
+                                                $sum = 0;
+                                                for ($k = 0; $k < $baseSize; $k++) {
+                                                    $dayVal = 0;
+                                                    foreach($rows[$k]['rate'] ?? [] as $rt) {
+                                                        if (($rt['date'] ?? '') === $d) { $dayVal = (float)($rt['val'] ?? 0); break; }
+                                                    }
+                                                    $sum += $dayVal;
+                                                }
+                                                $totals[$d] = $sum;
+                                            }
+                                        } elseif ($i < $baseSize) {
+                                            $span = 0;
+                                        } else {
+                                            $span = 1;
+                                            foreach($dateCols as $d) {
+                                                $dayVal = 0;
+                                                foreach($rows[$i]['rate'] ?? [] as $rt) {
+                                                    if (($rt['date'] ?? '') === $d) { $dayVal = (float)($rt['val'] ?? 0); break; }
+                                                }
+                                                $totals[$d] = $dayVal;
+                                            }
+                                        }
+                                        $accSpans[] = ['span' => $span, 'totals' => $totals];
+                                    }
                                 }
                                 $renderedRes = [];
                             @endphp
-                            @foreach($reservations as $res)
+                            @foreach($reservations as $idx => $res)
                                 @php 
-                                    $resNo = $res['resNo'] ?? $res['conf'] ?? 'N/A';
+                                    $resNo = trim($res['resNo'] ?? $res['conf'] ?? 'N/A');
                                     $isFirstInGroup = !isset($renderedRes[$resNo]);
                                     if($isFirstInGroup) $renderedRes[$resNo] = true;
+                                    $spanInfo = $accSpans[$idx] ?? ['span' => 1, 'totals' => []];
+                                    $resDataForJs[$idx] = $res;
                                 @endphp
                                 <tr class="{{ $isFirstInGroup ? 'res-group-header' : '' }}">
                                     @if($isFirstInGroup)
-                                        <td rowspan="{{ $resCounts[$resNo] }}" class="sticky-col-1" style="vertical-align: top; padding-top: 1.5rem;">
+                                        <td rowspan="{{ count($resGroups[$resNo]) }}" class="sticky-col-1" style="vertical-align: top; padding-top: 1.5rem;">
                                             <span class="res-no">#{{ $resNo }}</span>
                                         </td>
-                                        <td rowspan="{{ $resCounts[$resNo] }}" class="sticky-col-2" style="vertical-align: top; padding-top: 1.5rem; font-weight: 600;">
+                                        <td rowspan="{{ count($resGroups[$resNo]) }}" class="sticky-col-2" style="vertical-align: top; padding-top: 1.5rem; font-weight: 600;">
                                             {{ $res['village_name'] ?? 'N/A' }}
                                         </td>
                                     @endif
@@ -769,36 +869,54 @@
                                             @if(!empty($res['is_employee'])) (Emp) @endif
                                         </div>
                                     </td>
-                                    @foreach($dateCols as $date)
-                                        @php 
-                                            $dayRate = 0;
-                                            foreach($res['rate'] ?? [] as $r) {
-                                                if(($r['date'] ?? '') === $date) {
-                                                    $dayRate = (float)($r['val'] ?? 0);
-                                                    break;
-                                                }
-                                            }
-                                        @endphp
-                                        <td class="rate-cell" data-date="{{ $date }}">
-                                            @if($dayRate > 0)
-                                                <div class="stay-block">
-                                                    <input type="number" class="rate-input" value="{{ (int)$dayRate }}" step="100">
-                                                    <button type="button" class="remove-btn" onclick="removeRate(this)">&times;</button>
-                                                </div>
-                                            @else
-                                                <button type="button" class="add-cell-btn" onclick="addRate(this)">+</button>
-                                            @endif
-                                        </td>
-                                    @endforeach
+                                    
+                                    @if($spanInfo['span'] > 0)
+                                        @foreach($dateCols as $date)
+                                            @php 
+                                                $dayRate = (float)($spanInfo['totals'][$date] ?? 0);
+                                            @endphp
+                                            <td class="rate-cell" data-date="{{ $date }}" rowspan="{{ $spanInfo['span'] }}" style="vertical-align: middle; text-align: center; cursor: pointer;">
+                                                @if($dayRate > 0)
+                                                    @php $isFvnRate = in_array($dayRate, [0.01, 0.02, 0.5]); @endphp
+                                                    <div class="stay-block" draggable="true" onclick="openRateEditor(this)">
+                                                        {{-- Display mode --}}
+                                                        <span class="rate-display {{ $isFvnRate ? 'fvn-display' : '' }}">
+                                                            @if($isFvnRate)
+                                                                {{ number_format($dayRate, 2) }} FVN
+                                                            @else
+                                                                {{ number_format($dayRate, 2) }}
+                                                            @endif
+                                                        </span>
+                                                        {{-- Edit mode (hidden by default) --}}
+                                                        <div class="rate-editor" style="display:none;">
+                                                            <select class="rate-select" onchange="onRateSelectChange(this)">
+                                                                <option value="custom" {{ !$isFvnRate ? 'selected' : '' }}>Custom</option>
+                                                                <option value="0.01" {{ $dayRate == 0.01 ? 'selected' : '' }}>.01 FVN</option>
+                                                                <option value="0.02" {{ $dayRate == 0.02 ? 'selected' : '' }}>.02 FVN</option>
+                                                                <option value="0.5"  {{ $dayRate == 0.5  ? 'selected' : '' }}>.5 FVN</option>
+                                                            </select>
+                                                            <input type="number" class="rate-input" value="{{ $dayRate }}" step="0.01"
+                                                                   style="{{ $isFvnRate ? 'display:none;' : '' }}"
+                                                                   onblur="closeRateEditor(this)">
+                                                        </div>
+                                                        <button type="button" class="remove-btn" onclick="removeRate(this); event.stopPropagation();">&times;</button>
+                                                    </div>
+                                                @else
+                                                    <button type="button" class="add-cell-btn" onclick="addRate(this)">+</button>
+                                                @endif
+                                            </td>
+                                        @endforeach
+                                    @endif
+                                    
                                     <td class="row-total" style="text-align: right; font-weight: 700; color: var(--primary);">
                                         @php
                                             $r = $res['calculated_rates'] ?? [];
-                                            $total = floor($r['acc'] ?? 0) + floor($r['air'] ?? 0) + floor($r['han'] ?? 0) + floor($r['avi'] ?? 0) + floor($r['env'] ?? 0);
+                                            $total = ($r['acc'] ?? 0) + ($r['air'] ?? 0) + ($r['han'] ?? 0) + ($r['avi'] ?? 0) + ($r['env'] ?? 0);
                                             // Store base fees for live calc
-                                            $baseFees = floor($r['air'] ?? 0) + floor($r['han'] ?? 0) + floor($r['avi'] ?? 0) + floor($r['env'] ?? 0);
+                                            $baseFees = ($r['air'] ?? 0) + ($r['han'] ?? 0) + ($r['avi'] ?? 0) + ($r['env'] ?? 0);
                                         @endphp
                                         <span class="total-val" data-base-fees="{{ $baseFees }}">{{ number_format($total, 2) }}</span>
-                                        <button type="button" class="info-btn show-breakdown-btn" data-res='@json($res)' title="Calculation Breakdown">
+                                        <button type="button" class="info-btn show-breakdown-btn" data-res-idx="{{ $idx }}" data-bs-toggle="modal" data-bs-target="#breakdownModal" title="Calculation Breakdown">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
                                         </button>
                                     </td>
@@ -806,11 +924,9 @@
                             @endforeach
                         </tbody>
                     </table>
-                </div>
-                <button type="button" class="btn-add-row" onclick="addNewRow()">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                    Add New Record Row
-                </button>
+                    <script>
+                        window.__resData = {!! json_encode($resDataForJs ?? []) !!};
+                    </script>
             </div>
         @else
             <div class="table-container">
@@ -887,6 +1003,7 @@
     </div>
 </div>
 
+@section('modals')
 <!-- Breakdown Modal -->
 <div class="modal fade" id="breakdownModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
@@ -906,6 +1023,8 @@
         </div>
     </div>
 </div>
+@endsection
+
 @endsection
 
 @section('scripts')
@@ -1035,18 +1154,125 @@
             recalculateRow(cell.closest('tr'));
         };
 
+        // ── Drag & Drop ───────────────────────────────────────────────
+        let dragSourceCell = null;
+        let dragHTML       = null;
+
+        $(document).on('dragstart', '.stay-block', function(e) {
+            dragSourceCell = $(this).closest('td.rate-cell');
+            dragHTML       = $(this).closest('td.rate-cell').html();
+            $(this).addClass('dragging');
+            e.originalEvent.dataTransfer.effectAllowed = 'move';
+            e.originalEvent.dataTransfer.setData('text/plain', 'rate-block');
+        });
+
+        $(document).on('dragend', '.stay-block', function() {
+            $(this).removeClass('dragging');
+            $('.rate-cell').removeClass('drag-over');
+        });
+
+        $(document).on('dragover', 'td.rate-cell', function(e) {
+            e.preventDefault();
+            e.originalEvent.dataTransfer.dropEffect = 'move';
+            $(this).addClass('drag-over');
+        });
+
+        $(document).on('dragleave', 'td.rate-cell', function() {
+            $(this).removeClass('drag-over');
+        });
+
+        $(document).on('drop', 'td.rate-cell', function(e) {
+            e.preventDefault();
+            $(this).removeClass('drag-over');
+            const targetCell = $(this);
+            if (!dragSourceCell || dragSourceCell.is(targetCell)) return;
+
+            // Only allow drop within the same row
+            if (!dragSourceCell.closest('tr').is(targetCell.closest('tr'))) return;
+
+            // Swap HTML
+            const targetHTML = targetCell.html();
+            targetCell.html(dragHTML);
+            dragSourceCell.html(targetHTML || '<button type="button" class="add-cell-btn" onclick="addRate(this)">+</button>');
+
+            // Synchronize the underlying window.__resData model so the Breakdown Modal recalculates correctly
+            const row = targetCell.closest('tr');
+            const resBtn = row.find('.show-breakdown-btn');
+            if (resBtn.length) {
+                const resIdx = parseInt(resBtn.data('res-idx'), 10);
+                if (!isNaN(resIdx) && window.__resData && window.__resData[resIdx]) {
+                    const sourceDate = dragSourceCell.data('date');
+                    const targetDate = targetCell.data('date');
+                    const rates = window.__resData[resIdx].rate || [];
+                    
+                    const sourceRateObj = rates.find(r => r.date === sourceDate);
+                    const targetRateObj = rates.find(r => r.date === targetDate);
+                    
+                    if (sourceRateObj && targetRateObj) {
+                        // Swap ONLY the mathematical values, not the dates
+                        const tempVal = sourceRateObj.val;
+                        const tempBreakdown = sourceRateObj.breakdown;
+                        
+                        sourceRateObj.val = targetRateObj.val;
+                        sourceRateObj.breakdown = targetRateObj.breakdown;
+                        
+                        targetRateObj.val = tempVal;
+                        targetRateObj.breakdown = tempBreakdown;
+                    }
+                }
+            }
+
+            recalculateRow(row);
+            dragSourceCell = null;
+            dragHTML = null;
+        });
+        // ─────────────────────────────────────────────────────────────
+
         window.addRate = function(btn) {
             const cell = $(btn).closest('td');
-            // Default rate from settings or 0
-            const defaultRate = 5000; 
+            const date = cell.data('date');
+            const row  = cell.closest('tr');
+
+            // Check if this row/group has a .01 or .02 FVN ratecode on the first day
+            const isFirstDate = date === '{{ $dateCols[0] ?? '' }}';
+            const rateMetadata = row.find('[data-res]').length
+                ? (row.find('[data-res]').data('res') || {}).rate_metadata || ''
+                : '';
+            const isFvn01 = isFirstDate && (rateMetadata.includes('.01') || rateMetadata.includes('KEY-VILLA'));
+            const isFvn02 = isFirstDate && (rateMetadata.includes('.02') || rateMetadata.includes('KEY-SUITE'));
+            const isFvn05 = isFirstDate && rateMetadata.includes('.5FVN');
+
+            let defaultSelectVal = 'custom';
+            let defaultInputVal  = 5000;
+            let defaultDisplay   = '';
+            let isFvn = false;
+
+            if (isFvn01)      { defaultSelectVal = '0.01'; defaultInputVal = 0.01; defaultDisplay = '.01 FVN'; isFvn = true; }
+            else if (isFvn02) { defaultSelectVal = '0.02'; defaultInputVal = 0.02; defaultDisplay = '.02 FVN'; isFvn = true; }
+            else if (isFvn05) { defaultSelectVal = '0.5';  defaultInputVal = 0.5;  defaultDisplay = '.5 FVN';  isFvn = true; }
+            else              { defaultDisplay = defaultInputVal.toLocaleString(undefined, {minimumFractionDigits: 2}); }
+
             cell.html(`
-                <div class="stay-block">
-                    <input type="number" class="rate-input" value="${defaultRate}" step="100">
-                    <button type="button" class="remove-btn" onclick="removeRate(this)">&times;</button>
+                <div class="stay-block" onclick="openRateEditor(this)">
+                    <span class="rate-display ${isFvn ? 'fvn-display' : ''}">${defaultDisplay}</span>
+                    <div class="rate-editor" style="display:none;">
+                        <select class="rate-select" onchange="onRateSelectChange(this)">
+                            <option value="custom" ${defaultSelectVal === 'custom' ? 'selected' : ''}>Custom</option>
+                            <option value="0.01"   ${defaultSelectVal === '0.01'   ? 'selected' : ''}>.01 FVN</option>
+                            <option value="0.02"   ${defaultSelectVal === '0.02'   ? 'selected' : ''}>.02 FVN</option>
+                            <option value="0.5"    ${defaultSelectVal === '0.5'    ? 'selected' : ''}>.5 FVN</option>
+                        </select>
+                        <input type="number" class="rate-input" value="${defaultInputVal}" step="0.01"
+                               style="${isFvn ? 'display:none;' : ''}"
+                               onblur="closeRateEditor(this)">
+                    </div>
+                    <button type="button" class="remove-btn" onclick="removeRate(this); event.stopPropagation();">&times;</button>
                 </div>
             `);
             recalculateRow(cell.closest('tr'));
-            cell.find('.rate-input').focus().select();
+            if (!isFvn) {
+                cell.find('.rate-input').focus().select();
+            }
         };
 
         window.addNewRow = function() {
@@ -1169,7 +1395,9 @@
 
         // Breakdown Modal Logic
         $(document).on('click', '.show-breakdown-btn', function() {
-            const res = $(this).data('res');
+            const idx = $(this).data('res-idx');
+            const res = window.__resData[idx];
+            if (!res) return;
             let html = `
                 <div style="margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border);">
                     <div style="font-weight: bold; font-size: 1.25rem; color: var(--primary);">${res.gstName || res.guestName || 'Unknown'}</div>
@@ -1216,18 +1444,37 @@
                     `;
                 }
 
-                html += `
-                    <tr>
-                        <td style="white-space: nowrap; font-weight: 600;">${dateStr}</td>
-                        <td>
-                            <div style="font-weight: 500;">${b.is_discounted ? 'Senior/PWD' : 'Regular'}</div>
-                            <div style="font-size: 0.65rem; color: var(--text-muted);">Gross: ₱${parseFloat(b.gross_share).toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
-                        </td>
-                        <td>₱${parseFloat(b.base).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                        <td>${detailHtml}</td>
-                        <td style="font-weight: bold; text-align: right; color: white;">₱${parseFloat(r.val).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                    </tr>
-                `;
+                if (b.is_fvn) {
+                    html += `
+                        <tr style="background: rgba(239, 68, 68, 0.1);">
+                            <td style="white-space: nowrap; font-weight: 600;">${dateStr}</td>
+                            <td>
+                                <div style="font-weight: 500; color: #ef4444;">Free Villa Night</div>
+                            </td>
+                            <td style="color: rgba(255,255,255,0.2);">-</td>
+                            <td style="color: rgba(255,255,255,0.2);">-</td>
+                            <td style="font-weight: bold; text-align: right; color: #ef4444;">
+                                ${parseFloat(b.fvn_rate).toFixed(2)} FVN
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    html += `
+                        <tr>
+                            <td style="white-space: nowrap; font-weight: 600;">${dateStr}</td>
+                            <td>
+                                <div style="font-weight: 500;">${b.is_discounted ? 'Senior/PWD' : 'Regular'}</div>
+                                <div style="font-size: 0.65rem; color: var(--text-muted);">Gross: ₱${parseFloat(b.gross_share).toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+                            </td>
+                            <td>₱${parseFloat(b.base).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                            <td>${detailHtml}</td>
+                            <td style="font-weight: bold; text-align: right; color: white;">
+                                ₱${parseFloat(r.val).toLocaleString(undefined, {minimumFractionDigits: 2})}
+                            </td>
+                        </tr>
+                    `;
+                }
+
             });
 
             // Add other fees
@@ -1264,7 +1511,7 @@
                         <tr style="border-top: 2px solid var(--primary);">
                             <td colspan="4" style="text-align: right; padding-top: 1.5rem; font-weight: bold; color: var(--text-muted);">TOTAL BILLABLE:</td>
                             <td style="text-align: right; padding-top: 1.5rem; font-weight: 900; color: var(--primary); font-size: 1.4rem;">
-                                ₱${overallTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                                ₱${overallTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                             </td>
                         </tr>
                     </tfoot>
@@ -1283,8 +1530,6 @@
             `;
 
             $('#breakdownContent').html(html);
-            const modal = new bootstrap.Modal(document.getElementById('breakdownModal'));
-            modal.show();
         });
 
         // When the input is typed into, update the checkboxes
@@ -1296,5 +1541,55 @@
             updateLinks();
         });
     });
+
+    function openRateEditor(block) {
+        const display = block.querySelector('.rate-display');
+        const editor  = block.querySelector('.rate-editor');
+        if (!editor) return;
+        display.style.display = 'none';
+        editor.style.display = 'flex';
+        // Focus number input if custom, else focus select
+        const sel = editor.querySelector('.rate-select');
+        const inp = editor.querySelector('.rate-input');
+        if (sel.value === 'custom' && inp) {
+            inp.focus();
+        } else {
+            sel.focus();
+        }
+    }
+
+    function closeRateEditor(inp) {
+        const editor  = inp.closest('.rate-editor');
+        const block   = inp.closest('.stay-block');
+        const display = block.querySelector('.rate-display');
+        const val     = parseFloat(inp.value) || 0;
+        const fvnMap  = { 0.01: '.01 FVN', 0.02: '.02 FVN', 0.5: '.5 FVN' };
+        display.textContent = fvnMap[val] ? fvnMap[val] : (val > 0 ? val.toLocaleString(undefined,{minimumFractionDigits:2}) : '');
+        display.className = 'rate-display' + (fvnMap[val] ? ' fvn-display' : '');
+        editor.style.display = 'none';
+        display.style.display = '';
+    }
+
+    function onRateSelectChange(sel) {
+        const editor  = sel.closest('.rate-editor');
+        const block   = sel.closest('.stay-block');
+        const display = block.querySelector('.rate-display');
+        const inp     = editor.querySelector('.rate-input');
+        const val     = sel.value;
+        const fvnMap  = { '0.01': '.01 FVN', '0.02': '.02 FVN', '0.5': '.5 FVN' };
+
+        if (val === 'custom') {
+            inp.style.display = '';
+            inp.focus();
+        } else {
+            inp.style.display = 'none';
+            inp.value = val;
+            // Immediately close and update display
+            display.textContent = fvnMap[val];
+            display.className = 'rate-display fvn-display';
+            editor.style.display = 'none';
+            display.style.display = '';
+        }
+    }
 </script>
 @endsection
