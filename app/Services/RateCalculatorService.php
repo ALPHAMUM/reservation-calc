@@ -187,6 +187,21 @@ class RateCalculatorService
         $dayOfWeek = date('w', strtotime($date));
         $isWeekend = ($dayOfWeek == 5 || $dayOfWeek == 6);
 
+        // Try to fetch from Database first
+        try {
+            $prefix = $isMember ? 'M' : 'G';
+            $type = $isVilla ? 'VILLA' : 'SUITE';
+            $suffix = $isWeekend ? 'WKENDS' : 'WKDAYS';
+            $code = "{$prefix}{$type}-{$suffix}";
+
+            $rate = \App\Models\Rate::where('rate_code', $code)->first();
+            if ($rate) {
+                return (float)$rate->rate_value;
+            }
+        } catch (\Exception $e) {
+            // Fallback to hardcoded if table doesn't exist yet
+        }
+
         if ($isMember) {
             if ($isVilla) return $isWeekend ? 14000 : 10000;
             return $isWeekend ? 21000 : 15000;
@@ -198,6 +213,13 @@ class RateCalculatorService
 
     private function getExtraPersonRate($date, $isMember)
     {
+        try {
+            $rate = \App\Models\Rate::where('rate_code', $isMember ? 'MVILLA-WKDAYS' : 'GVILLA-WKDAYS')->first();
+            if ($rate) {
+                return (float)($rate->rate_extra - $rate->rate_value);
+            }
+        } catch (\Exception $e) {}
+
         return 3700;
     }
 }
