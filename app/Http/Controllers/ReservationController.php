@@ -835,9 +835,13 @@ class ReservationController extends Controller
                 if ($accRowSpan > 0) {
                     foreach ($dateCols as $d) {
                         $val = $accGroupTotals[$d] ?? 0;
+                        $formattedVal = ($val > 0 ? number_format($val, 2) : '');
+                        if (round($val, 2) == 0.01 || round($val, 2) == 0.02) {
+                            $formattedVal = number_format($val, 2) . ' FVN';
+                        }
                         $style = $accRowSpan > 1 ? ' style="text-align: center;"' : '';
-                        echo '<td class="num" rowspan="' . $accRowSpan . '"' . $style . '>' . ($val > 0 ? number_format($val, 2) : '') . '</td>';
-                        $dateTotals[$d] += floor($val);
+                        echo '<td class="num" rowspan="' . $accRowSpan . '"' . $style . '>' . $formattedVal . '</td>';
+                        $dateTotals[$d] += (float)$val;
                     }
                 }
 

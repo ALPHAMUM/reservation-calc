@@ -226,7 +226,7 @@
                                     $displayVal = number_format($val, 2) . ' FVN';
                                 }
                             @endphp
-                            <td class="num {{ $spanInfo['span'] > 1 ? 'merged' : '' }}" rowspan="{{ $spanInfo['span'] }}">{{ $val > 0 ? number_format($val, 2) : '' }}</td>
+                            <td class="num {{ $spanInfo['span'] > 1 ? 'merged' : '' }}" rowspan="{{ $spanInfo['span'] }}">{{ $displayVal }}</td>
                         @endforeach
                     @endif
 

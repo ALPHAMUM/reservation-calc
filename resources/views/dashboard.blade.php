@@ -120,7 +120,32 @@
         background: rgba(239, 68, 68, 0.2); color: #f87171; 
     }
     /* Completed - Slate */
-    .status-checkout, .status-completed { background: rgba(148, 163, 184, 0.2); color: #94a3b8; }
+    .status-checkout, .status-completed, .status-NC-SYS-CANCELLED { background: rgba(148, 163, 184, 0.1); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }
+
+    .btn-fvn {
+        background: #ef4444;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 4px 8px;
+        font-size: 0.75rem;
+        font-weight: bold;
+        cursor: pointer;
+        transition: transform 0.1s;
+    }
+    .btn-fvn:hover {
+        transform: scale(1.05);
+        filter: brightness(1.1);
+    }
+    .btn-fvn:active {
+        transform: scale(0.95);
+    }
+    .quick-fvn-options {
+        background: rgba(0,0,0,0.2);
+        padding: 6px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+    }
 
     .badge-guest { background: rgba(14, 165, 233, 0.15); color: #38bdf8; }
     .badge-member { background: rgba(16, 185, 129, 0.15); color: #34d399; }
@@ -567,7 +592,10 @@
     }
 
     .add-cell-btn {
-        display: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0.3;
         width: 100%;
         height: 100%;
         background: rgba(255, 255, 255, 0.05);
@@ -580,9 +608,7 @@
     }
 
     td:hover .add-cell-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        opacity: 1;
     }
 
     .add-cell-btn:hover {
@@ -888,17 +914,19 @@
                                                             @endif
                                                         </span>
                                                         {{-- Edit mode (hidden by default) --}}
-                                                        <div class="rate-editor" style="display:none;">
-                                                            <select class="rate-select" onchange="onRateSelectChange(this)">
-                                                                <option value="custom" {{ !$isFvnRate ? 'selected' : '' }}>Custom</option>
-                                                                <option value="0.01" {{ $dayRate == 0.01 ? 'selected' : '' }}>.01 FVN</option>
-                                                                <option value="0.02" {{ $dayRate == 0.02 ? 'selected' : '' }}>.02 FVN</option>
-                                                                <option value="0.5"  {{ $dayRate == 0.5  ? 'selected' : '' }}>.5 FVN</option>
-                                                            </select>
-                                                            <input type="number" class="rate-input" value="{{ $dayRate }}" step="0.01"
-                                                                   style="{{ $isFvnRate ? 'display:none;' : '' }}"
-                                                                   onblur="closeRateEditor(this)">
-                                                        </div>
+                                                            <div class="rate-editor" style="display:none;">
+                                                                <div class="quick-fvn-options" style="display: flex; gap: 4px; margin-bottom: 8px;" onclick="event.stopPropagation()">
+                                                                    <button type="button" class="btn-fvn" onclick="applyQuickRate(this, '0.01'); event.stopPropagation();">.01</button>
+                                                                    <button type="button" class="btn-fvn" onclick="applyQuickRate(this, '0.02'); event.stopPropagation();">.02</button>
+                                                                    <button type="button" class="btn-fvn" onclick="applyQuickRate(this, '0.5'); event.stopPropagation();">.5</button>
+                                                                    <button type="button" class="btn-fvn" onclick="toggleCustomInput(this); event.stopPropagation();" style="background: var(--primary)">₱</button>
+                                                                </div>
+                                                                <input type="number" class="rate-input" value="{{ $dayRate }}" step="0.01"
+                                                                       style="{{ $isFvnRate ? 'display:none;' : 'width: 80px;' }}"
+                                                                       onclick="event.stopPropagation()"
+                                                                       onblur="closeRateEditor(this)"
+                                                                       onkeydown="if(event.key==='Enter') { closeRateEditor(this); event.stopPropagation(); }">
+                                                            </div>
                                                         <button type="button" class="remove-btn" onclick="removeRate(this); event.stopPropagation();">&times;</button>
                                                     </div>
                                                 @else
@@ -1120,8 +1148,49 @@
         // Live Editing Functions
         window.recalculateRow = function(row) {
             let accTotal = 0;
-            $(row).find('.rate-input').each(function() {
-                accTotal += parseFloat($(this).val()) || 0;
+            const resBtn = $(row).find('.show-breakdown-btn');
+            const resIdx = resBtn.length ? parseInt(resBtn.data('res-idx'), 10) : -1;
+            const res = (resIdx !== -1 && window.__resData) ? window.__resData[resIdx] : null;
+
+            $(row).find('.rate-cell').each(function() {
+                const cell = $(this);
+                const date = cell.data('date');
+                const inp  = cell.find('.rate-input');
+                const val  = parseFloat(inp.val()) || 0;
+                accTotal += val;
+
+                // Sync with __resData model if available
+                if (res && date) {
+                    if (!res.rate) res.rate = [];
+                    let rObj = res.rate.find(r => r.date === date);
+                    if (!rObj) {
+                        rObj = { date: date, val: 0, breakdown: {} };
+                        res.rate.push(rObj);
+                    }
+                    rObj.val = val;
+                    
+                    // Simple live breakdown calculation
+                    const isFvn = (val === 0.01 || val === 0.02 || val === 0.5);
+                    if (isFvn) {
+                        rObj.breakdown = { is_fvn: true, fvn_rate: val, base: val, sc: 0, vat: 0, gross_share: val };
+                    } else {
+                        const isDisc = rObj.breakdown ? rObj.breakdown.is_discounted : false;
+                        let base, sc, vat, gross;
+                        gross = val;
+                        if (isDisc) {
+                            // Reverse engineer from disc logic (simplified)
+                            base = gross / 0.9; // 0.8 base + 0.1 sc
+                            sc = base * 0.1;
+                            vat = 0;
+                            rObj.breakdown = { is_discounted: true, base: base, sc: sc, vat: 0, discount: base * 0.2, gross_share: base * 1.12 };
+                        } else {
+                            base = gross / 1.22; // 1 base + 0.1 sc + 0.12 vat
+                            sc = base * 0.1;
+                            vat = base * 0.12;
+                            rObj.breakdown = { is_discounted: false, base: base, sc: sc, vat: vat, gross_share: gross };
+                        }
+                    }
+                }
             });
             
             const totalSpan = $(row).find('.total-val');
@@ -1129,6 +1198,13 @@
             const grandTotal = accTotal + baseFees;
             
             totalSpan.text(grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+            
+            // Sync overall total in model
+            if (res) {
+                if (!res.calculated_rates) res.calculated_rates = {};
+                res.calculated_rates.acc = accTotal;
+            }
+
             updateGlobalStats();
         };
 
@@ -1250,29 +1326,35 @@
             if (isFvn01)      { defaultSelectVal = '0.01'; defaultInputVal = 0.01; defaultDisplay = '.01 FVN'; isFvn = true; }
             else if (isFvn02) { defaultSelectVal = '0.02'; defaultInputVal = 0.02; defaultDisplay = '.02 FVN'; isFvn = true; }
             else if (isFvn05) { defaultSelectVal = '0.5';  defaultInputVal = 0.5;  defaultDisplay = '.5 FVN';  isFvn = true; }
-            else              { defaultDisplay = defaultInputVal.toLocaleString(undefined, {minimumFractionDigits: 2}); }
+            else {
+                // Not automatically FVN, but check if it's currently a magic number
+                if (defaultInputVal == 0.01) { defaultSelectVal = '0.01'; defaultDisplay = '.01 FVN'; isFvn = true; }
+                else if (defaultInputVal == 0.02) { defaultSelectVal = '0.02'; defaultDisplay = '.02 FVN'; isFvn = true; }
+                else if (defaultInputVal == 0.5) { defaultSelectVal = '0.5';  defaultDisplay = '.5 FVN';  isFvn = true; }
+                else { defaultDisplay = defaultInputVal.toLocaleString(undefined, {minimumFractionDigits: 2}); }
+            }
 
             cell.html(`
                 <div class="stay-block" onclick="openRateEditor(this)">
                     <span class="rate-display ${isFvn ? 'fvn-display' : ''}">${defaultDisplay}</span>
                     <div class="rate-editor" style="display:none;">
-                        <select class="rate-select" onchange="onRateSelectChange(this)">
-                            <option value="custom" ${defaultSelectVal === 'custom' ? 'selected' : ''}>Custom</option>
-                            <option value="0.01"   ${defaultSelectVal === '0.01'   ? 'selected' : ''}>.01 FVN</option>
-                            <option value="0.02"   ${defaultSelectVal === '0.02'   ? 'selected' : ''}>.02 FVN</option>
-                            <option value="0.5"    ${defaultSelectVal === '0.5'    ? 'selected' : ''}>.5 FVN</option>
-                        </select>
+                        <div class="quick-fvn-options" style="display: flex; gap: 4px; margin-bottom: 8px;" onclick="event.stopPropagation()">
+                            <button type="button" class="btn-fvn" onclick="applyQuickRate(this, '0.01'); event.stopPropagation();">.01</button>
+                            <button type="button" class="btn-fvn" onclick="applyQuickRate(this, '0.02'); event.stopPropagation();">.02</button>
+                            <button type="button" class="btn-fvn" onclick="applyQuickRate(this, '0.5'); event.stopPropagation();">.5</button>
+                            <button type="button" class="btn-fvn" onclick="toggleCustomInput(this); event.stopPropagation();" style="background: var(--primary)">₱</button>
+                        </div>
                         <input type="number" class="rate-input" value="${defaultInputVal}" step="0.01"
-                               style="${isFvn ? 'display:none;' : ''}"
-                               onblur="closeRateEditor(this)">
+                               style="${isFvn ? 'display:none;' : 'width: 80px;'}"
+                               onclick="event.stopPropagation()"
+                               onblur="closeRateEditor(this)"
+                               onkeydown="if(event.key==='Enter') { closeRateEditor(this); event.stopPropagation(); }">
                     </div>
                     <button type="button" class="remove-btn" onclick="removeRate(this); event.stopPropagation();">&times;</button>
                 </div>
             `);
+            
             recalculateRow(cell.closest('tr'));
-            if (!isFvn) {
-                cell.find('.rate-input').focus().select();
-            }
         };
 
         window.addNewRow = function() {
@@ -1449,7 +1531,7 @@
                         <tr style="background: rgba(239, 68, 68, 0.1);">
                             <td style="white-space: nowrap; font-weight: 600;">${dateStr}</td>
                             <td>
-                                <div style="font-weight: 500; color: #ef4444;">Free Villa Night</div>
+                                <div style="font-weight: 500; color: #ef4444;">Villa/Suite</div>
                             </td>
                             <td style="color: rgba(255,255,255,0.2);">-</td>
                             <td style="color: rgba(255,255,255,0.2);">-</td>
@@ -1542,23 +1624,17 @@
         });
     });
 
-    function openRateEditor(block) {
+    window.openRateEditor = function(block) {
         const display = block.querySelector('.rate-display');
         const editor  = block.querySelector('.rate-editor');
         if (!editor) return;
         display.style.display = 'none';
         editor.style.display = 'flex';
-        // Focus number input if custom, else focus select
-        const sel = editor.querySelector('.rate-select');
-        const inp = editor.querySelector('.rate-input');
-        if (sel.value === 'custom' && inp) {
-            inp.focus();
-        } else {
-            sel.focus();
-        }
+        editor.style.flexDirection = 'column'; // Stack buttons and input
+        editor.style.alignItems = 'center';
     }
 
-    function closeRateEditor(inp) {
+    window.closeRateEditor = function(inp) {
         const editor  = inp.closest('.rate-editor');
         const block   = inp.closest('.stay-block');
         const display = block.querySelector('.rate-display');
@@ -1570,26 +1646,32 @@
         display.style.display = '';
     }
 
-    function onRateSelectChange(sel) {
-        const editor  = sel.closest('.rate-editor');
-        const block   = sel.closest('.stay-block');
+    window.onRateSelectChange = function(sel) {
+        // Obsolete with quick buttons, but keeping for compatibility
+    }
+
+    window.applyQuickRate = function(btn, val) {
+        const editor  = btn.closest('.rate-editor');
+        const block   = btn.closest('.stay-block');
         const display = block.querySelector('.rate-display');
         const inp     = editor.querySelector('.rate-input');
-        const val     = sel.value;
         const fvnMap  = { '0.01': '.01 FVN', '0.02': '.02 FVN', '0.5': '.5 FVN' };
 
-        if (val === 'custom') {
-            inp.style.display = '';
-            inp.focus();
-        } else {
-            inp.style.display = 'none';
-            inp.value = val;
-            // Immediately close and update display
-            display.textContent = fvnMap[val];
-            display.className = 'rate-display fvn-display';
-            editor.style.display = 'none';
-            display.style.display = '';
-        }
+        inp.value = val;
+        display.textContent = fvnMap[val] || val;
+        display.className = 'rate-display fvn-display';
+        editor.style.display = 'none';
+        display.style.display = '';
+        
+        recalculateRow(block.closest('tr'));
+    }
+
+    window.toggleCustomInput = function(btn) {
+        const editor = btn.closest('.rate-editor');
+        const inp    = editor.querySelector('.rate-input');
+        inp.style.display = '';
+        inp.focus();
+        inp.select();
     }
 </script>
 @endsection

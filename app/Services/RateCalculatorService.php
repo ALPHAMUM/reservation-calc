@@ -88,14 +88,17 @@ class RateCalculatorService
                 $isVillaCode = (round($originalVal, 2) == 0.01);
                 $isSuiteCode = (round($originalVal, 2) == 0.02);
 
-                if ($originalVal == 0.01 || $originalVal == 0.02) {
-                    $dateRate = $originalVal;
-                } elseif (!$isInfant) {
+                if (!$isInfant) {
                     $grossAmount = 0;
                     if (!$isExtra) {
 
-                        // Handle special FVN logic for day 1
-                        if ($idx === 0) {
+                        // 1. Magic numbers are always FVN (respects manual user input on any day)
+                        if ($originalVal == 0.01 || $originalVal == 0.02) {
+                            $unitRate = $originalVal;
+                            $isFVN = true;
+                        }
+                        // 2. Automatic detection from metadata only on Day 1
+                        elseif ($idx === 0) {
                             $rCodeRaw = $passenger['rateCode'] ?? $passenger['rate_code'] ?? '';
                             $rCode = is_string($rCodeRaw) ? strtoupper($rCodeRaw) : '';
 
@@ -103,14 +106,14 @@ class RateCalculatorService
                             $rName = is_string($rNameRaw) ? strtoupper($rNameRaw) : '';
 
                             if (
-                                str_contains($rateMetadata, '.01') || str_contains($rateMetadata, 'KEY-VILLA') ||
-                                $rCode === '.01' || str_contains($rName, 'KEY-VILLA')
+                                str_contains($rateMetadata, 'KEY-VILLA') || str_contains($rName, 'KEY-VILLA') ||
+                                str_contains($rateMetadata, '.01') || $rCode === '.01'
                             ) {
                                 $unitRate = 0.01;
                                 $isFVN = true;
                             } elseif (
-                                str_contains($rateMetadata, '.02') || str_contains($rateMetadata, 'KEY-SUITE') ||
-                                $rCode === '.02' || str_contains($rName, 'KEY-SUITE')
+                                str_contains($rateMetadata, 'KEY-SUITE') || str_contains($rName, 'KEY-SUITE') ||
+                                str_contains($rateMetadata, '.02') || $rCode === '.02'
                             ) {
                                 $unitRate = 0.02;
                                 $isFVN = true;
@@ -125,28 +128,35 @@ class RateCalculatorService
                         $grossAmount = $this->getExtraPersonRate($date, $isMember);
                     }
 
-                    $breakdown['gross_share'] = $grossAmount;
+                    if (!$isFVN) {
+                        $breakdown['gross_share'] = $grossAmount;
 
-                    if ($hasPrivCard) {
-                        $breakdown['is_discounted'] = true;
-                        $baseForDisc = $grossAmount / 1.12;
-                        $discount = $baseForDisc * 0.2;
-                        $netBase = $baseForDisc - $discount;
-                        $sc = $netBase * 0.1;
+                        if ($hasPrivCard) {
+                            $breakdown['is_discounted'] = true;
+                            $baseForDisc = $grossAmount / 1.12;
+                            $discount = $baseForDisc * 0.2;
+                            $netBase = $baseForDisc - $discount;
+                            $sc = $netBase * 0.1;
 
-                        $breakdown['base'] = $baseForDisc;
-                        $breakdown['discount'] = $discount;
-                        $breakdown['sc'] = $sc;
-                        $dateRate = $netBase + $sc;
+                            $breakdown['base'] = $baseForDisc;
+                            $breakdown['discount'] = $discount;
+                            $breakdown['sc'] = $sc;
+                            $dateRate = $netBase + $sc;
+                        } else {
+                            $base = $grossAmount / 1.12;
+                            $sc = $base * 0.1;
+                            $vat = $base * 0.12;
+
+                            $breakdown['base'] = $base;
+                            $breakdown['sc'] = $sc;
+                            $breakdown['vat'] = $vat;
+                            $dateRate = $grossAmount;
+                        }
                     } else {
-                        $base = $grossAmount / 1.12;
-                        $sc = $base * 0.1;
-                        $vat = $base * 0.12;
-
-                        $breakdown['base'] = $base;
-                        $breakdown['sc'] = $sc;
-                        $breakdown['vat'] = $vat;
-                        $dateRate = $grossAmount;
+                        $dateRate = $unitRate;
+                        $breakdown['gross_share'] = $unitRate;
+                        // Populate minimal breakdown to prevent "empty" modal
+                        $breakdown['base'] = $unitRate;
                     }
                 }
 
