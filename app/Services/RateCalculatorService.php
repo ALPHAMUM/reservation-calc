@@ -46,7 +46,9 @@ class RateCalculatorService
         $accDates = [];
         $isVilla = true;
         $roomTypeUpper = strtoupper($roomType);
-        if (str_contains($roomTypeUpper, 'RGNCY') || str_contains($roomTypeUpper, 'ROYL') || str_contains($roomTypeUpper, 'PV8') || str_contains($roomTypeUpper, 'SUITE')) {
+        $metaUpper = strtoupper($rateMetadata);
+        if (str_contains($roomTypeUpper, 'RGNCY') || str_contains($roomTypeUpper, 'ROYL') || str_contains($roomTypeUpper, 'PV8') || str_contains($roomTypeUpper, 'SUITE') ||
+            str_contains($metaUpper, 'SUITE') || str_contains($metaUpper, 'ROYL') || str_contains($metaUpper, 'RGNCY')) {
             $isVilla = false;
         }
 
@@ -99,8 +101,8 @@ class RateCalculatorService
                             $isFVN = true;
                             $fvnApplied = true;
                         }
-                        // 2. Automatic detection from metadata only on Day 1
-                        elseif ($idx === 0 && !$fvnApplied) {
+                        // 2. Automatic detection from metadata only on Day 1 IF the rate is a magic number (not 0)
+                        elseif ($idx === 0 && !$fvnApplied && ($originalVal == 0.01 || $originalVal == 0.02)) {
                             $rCodeRaw = $passenger['rateCode'] ?? $passenger['rate_code'] ?? '';
                             $rCode = is_string($rCodeRaw) ? strtoupper($rCodeRaw) : '';
 
