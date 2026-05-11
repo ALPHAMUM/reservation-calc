@@ -560,7 +560,11 @@ class ReservationController extends Controller
 
                 foreach ($msgs as &$res) {
                     $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
-                    $res['rate_metadata'] = $rateMap[$resNo] ?? '';
+                    $metadata = $rateMap[$resNo] ?? '';
+                    if (isset($localMetaMap[$resNo])) {
+                        $metadata .= ($metadata ? '|' : '') . $localMetaMap[$resNo];
+                    }
+                    $res['rate_metadata'] = $metadata;
 
                     // Detect COMP/PKG based on raw values
                     $isComp = false;
@@ -602,9 +606,7 @@ class ReservationController extends Controller
                     $gstType = strtolower($res['gstType'] ?? '');
                     $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
 
-                    if (!$isInfant) {
-                        $paxIndices[$resNo]++;
-                    }
+
 
                     // Sync rates back to the rate array for display
                     foreach ($res['rate'] as &$r) {
@@ -703,14 +705,13 @@ class ReservationController extends Controller
 
                     // Define what makes a "matching" row
                     $getRateKey = function ($row) use ($dateCols) {
-                        $rateCode = $row['res']['rate_metadata'] ?? '';
-
-                        $rates = [];
+                        $resNo = trim($row['res']['resNo'] ?? $row['res']['conf'] ?? '');
+                        $key = $resNo;
                         foreach ($dateCols as $d) {
-                            $rates[] = round((float) ($row['rateDates'][$d] ?? 0), 2);
+                            $v = round((float) ($row['rateDates'][$d] ?? 0), 2);
+                            $key .= '|' . sprintf("%.2f", $v);
                         }
-
-                        return json_encode([$rateCode, $rates]);
+                        return $key;
                     };
 
 
@@ -741,14 +742,15 @@ class ReservationController extends Controller
                                 // This means the merged cell SHOWS THE SUM.
                                 // If 4 people share 10,000, each person is 2,500. The merged cell shows 10,000.
                                 // This seems to be the intended behavior for "unit-based" merging.
+                                // Sum whole numbers, but keep unit rate for FVN (0.01/0.02)
                                 $sum = 0;
-                                for ($m = $startIdx; $m < $i; $m++) {
-                                    $v = (float) ($rows[$m]['rateDates'][$d] ?? 0);
-                                    if (round($v, 2) == 0.01 || round($v, 2) == 0.02) {
-                                        $sum = $v;
-                                        break;
+                                $firstVal = (float) ($rows[$startIdx]['rateDates'][$d] ?? 0);
+                                if (round($firstVal, 2) == floor(round($firstVal, 2))) {
+                                    for ($m = $startIdx; $m < $i; $m++) {
+                                        $sum += (float) ($rows[$m]['rateDates'][$d] ?? 0);
                                     }
-                                    $sum += $v;
+                                } else {
+                                    $sum = $firstVal;
                                 }
                                 $rows[$k]['accGroupTotals'][$d] = $sum;
                             }
@@ -803,10 +805,10 @@ class ReservationController extends Controller
                 if ($isFirst)
                     $last = $resNo;
 
-                $totals['air'] += (float) ($rates['air'] ?? 0);
-                $totals['han'] += (float) ($rates['han'] ?? 0);
-                $totals['avi'] += (float) ($rates['avi'] ?? 0);
-                $totals['env'] += (float) ($rates['env'] ?? 0);
+                $totals['air'] += floor($rates['air']);
+                $totals['han'] += floor($rates['han']);
+                $totals['avi'] += floor($rates['avi']);
+                $totals['env'] += floor($rates['env']);
 
                 echo '<tr>';
                 echo '<td>' . ($isFirst ? htmlspecialchars($resNo) : '') . '</td>';
@@ -835,27 +837,34 @@ class ReservationController extends Controller
                 if ($accRowSpan > 0) {
                     foreach ($dateCols as $d) {
                         $val = $accGroupTotals[$d] ?? 0;
+                        $isWhole = (round($val, 2) == floor(round($val, 2)));
                         $formattedVal = ($val > 0 ? number_format($val, 2) : '');
-                        if (round($val, 2) == 0.01 || round($val, 2) == 0.02) {
+                        if (!$isWhole && (round($val, 2) == 0.01 || round($val, 2) == 0.02)) {
                             $formattedVal = number_format($val, 2) . ' FVN';
                         }
                         $style = $accRowSpan > 1 ? ' style="text-align: center;"' : '';
                         echo '<td class="num" rowspan="' . $accRowSpan . '"' . $style . '>' . $formattedVal . '</td>';
-                        $dateTotals[$d] += (float)$val;
+                        // If it was already summed (whole number), just add the value. 
+                        // If it's a unit rate (FVN), multiply by the group size.
+                        $dateTotals[$d] += $isWhole ? (float)$val : ((float)$val * $accRowSpan);
                     }
                 }
 
-                // accGrandTotal will be calculated at the end from dateTotals to avoid double counting merged cells
+                $passengerAccTotal = 0;
+                foreach ($dateCols as $d) {
+                    $passengerAccTotal += (float) ($rateDates[$d] ?? 0);
+                }
+                $accGrandTotal += $passengerAccTotal;
 
                 $air = (float) ($res['calculated_rates']['air'] ?? 0);
                 $han = (float) ($res['calculated_rates']['han'] ?? 0);
                 $avi = (float) ($res['calculated_rates']['avi'] ?? 0);
                 $env = (float) ($res['calculated_rates']['env'] ?? 0);
 
-                echo '<td class="num">' . number_format($air, 2) . '</td>';
-                echo '<td class="num">' . number_format($han, 2) . '</td>';
-                echo '<td class="num">' . number_format($avi, 2) . '</td>';
-                echo '<td class="num">' . number_format($env, 2) . '</td>';
+                echo '<td class="num">' . ($air > 0 ? number_format($air, 2) : '') . '</td>';
+                echo '<td class="num">' . ($han > 0 ? number_format($han, 2) : '') . '</td>';
+                echo '<td class="num">' . ($avi > 0 ? number_format($avi, 2) : '') . '</td>';
+                echo '<td class="num">' . ($env > 0 ? number_format($env, 2) : '') . '</td>';
                 echo '</tr>';
                 flush();
             }
@@ -876,7 +885,6 @@ class ReservationController extends Controller
             echo '<td class="num">' . number_format($totals['env'], 2) . '</td>';
             echo '</tr>';
 
-            $accGrandTotal = array_sum($dateTotals);
             $overallGrandTotal = $accGrandTotal + $totals['air'] + $totals['han'] + $totals['avi'] + $totals['env'];
 
             $fullColspan = 10 + $dateCount + 4;
@@ -980,9 +988,28 @@ class ReservationController extends Controller
                         $reservationPaxCounts[$resNo]++;
                 }
 
+                // Build localMetaMap from Detail records
+                $localMetaMap = [];
+                foreach ($msgs as $m) {
+                    $rn = trim($m['resNo'] ?? $m['conf'] ?? '');
+                    if ($rn === '') continue;
+                    if (!isset($localMetaMap[$rn])) $localMetaMap[$rn] = '';
+                    $mCode = $m['rateCode'] ?? $m['rate_code'] ?? '';
+                    if (is_string($mCode) && trim($mCode) !== '') {
+                        $upper = strtoupper(trim($mCode));
+                        if (!str_contains($localMetaMap[$rn], $upper)) {
+                            $localMetaMap[$rn] .= ($localMetaMap[$rn] ? '|' : '') . $upper;
+                        }
+                    }
+                }
+
                 foreach ($msgs as &$res) {
                     $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
-                    $res['rate_metadata'] = $rateMap[$resNo] ?? '';
+                    $metadata = $rateMap[$resNo] ?? '';
+                    if (isset($localMetaMap[$resNo])) {
+                        $metadata .= ($metadata ? '|' : '') . $localMetaMap[$resNo];
+                    }
+                    $res['rate_metadata'] = $metadata;
 
                     // Detect COMP/PKG based on raw values
                     $isComp = false;
@@ -1068,9 +1095,8 @@ class ReservationController extends Controller
                 $currentRow = $rows[$i];
 
                 $getRateKey = function ($row) use ($dateCols) {
-                    $rateCode = $row['rate_metadata'] ?? '';
-
-                    $rates = [];
+                    $resNo = trim($row['resNo'] ?? $row['conf'] ?? '');
+                    $key = $resNo;
                     foreach ($dateCols as $d) {
                         $val = 0;
                         foreach ($row['rate'] ?? [] as $r) {
@@ -1079,10 +1105,10 @@ class ReservationController extends Controller
                                 break;
                             }
                         }
-                        $rates[] = round($val, 2);
+                        $v = round($val, 2);
+                        $key .= '|' . sprintf("%.2f", $v);
                     }
-
-                    return json_encode([$rateCode, $rates]);
+                    return $key;
                 };
 
                 $currentKey = $getRateKey($currentRow);
@@ -1099,20 +1125,29 @@ class ReservationController extends Controller
                     if ($k === $startIdx) {
                         $accSpans[$currentIdx] = ['span' => $span, 'totals' => [], 'fee_totals' => []];
                         foreach ($dateCols as $d) {
-                            $sum = 0;
-                            for ($m = $startIdx; $m < $i; $m++) {
-                                foreach ($rows[$m]['rate'] ?? [] as $r) {
-                                    if (($r['date'] ?? '') === $d) {
-                                        $v = (float) ($r['val'] ?? 0);
-                                        if (round($v, 2) == 0.01 || round($v, 2) == 0.02) {
-                                            $sum = $v;
-                                            break 2;
-                                        }
-                                        $sum += $v;
-                                    }
+                            // Sum whole numbers, but keep unit rate for FVN
+                            $firstVal = 0;
+                            foreach ($rows[$startIdx]['rate'] ?? [] as $r) {
+                                if (($r['date'] ?? '') === $d) {
+                                    $firstVal = (float) ($r['val'] ?? 0);
+                                    break;
                                 }
                             }
-                            $accSpans[$currentIdx]['totals'][$d] = $sum;
+
+                            if (round($firstVal, 2) == floor(round($firstVal, 2))) {
+                                $sum = 0;
+                                for ($m = $startIdx; $m < $i; $m++) {
+                                    foreach ($rows[$m]['rate'] ?? [] as $r) {
+                                        if (($r['date'] ?? '') === $d) {
+                                            $sum += (float) ($r['val'] ?? 0);
+                                            break;
+                                        }
+                                    }
+                                }
+                                $accSpans[$currentIdx]['totals'][$d] = $sum;
+                            } else {
+                                $accSpans[$currentIdx]['totals'][$d] = $firstVal;
+                            }
                         }
 
                         $ftotals = ['air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0];
@@ -1161,15 +1196,7 @@ class ReservationController extends Controller
             foreach ($res['rate'] ?? [] as $r) {
                 $date = $r['date'] ?? '';
                 if ($date) {
-                    $v = (float) ($r['val'] ?? 0);
-                    // Special case for FVN magic numbers: don't sum, just take the first one found
-                    if ($v == 0.01 || $v == 0.02) {
-                        if (!isset($grouped[$key]['_rateMap'][$date])) {
-                            $grouped[$key]['_rateMap'][$date] = $v;
-                        }
-                    } else {
-                        $grouped[$key]['_rateMap'][$date] = ($grouped[$key]['_rateMap'][$date] ?? 0) + $v;
-                    }
+                    $grouped[$key]['_rateMap'][$date] = ($grouped[$key]['_rateMap'][$date] ?? 0) + (float) ($r['val'] ?? 0);
                 }
             }
         }
