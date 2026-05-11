@@ -50,6 +50,7 @@
             border: 1px solid #e2e8f0;
             padding: 8px;
             text-align: left;
+            vertical-align: middle;
         }
 
         th {
@@ -67,6 +68,10 @@
 
         .num {
             text-align: right;
+        }
+
+        .merged {
+            text-align: center !important;
         }
 
         .acc {
@@ -133,6 +138,7 @@
                 <th rowspan="2">VILLAGE</th>
                 <th rowspan="2">OCCUPANTS</th>
                 <th rowspan="2">RELATION</th>
+                <th rowspan="2">RATE CODE</th>
                 <th rowspan="2">AGE</th>
                 <th rowspan="2">BIRTHDAY</th>
                 <th rowspan="2">NATIONALITY</th>
@@ -197,6 +203,7 @@
                         @if(!empty($res['is_employee'])) (Employee) @endif
                         {{ $isValidCard ? ' (' . $privCard . ')' : '' }}
                     </td>
+                    <td style="text-align: center;">{{ $res['rate_metadata'] ?? '' }}</td>
                     <td>{{ $res['age'] ?? '' }}</td>
                     <td>{{ $res['dateOfBirth'] ?? '' }}</td>
                     <td>{{ $res['nationality_name'] ?? $res['nationality'] ?? '' }}</td>
@@ -219,7 +226,7 @@
                                     $displayVal = number_format($val, 2) . ' FVN';
                                 }
                             @endphp
-                            <td class="num" rowspan="{{ $spanInfo['span'] }}">{{ $displayVal }}</td>
+                            <td class="num {{ $spanInfo['span'] > 1 ? 'merged' : '' }}" rowspan="{{ $spanInfo['span'] }}">{{ $val > 0 ? number_format($val, 2) : '' }}</td>
                         @endforeach
                     @endif
 
@@ -231,10 +238,10 @@
                     @endforeach
 
                     @php $accGrandTotal += $passengerAccTotal; @endphp
-                        <td class="num">{{ number_format($rates['air'], 2) }}</td>
-                        <td class="num">{{ number_format($rates['han'], 2) }}</td>
-                        <td class="num">{{ number_format($rates['avi'], 2) }}</td>
-                        <td class="num">{{ number_format($rates['env'], 2) }}</td>
+                        <td class="num">{{ number_format($res['calculated_rates']['air'] ?? 0, 2) }}</td>
+                        <td class="num">{{ number_format($res['calculated_rates']['han'] ?? 0, 2) }}</td>
+                        <td class="num">{{ number_format($res['calculated_rates']['avi'] ?? 0, 2) }}</td>
+                        <td class="num">{{ number_format($res['calculated_rates']['env'] ?? 0, 2) }}</td>
                     </tr>
             @endforeach
             <tr style="display: none;">
@@ -242,8 +249,8 @@
                     <?php
                         $overallGrandTotal = $accGrandTotal + $grandTotals['air'] + $grandTotals['han'] + $grandTotals['avi'] + $grandTotals['env'];
                         $totalPax = count($reservations);
-                        $fullColspan = 9 + count($dateCols) + 4;
-                        $labelColspan = 9 + count($dateCols) + 3;
+                        $fullColspan = 10 + count($dateCols) + 4;
+                        $labelColspan = 10 + count($dateCols) + 3;
                     ?>
                 </td>
             </tr>
@@ -252,7 +259,7 @@
             <tr class="total-row">
                 <td colspan="2" style="text-align: right;">TOTAL PAX:</td>
                 <td style="text-align: center;">{{ $totalPax }}</td>
-                <td colspan="6" style="text-align: right;">GRAND TOTALS:</td>
+                <td colspan="7" style="text-align: right;">GRAND TOTALS:</td>
                 @foreach($dateCols as $d)
                     <td class="num">{{ number_format($dateTotals[$d], 2) }}</td>
                 @endforeach
@@ -263,32 +270,32 @@
             </tr>
             <tr><td colspan="{{ $fullColspan }}" style="border: none; padding: 10px;"></td></tr>
             <tr>
-                <td colspan="9" style="text-align: right; border: none; font-weight: bold;">TOTAL AMOUNT DUE:</td>
+                <td colspan="10" style="text-align: right; border: none; font-weight: bold;">TOTAL AMOUNT DUE:</td>
                 <td colspan="{{ count($dateCols) }}" style="border: none;"></td>
                 <td colspan="4" class="num" style="border: none; font-weight: bold;">&#8369;{{ number_format($overallGrandTotal, 2) }}</td>
             </tr>
             <tr>
-                <td colspan="9" style="text-align: right; border: none; font-style: italic; color: #64748b; padding-bottom: 15px;">Room Rates include service charge (10%) and VAT (12%)</td>
+                <td colspan="10" style="text-align: right; border: none; font-style: italic; color: #64748b; padding-bottom: 15px;">Room Rates include service charge (10%) and VAT (12%)</td>
                 <td colspan="{{ count($dateCols) + 4 }}" style="border: none;"></td>
             </tr>
             
             <tr>
-                <td colspan="9" style="text-align: right; border: none; font-weight: bold;">LESS PAYMENT/S:</td>
+                <td colspan="10" style="text-align: right; border: none; font-weight: bold;">LESS PAYMENT/S:</td>
                 <td colspan="{{ count($dateCols) }}" style="border: none;"></td>
                 <td colspan="4" style="border: none;"></td>
             </tr>
             <tr>
-                <td colspan="9" style="text-align: right; border: none;">OVERPAYMENT/CREDIT FROM FOLIO</td>
+                <td colspan="10" style="text-align: right; border: none;">OVERPAYMENT/CREDIT FROM FOLIO</td>
                 <td colspan="{{ count($dateCols) }}" style="border: none;"></td>
                 <!-- <td colspan="4" class="num" style="border: none;">&#8369;0.00</td> -->
             </tr>
             <tr>
-                <td colspan="9" style="text-align: right; border: none; padding-bottom: 20px;">COLLECTION RECEIPT</td>
+                <td colspan="10" style="text-align: right; border: none; padding-bottom: 20px;">COLLECTION RECEIPT</td>
                 <td colspan="{{ count($dateCols) }}" style="border: none;"></td>
                 <!-- <td colspan="4" class="num" style="border: none; padding-bottom: 20px;">&#8369;0.00</td> -->
             </tr>
             <tr>
-                <td colspan="9" style="text-align: right; border: none; font-weight: bold;">BALANCE TO SETTLE</td>
+                <td colspan="10" style="text-align: right; border: none; font-weight: bold;">BALANCE TO SETTLE</td>
                 <td colspan="{{ count($dateCols) }}" style="border: none;"></td>
                 <td colspan="4" class="num" style="border: none; font-weight: bold; border-top: 1px solid #000;">&#8369;{{ number_format($overallGrandTotal, 2) }}</td>
             </tr>

@@ -227,12 +227,14 @@ class ReservationController extends Controller
                     ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
                 if ($listResp->successful()) {
                     $listData = $listResp->json()['msg'] ?? [];
-                    foreach($listData as $lr) {
+                    foreach ($listData as $lr) {
                         $c = trim($lr['conf'] ?? $lr['resNo'] ?? $lr['resno'] ?? '');
                         $rateVal = strtoupper(trim($lr['rate'] ?? ''));
                         $cust = strtoupper($lr['customer'] ?? $lr['custName'] ?? '');
-                        if (str_contains($cust, 'ALPHALAND EMPLOYEE')) $rateVal = 'EMPLOYEE';
-                        if ($c !== '') $rateMap[$c] = $rateVal;
+                        if (str_contains($cust, 'ALPHALAND EMPLOYEE'))
+                            $rateVal = 'EMPLOYEE';
+                        if ($c !== '')
+                            $rateMap[$c] = $rateVal;
                     }
                 }
             }
@@ -258,11 +260,13 @@ class ReservationController extends Controller
 
                     foreach ($msgs as $res) {
                         $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
-                        if (!isset($reservationPaxCounts[$resNo])) $reservationPaxCounts[$resNo] = 0;
-                        $age = (int)($res['age'] ?? 99);
+                        if (!isset($reservationPaxCounts[$resNo]))
+                            $reservationPaxCounts[$resNo] = 0;
+                        $age = (int) ($res['age'] ?? 99);
                         $gstType = strtolower($res['gstType'] ?? '');
                         $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
-                        if (!$isInfant) $reservationPaxCounts[$resNo]++;
+                        if (!$isInfant)
+                            $reservationPaxCounts[$resNo]++;
                     }
 
                     // If rateMap is empty (no fromDate, searching by resnolist only),
@@ -323,16 +327,17 @@ class ReservationController extends Controller
                         $age = (int)($res['age'] ?? 99);
                         $gstType = strtolower($res['gstType'] ?? '');
                         $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
-                        
-                        if (!isset($paxIndices[$resNo])) $paxIndices[$resNo] = 0;
+
+                        if (!isset($paxIndices[$resNo]))
+                            $paxIndices[$resNo] = 0;
                         $paxIndex = $paxIndices[$resNo];
                         $roomType = $res['roomtyp'] ?? $res['roomType'] ?? '';
                         $totalBillable = $reservationPaxCounts[$resNo] ?? 1;
 
                         $res['calculated_rates'] = $calculator->calculatePassengerRates($res, $paxIndex, $roomType, $totalBillable);
-                        
+
                         // Sync rates back to the rate array for display (replaces original accommodation values)
-                        foreach($res['rate'] as &$r) {
+                        foreach ($res['rate'] as &$r) {
                             $d = $r['date'] ?? '';
                             if ($d && isset($res['calculated_rates']['acc_dates'][$d])) {
                                 $r['val'] = $res['calculated_rates']['acc_dates'][$d]['val'];
@@ -363,15 +368,15 @@ class ReservationController extends Controller
                 // Apply Global Search
                 if ($search) {
                     $search = strtolower(trim($search));
-                    $reservations = array_filter($reservations, function($res) use ($search) {
+                    $reservations = array_filter($reservations, function ($res) use ($search) {
                         $resNo = strtolower($res['resNo'] ?? $res['conf'] ?? '');
                         $name = strtolower($res['gstName'] ?? $res['guestName'] ?? $res['custName'] ?? $res['customer'] ?? '');
                         return str_contains($resNo, $search) || str_contains($name, $search);
                     });
                 }
-                
+
                 $total = count($reservations);
-                $pagedReservations = $reservations; 
+                $pagedReservations = $reservations;
             } else {
                 $viewType = 'list';
                 // If we didn't fetch listResp above or it failed, we might need to handle it, 
@@ -379,8 +384,8 @@ class ReservationController extends Controller
                 $all = $listData ?? [];
                 $total = count($all);
                 $pagedReservations = $all;
-                
-                foreach($pagedReservations as &$res) {
+
+                foreach ($pagedReservations as &$res) {
                     $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
                 }
                 unset($res); // Fix reference leak
@@ -397,7 +402,7 @@ class ReservationController extends Controller
         $dateCols = [];
         if ($viewType === 'detail' && is_array($pagedReservations) && !empty($pagedReservations)) {
             // Sort by Reservation Number first
-            usort($pagedReservations, function($a, $b) {
+            usort($pagedReservations, function ($a, $b) {
                 $resA = $a['resNo'] ?? $a['conf'] ?? '';
                 $resB = $b['resNo'] ?? $b['conf'] ?? '';
                 return strcmp($resA, $resB);
@@ -416,13 +421,13 @@ class ReservationController extends Controller
         }
 
         return view('dashboard', [
-            'reservations' => $pagedReservations ?? [], 
-            'resNoList' => $resNoList, 
-            'fromDate' => $fromDate, 
-            'toDate' => $toDate, 
+            'reservations' => $pagedReservations ?? [],
+            'resNoList' => $resNoList,
+            'fromDate' => $fromDate,
+            'toDate' => $toDate,
             'statusFilter' => $statusFilter,
             'dateCols' => $dateCols,
-            'viewType' => $viewType, 
+            'viewType' => $viewType,
             'error' => $error,
             'settings' => $settings
         ]);
@@ -445,15 +450,17 @@ class ReservationController extends Controller
                     ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
                 if ($listResp->successful()) {
                     $listData = $listResp->json()['msg'] ?? [];
-                    foreach($listData as $lr) {
+                    foreach ($listData as $lr) {
                         $c = trim($lr['conf'] ?? $lr['resNo'] ?? $lr['resno'] ?? '');
                         $rateVal = strtoupper(trim($lr['rate'] ?? ''));
                         $rateCode = trim($lr['rateCode'] ?? $lr['rate_code'] ?? '');
                         if ($rateCode !== '') $rateVal .= '|' . $rateCode;
 
                         $cust = strtoupper($lr['customer'] ?? $lr['custName'] ?? '');
-                        if (str_contains($cust, 'ALPHALAND EMPLOYEE')) $rateVal = 'EMPLOYEE';
-                        if ($c !== '') $rateMap[$c] = $rateVal;
+                        if (str_contains($cust, 'ALPHALAND EMPLOYEE'))
+                            $rateVal = 'EMPLOYEE';
+                        if ($c !== '')
+                            $rateMap[$c] = $rateVal;
                     }
                 }
             }
@@ -462,10 +469,11 @@ class ReservationController extends Controller
                 $ids = array_filter(explode(',', $resNoList));
             } elseif ($fromDate && $toDate) {
                 $all = $listData ?? [];
-                
+
                 // Apply Status Filter (Array Support)
                 if ($statusFilter) {
-                    if (!is_array($statusFilter)) $statusFilter = [$statusFilter];
+                    if (!is_array($statusFilter))
+                        $statusFilter = [$statusFilter];
                     $all = array_filter($all, function ($res) use ($statusFilter) {
                         return in_array(strtoupper(trim($res['status'] ?? '')), array_map('strtoupper', $statusFilter));
                     });
@@ -474,7 +482,7 @@ class ReservationController extends Controller
                 // Apply Global Search
                 if ($search) {
                     $search = strtolower(trim($search));
-                    $all = array_filter($all, function($res) use ($search) {
+                    $all = array_filter($all, function ($res) use ($search) {
                         $resNo = strtolower($res['resNo'] ?? $res['conf'] ?? $res['resno'] ?? '');
                         $name = strtolower($res['gstName'] ?? $res['guestName'] ?? $res['custName'] ?? $res['customer'] ?? $res['custname'] ?? $res['guestname'] ?? '');
                         return str_contains($resNo, $search) || str_contains($name, $search);
@@ -482,6 +490,8 @@ class ReservationController extends Controller
                 }
 
                 $ids = collect($all)->map(fn($i) => $i['conf'] ?? $i['resNo'] ?? $i['resno'] ?? null)->filter()->unique()->toArray();
+
+
             }
         } catch (\Exception $e) {
             return back()->with('error', 'Connection Error: ' . $e->getMessage());
@@ -510,11 +520,13 @@ class ReservationController extends Controller
 
                 foreach ($msgs as $res) {
                     $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
-                    if (!isset($reservationPaxCounts[$resNo])) $reservationPaxCounts[$resNo] = 0;
-                    $age = (int)($res['age'] ?? 99);
+                    if (!isset($reservationPaxCounts[$resNo]))
+                        $reservationPaxCounts[$resNo] = 0;
+                    $age = (int) ($res['age'] ?? 99);
                     $gstType = strtolower($res['gstType'] ?? '');
                     $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
-                    if (!$isInfant) $reservationPaxCounts[$resNo]++;
+                    if (!$isInfant)
+                        $reservationPaxCounts[$resNo]++;
                 }
 
                 $localMetaMap = [];
@@ -537,6 +549,7 @@ class ReservationController extends Controller
 
                 foreach ($msgs as &$res) {
                     $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
+<<<<<<< HEAD
                     
                     // Combine List API metadata with any found in Detail API chunk
                     $metadata = $rateMap[$resNo] ?? '';
@@ -546,36 +559,60 @@ class ReservationController extends Controller
 
                     $res['rate_metadata'] = $metadata;
                     
+=======
+                    $res['rate_metadata'] = $rateMap[$resNo] ?? '';
+
+                    // Detect COMP/PKG based on raw values
+                    $isComp = false;
+                    $isPkg = false;
+                    foreach ($res['rate'] ?? [] as $rt) {
+                        $v = (float) ($rt['val'] ?? 0);
+                        if (abs($v - 0.01) < 0.0001)
+                            $isComp = true;
+                        if (abs($v - 0.02) < 0.0001)
+                            $isPkg = true;
+                    }
+                    if ($isComp)
+                        $res['rate_metadata'] = trim(($res['rate_metadata'] ?? '') . ' COMP');
+                    if ($isPkg)
+                        $res['rate_metadata'] = trim(($res['rate_metadata'] ?? '') . ' PKG');
+
+>>>>>>> 9ab0013dc47590ce58a2503eeb2a31766dec399a
                     $roomType = $res['roomtyp'] ?? $res['roomType'] ?? '';
                     $res['village_name'] = $this->getVillageName($roomType);
                     $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
-                    
-                    $rd = [];
-                    foreach ($res['rate'] as $r) {
-                        $d = $r['date'] ?? '';
-                        if ($d) {
-                            $rd[$d] = (float)($r['val'] ?? 0);
-                            $allDates[$d] = true;
-                        }
-                    }
 
-                    $age = (int)($res['age'] ?? 99);
-                    $gstType = strtolower($res['gstType'] ?? '');
-                    $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
-                    
-                    if (!isset($paxIndices[$resNo])) $paxIndices[$resNo] = 0;
+                    if (!isset($paxIndices[$resNo]))
+                        $paxIndices[$resNo] = 0;
                     $paxIndex = $paxIndices[$resNo];
                     $totalBillable = $reservationPaxCounts[$resNo] ?? 1;
 
                     $calcResult = $calculator->calculatePassengerRates($res, $paxIndex, $roomType, $totalBillable);
-                    
+                    $res['calculated_rates'] = $calcResult;
+
+                    $rd = [];
+                    foreach ($res['rate'] as $r) {
+                        $d = $r['date'] ?? '';
+                        if ($d) {
+                            $rd[$d] = (float) ($r['val'] ?? 0);
+                            $allDates[$d] = true;
+                        }
+                    }
+
+                    $age = (int) ($res['age'] ?? 99);
+                    $gstType = strtolower($res['gstType'] ?? '');
+                    $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
+
+                    if (!$isInfant) {
+                        $paxIndices[$resNo]++;
+                    }
+
                     // Sync rates back to the rate array for display
-                    foreach($res['rate'] as &$r) {
+                    foreach ($res['rate'] as &$r) {
                         $d = $r['date'] ?? '';
                         if ($d && isset($calcResult['acc_dates'][$d])) {
                             $r['val'] = $calcResult['acc_dates'][$d]['val'];
                             $r['breakdown'] = $calcResult['acc_dates'][$d]['breakdown'];
-                            // Update $rd for export
                             $rd[$d] = $r['val'];
                         }
                     }
@@ -586,7 +623,7 @@ class ReservationController extends Controller
                     }
 
                     $res['is_employee'] = $calcResult['is_employee'] ?? false;
-                    
+
                     $allRows[] = [
                         'res' => $res,
                         'rates' => $calcResult,
@@ -619,6 +656,7 @@ class ReservationController extends Controller
             echo '<td rowspan="2" class="hdr">VILLAGE</td>';
             echo '<td rowspan="2" class="hdr" style="width: 150px;">OCCUPANTS</td>';
             echo '<td rowspan="2" class="hdr">RELATION</td>';
+            echo '<td rowspan="2" class="hdr">RATE CODE</td>';
             echo '<td rowspan="2" class="hdr">AGE</td>';
             echo '<td rowspan="2" class="hdr">BIRTHDAY</td>';
             echo '<td rowspan="2" class="hdr">NATIONALITY</td>';
@@ -656,32 +694,93 @@ class ReservationController extends Controller
             $processedRows = [];
             foreach ($groupedRows as $resNo => $rows) {
                 $count = count($rows);
-                if ($count === 0) continue;
-                $basePax = $rows[0]['rates']['base_pax'] ?? 4;
-                $baseSize = min($count, $basePax);
-                
-                for ($i = 0; $i < $count; $i++) {
-                    if ($i === 0) {
-                        $rows[$i]['accRowSpan'] = $baseSize;
-                        $rows[$i]['accGroupTotals'] = [];
+                if ($count === 0)
+                    continue;
+
+                $i = 0;
+                while ($i < $count) {
+                    $startIdx = $i;
+                    $currentRow = $rows[$i];
+
+                    // Define what makes a "matching" row
+                    $getRateKey = function ($row) use ($dateCols) {
+                        $rateCode = $row['res']['rate_metadata'] ?? '';
+
+                        $rates = [];
                         foreach ($dateCols as $d) {
-                            $sum = 0;
-                            for ($k = 0; $k < $baseSize; $k++) {
-                                $sum += (float)($rows[$k]['rateDates'][$d] ?? 0);
-                            }
-                            $rows[$i]['accGroupTotals'][$d] = $sum;
+                            $rates[] = round((float) ($row['rateDates'][$d] ?? 0), 2);
                         }
-                    } elseif ($i < $baseSize) {
-                        $rows[$i]['accRowSpan'] = 0;
-                    } else {
-                        $rows[$i]['accRowSpan'] = 1;
-                        $rows[$i]['accGroupTotals'] = $rows[$i]['rateDates'];
+                        
+                        return json_encode([$rateCode, $rates]);
+                    };
+
+
+                    $currentKey = $getRateKey($currentRow);
+                    $i++;
+
+                    while ($i < $count && $getRateKey($rows[$i]) === $currentKey) {
+                        $i++;
                     }
-                    $processedRows[] = $rows[$i];
+
+                    $span = $i - $startIdx;
+
+                    for ($k = $startIdx; $k < $i; $k++) {
+                        if ($k === $startIdx) {
+                            $rows[$k]['accRowSpan'] = $span;
+                            $rows[$k]['accGroupTotals'] = [];
+                            foreach ($dateCols as $d) {
+                                // For merged cells, we show the individual rate if they are all the same
+                                // The user's request "merge cells that matches the value" implies 
+                                // that the value shown in the merged cell should be that matching value.
+                                // HOWEVER, the previous logic was SUMMING them for the base group.
+                                // Wait, re-reading: "merge cells that are matches the value and rate code".
+                                // If they match, the "total" for the group would be the same as the individual value? 
+                                // No, usually if you merge 4 cells of 2500, the merged cell shows 2500 but it represents 4 people.
+                                // But the GRAND TOTALS must be correct.
+                                // The previous logic: $rows[$i]['accGroupTotals'][$d] = $sum;
+                                // And in the loop: $dateTotals[$d] += floor($val);
+                                // This means the merged cell SHOWS THE SUM.
+                                // If 4 people share 10,000, each person is 2,500. The merged cell shows 10,000.
+                                // This seems to be the intended behavior for "unit-based" merging.
+                                $sum = 0;
+                                for ($m = $startIdx; $m < $i; $m++) {
+                                    $v = (float) ($rows[$m]['rateDates'][$d] ?? 0);
+                                    if (round($v, 2) == 0.01 || round($v, 2) == 0.02) {
+                                        $sum = $v;
+                                        break;
+                                    }
+                                    $sum += $v;
+                                }
+                                $rows[$k]['accGroupTotals'][$d] = $sum;
+                            }
+                            
+                            $rows[$k]['feeGroupTotals'] = [
+                                'air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0
+                            ];
+                            for ($m = $startIdx; $m < $i; $m++) {
+                                $rows[$k]['feeGroupTotals']['air'] += (float) ($rows[$m]['res']['calculated_rates']['air'] ?? 0);
+                                $rows[$k]['feeGroupTotals']['han'] += (float) ($rows[$m]['res']['calculated_rates']['han'] ?? 0);
+                                $rows[$k]['feeGroupTotals']['avi'] += (float) ($rows[$m]['res']['calculated_rates']['avi'] ?? 0);
+                                $rows[$k]['feeGroupTotals']['env'] += (float) ($rows[$m]['res']['calculated_rates']['env'] ?? 0);
+                            }
+                        } else {
+                            $rows[$k]['accRowSpan'] = 0;
+                            $rows[$k]['feeGroupTotals'] = [
+                                'air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0
+                            ];
+                            for ($m = $startIdx; $m < $i; $m++) {
+                                $rows[$k]['feeGroupTotals']['air'] += (float) ($rows[$m]['res']['calculated_rates']['air'] ?? 0);
+                                $rows[$k]['feeGroupTotals']['han'] += (float) ($rows[$m]['res']['calculated_rates']['han'] ?? 0);
+                                $rows[$k]['feeGroupTotals']['avi'] += (float) ($rows[$m]['res']['calculated_rates']['avi'] ?? 0);
+                                $rows[$k]['feeGroupTotals']['env'] += (float) ($rows[$m]['res']['calculated_rates']['env'] ?? 0);
+                            }
+                        }
+                        $processedRows[] = $rows[$k];
+                    }
                 }
             }
             $allRows = $processedRows;
-            
+
             $totals = ['air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0];
             $dateTotals = array_fill_keys($dateCols, 0);
             $accGrandTotal = 0;
@@ -721,6 +820,7 @@ class ReservationController extends Controller
                 }
 
                 echo '<td>' . $relation . '</td>';
+                echo '<td style="text-align: center;">' . htmlspecialchars($res['rate_metadata'] ?? '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['age'] ?? '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['dateOfBirth'] ?? '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['nationality_name'] ?? $res['nationality'] ?? '') . '</td>';
@@ -730,12 +830,18 @@ class ReservationController extends Controller
                 if ($accRowSpan > 0) {
                     foreach ($dateCols as $d) {
                         $val = $accGroupTotals[$d] ?? 0;
+<<<<<<< HEAD
                         $formattedVal = ($val > 0 ? number_format($val, 2) : '');
                         if ($val == 0.01 || $val == 0.02) {
                             $formattedVal = number_format($val, 2) . ' FVN';
                         }
                         echo '<td class="num" rowspan="' . $accRowSpan . '">' . $formattedVal . '</td>';
                         $dateTotals[$d] += (float)$val;
+=======
+                        $style = $accRowSpan > 1 ? ' style="text-align: center;"' : '';
+                        echo '<td class="num" rowspan="' . $accRowSpan . '"' . $style . '>' . ($val > 0 ? number_format($val, 2) : '') . '</td>';
+                        $dateTotals[$d] += floor($val);
+>>>>>>> 9ab0013dc47590ce58a2503eeb2a31766dec399a
                     }
                 }
 
@@ -745,10 +851,15 @@ class ReservationController extends Controller
                 }
                 $accGrandTotal += $passengerAccTotal;
 
-                echo '<td class="num">' . number_format($rates['air'], 2) . '</td>';
-                echo '<td class="num">' . number_format($rates['han'], 2) . '</td>';
-                echo '<td class="num">' . number_format($rates['avi'], 2) . '</td>';
-                echo '<td class="num">' . number_format($rates['env'], 2) . '</td>';
+                $air = (float) ($res['calculated_rates']['air'] ?? 0);
+                $han = (float) ($res['calculated_rates']['han'] ?? 0);
+                $avi = (float) ($res['calculated_rates']['avi'] ?? 0);
+                $env = (float) ($res['calculated_rates']['env'] ?? 0);
+
+                echo '<td class="num">' . number_format($air, 2) . '</td>';
+                echo '<td class="num">' . number_format($han, 2) . '</td>';
+                echo '<td class="num">' . number_format($avi, 2) . '</td>';
+                echo '<td class="num">' . number_format($env, 2) . '</td>';
                 echo '</tr>';
                 flush();
             }
@@ -759,7 +870,7 @@ class ReservationController extends Controller
             echo '<tr style="font-weight:bold;background:#f1f5f9">';
             echo '<td colspan="2" style="text-align:right">TOTAL PAX:</td>';
             echo '<td style="text-align:center">' . $totalPax . '</td>';
-            echo '<td colspan="6" style="text-align:right">GRAND TOTALS:</td>';
+            echo '<td colspan="7" style="text-align:right">GRAND TOTALS:</td>';
             foreach ($dateCols as $d) {
                 echo '<td class="num">' . number_format($dateTotals[$d], 2) . '</td>';
             }
@@ -771,39 +882,19 @@ class ReservationController extends Controller
 
             $overallGrandTotal = $accGrandTotal + $totals['air'] + $totals['han'] + $totals['avi'] + $totals['env'];
 
-            $fullColspan = 9 + $dateCount + 4;
-            $labelColspan = 9 + $dateCount + 3;
+            $fullColspan = 10 + $dateCount + 4;
+            $labelColspan = 10 + $dateCount + 3;
 
             echo '<tr><td colspan="' . $fullColspan . '" style="border:none;">&nbsp;</td></tr>';
             echo '<tr>';
-            echo '<td colspan="9" style="border:none; font-weight:bold; text-align:right;">TOTAL AMOUNT DUE:</td>';
+            echo '<td colspan="10" style="border:none; font-weight:bold; text-align:right;">TOTAL AMOUNT DUE:</td>';
             echo '<td colspan="' . $dateCount . '" style="border:none;"></td>';
             echo '<td colspan="4" class="num" style="border:none; font-weight:bold; text-align:right;">&#8369;' . number_format($overallGrandTotal, 2) . '</td>';
             echo '</tr>';
             echo '<tr>';
-            echo '<td colspan="9" style="border:none; font-style:italic; text-align:right;">Room Rates include service charge (10%) and VAT (12%)</td>';
+            echo '<td colspan="10" style="border:none; font-style:italic; text-align:right;">Room Rates include service charge (10%) and VAT (12%)</td>';
             echo '<td colspan="' . ($dateCount + 4) . '" style="border:none;"></td>';
             echo '</tr>';
-            // echo '<tr>';
-            // echo '<td colspan="9" style="border:none; font-weight:bold; text-align:right;">LESS PAYMENT/S:</td>';
-            // echo '<td colspan="' . $dateCount . '" style="border:none;"></td>';
-            // echo '<td colspan="4" style="border:none;"></td>';
-            // echo '</tr>';
-            // echo '<tr>';
-            // echo '<td colspan="9" style="border:none; text-align:right;">OVERPAYMENT/CREDIT FROM FOLIO</td>';
-            // echo '<td colspan="' . $dateCount . '" style="border:none;"></td>';
-            // echo '<td colspan="4" class="num" style="border:none; text-align:right;">&#8369;0.00</td>';
-            // echo '</tr>';
-            // echo '<tr>';
-            // echo '<td colspan="9" style="border:none; text-align:right;">COLLECTION RECEIPT</td>';
-            // echo '<td colspan="' . $dateCount . '" style="border:none;"></td>';
-            // echo '<td colspan="4" class="num" style="border:none; text-align:right;">&#8369;0.00</td>';
-            // echo '</tr>';
-            // echo '<tr>';
-            // echo '<td colspan="9" style="border:none; font-weight:bold; text-align:right;">BALANCE TO SETTLE</td>';
-            // echo '<td colspan="' . $dateCount . '" style="border:none;"></td>';
-            // echo '<td colspan="4" class="num" style="border:none; font-weight:bold; text-align:right; border-top:0.5pt solid #000;">&#8369;' . number_format($overallGrandTotal, 2) . '</td>';
-            // echo '</tr>';
 
             echo '</table></body></html>';
         }, 200, ['Content-Type' => 'application/vnd.ms-excel', 'Content-Disposition' => 'attachment; filename="' . $filename . '"']);
@@ -826,12 +917,14 @@ class ReservationController extends Controller
                     ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
                 if ($listResp->successful()) {
                     $listData = $listResp->json()['msg'] ?? [];
-                    foreach($listData as $lr) {
+                    foreach ($listData as $lr) {
                         $c = trim($lr['conf'] ?? $lr['resNo'] ?? $lr['resno'] ?? '');
                         $rateVal = strtoupper(trim($lr['rate'] ?? ''));
                         $cust = strtoupper($lr['customer'] ?? $lr['custName'] ?? '');
-                        if (str_contains($cust, 'ALPHALAND EMPLOYEE')) $rateVal = 'EMPLOYEE';
-                        if ($c !== '') $rateMap[$c] = $rateVal;
+                        if (str_contains($cust, 'ALPHALAND EMPLOYEE'))
+                            $rateVal = 'EMPLOYEE';
+                        if ($c !== '')
+                            $rateMap[$c] = $rateVal;
                     }
                 }
             }
@@ -843,7 +936,8 @@ class ReservationController extends Controller
 
                 // Apply Status Filter (Array Support)
                 if ($statusFilter) {
-                    if (!is_array($statusFilter)) $statusFilter = [$statusFilter];
+                    if (!is_array($statusFilter))
+                        $statusFilter = [$statusFilter];
                     $all = array_filter($all, function ($res) use ($statusFilter) {
                         return in_array(strtoupper(trim($res['status'] ?? '')), array_map('strtoupper', $statusFilter));
                     });
@@ -852,7 +946,7 @@ class ReservationController extends Controller
                 // Apply Global Search
                 if ($search) {
                     $search = strtolower(trim($search));
-                    $all = array_filter($all, function($res) use ($search) {
+                    $all = array_filter($all, function ($res) use ($search) {
                         $resNo = strtolower($res['resNo'] ?? $res['conf'] ?? $res['resno'] ?? '');
                         $name = strtolower($res['gstName'] ?? $res['guestName'] ?? $res['custName'] ?? $res['customer'] ?? $res['custname'] ?? $res['guestname'] ?? '');
                         return str_contains($resNo, $search) || str_contains($name, $search);
@@ -880,30 +974,48 @@ class ReservationController extends Controller
 
                 foreach ($msgs as $res) {
                     $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
-                    if (!isset($reservationPaxCounts[$resNo])) $reservationPaxCounts[$resNo] = 0;
-                    $age = (int)($res['age'] ?? 99);
+                    if (!isset($reservationPaxCounts[$resNo]))
+                        $reservationPaxCounts[$resNo] = 0;
+                    $age = (int) ($res['age'] ?? 99);
                     $gstType = strtolower($res['gstType'] ?? '');
                     $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
-                    if (!$isInfant) $reservationPaxCounts[$resNo]++;
+                    if (!$isInfant)
+                        $reservationPaxCounts[$resNo]++;
                 }
 
                 foreach ($msgs as &$res) {
                     $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
                     $res['rate_metadata'] = $rateMap[$resNo] ?? '';
-                    
-                    $age = (int)($res['age'] ?? 99);
+
+                    // Detect COMP/PKG based on raw values
+                    $isComp = false;
+                    $isPkg = false;
+                    foreach ($res['rate'] ?? [] as $rt) {
+                        $v = (float) ($rt['val'] ?? 0);
+                        if (abs($v - 0.01) < 0.0001)
+                            $isComp = true;
+                        if (abs($v - 0.02) < 0.0001)
+                            $isPkg = true;
+                    }
+                    if ($isComp)
+                        $res['rate_metadata'] = trim(($res['rate_metadata'] ?? '') . ' COMP');
+                    if ($isPkg)
+                        $res['rate_metadata'] = trim(($res['rate_metadata'] ?? '') . ' PKG');
+
+                    $age = (int) ($res['age'] ?? 99);
                     $gstType = strtolower($res['gstType'] ?? '');
                     $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
-                    
-                    if (!isset($paxIndices[$resNo])) $paxIndices[$resNo] = 0;
+
+                    if (!isset($paxIndices[$resNo]))
+                        $paxIndices[$resNo] = 0;
                     $paxIndex = $paxIndices[$resNo];
                     $roomType = $res['roomtyp'] ?? $res['roomType'] ?? '';
                     $totalBillable = $reservationPaxCounts[$resNo] ?? 1;
 
                     $res['calculated_rates'] = $calculator->calculatePassengerRates($res, $paxIndex, $roomType, $totalBillable);
-                    
+
                     // Sync rates back to the rate array for display
-                    foreach($res['rate'] as &$r) {
+                    foreach ($res['rate'] as &$r) {
                         $d = $r['date'] ?? '';
                         if ($d && isset($res['calculated_rates']['acc_dates'][$d])) {
                             $r['val'] = $res['calculated_rates']['acc_dates'][$d]['val'];
@@ -928,6 +1040,7 @@ class ReservationController extends Controller
         // Collect all unique dates across all reservations to define columns
         $allDates = [];
         foreach ($reservations as $res) {
+
             foreach ($res['rate'] ?? [] as $r) {
                 $d = $r['date'] ?? '';
                 if ($d && !str_contains($d, ' to ')) {
@@ -949,58 +1062,75 @@ class ReservationController extends Controller
         $accSpans = []; // We will store span info per index in the final list
         foreach ($groupedReservations as $resNo => $rows) {
             $count = count($rows);
-            if ($count === 0) continue;
-            
-            // Note: Infants are already included in $reservations but don't count towards basePax index
-            // We need to identify billable vs infant to match RateCalculator logic
-            $billableRows = [];
-            foreach ($rows as $idx => $r) {
-                $gt = strtolower($r['gstType'] ?? '');
-                $age = (int)($r['age'] ?? 99);
-                $isInfant = str_contains($gt, 'infant') || (isset($r['age']) && $age >= 0 && $age <= 1);
-                if (!$isInfant) {
-                    $billableRows[] = $idx;
-                }
-            }
+            if ($count === 0)
+                continue;
 
-            $basePax = $rows[0]['calculated_rates']['base_pax'] ?? 4;
-            $baseBillableIndices = array_slice($billableRows, 0, $basePax);
-            
-            for ($i = 0; $i < $count; $i++) {
-                $currentIdx = count($processedReservations);
-                if (in_array($i, $baseBillableIndices)) {
-                    if ($i === $baseBillableIndices[0]) {
-                        // First billable person gets the span for the whole base group
-                        // But wait, the span must cover ALL rows (including infants) in this range?
-                        // Usually infants are at the end, but let's be safe.
-                        // Actually, if we merge, we merge all rows from first billable to last billable in base group.
-                        $first = $baseBillableIndices[0];
-                        $last = end($baseBillableIndices);
-                        $span = $last - $first + 1;
-                        
-                        $accSpans[$currentIdx] = ['span' => $span, 'totals' => []];
+            $i = 0;
+            while ($i < $count) {
+                $startIdx = $i;
+                $currentRow = $rows[$i];
+
+                $getRateKey = function ($row) use ($dateCols) {
+                    $rateCode = $row['rate_metadata'] ?? '';
+
+                    $rates = [];
+                    foreach ($dateCols as $d) {
+                        $val = 0;
+                        foreach ($row['rate'] ?? [] as $r) {
+                            if (($r['date'] ?? '') === $d) {
+                                $val = (float) ($r['val'] ?? 0);
+                                break;
+                            }
+                        }
+                        $rates[] = round($val, 2);
+                    }
+
+                    return json_encode([$rateCode, $rates]);
+                };
+
+                $currentKey = $getRateKey($currentRow);
+                $i++;
+
+                while ($i < $count && $getRateKey($rows[$i]) === $currentKey) {
+                    $i++;
+                }
+
+                $span = $i - $startIdx;
+
+                for ($k = $startIdx; $k < $i; $k++) {
+                    $currentIdx = count($processedReservations);
+                    if ($k === $startIdx) {
+                        $accSpans[$currentIdx] = ['span' => $span, 'totals' => [], 'fee_totals' => []];
                         foreach ($dateCols as $d) {
                             $sum = 0;
-                            for ($k = $first; $k <= $last; $k++) {
-                                // Sum rates
-                                foreach ($rows[$k]['rate'] ?? [] as $r) {
-                                    if (($r['date'] ?? '') === $d) $sum += (float)($r['val'] ?? 0);
+                            for ($m = $startIdx; $m < $i; $m++) {
+                                foreach ($rows[$m]['rate'] ?? [] as $r) {
+                                    if (($r['date'] ?? '') === $d) {
+                                        $v = (float) ($r['val'] ?? 0);
+                                        if (round($v, 2) == 0.01 || round($v, 2) == 0.02) {
+                                            $sum = $v;
+                                            break 2;
+                                        }
+                                        $sum += $v;
+                                    }
                                 }
                             }
                             $accSpans[$currentIdx]['totals'][$d] = $sum;
                         }
+
+                        $ftotals = ['air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0];
+                        for ($m = $startIdx; $m < $i; $m++) {
+                            $ftotals['air'] += (float) ($rows[$m]['calculated_rates']['air'] ?? 0);
+                            $ftotals['han'] += (float) ($rows[$m]['calculated_rates']['han'] ?? 0);
+                            $ftotals['avi'] += (float) ($rows[$m]['calculated_rates']['avi'] ?? 0);
+                            $ftotals['env'] += (float) ($rows[$m]['calculated_rates']['env'] ?? 0);
+                        }
+                        $accSpans[$currentIdx]['fee_totals'] = $ftotals;
                     } else {
                         $accSpans[$currentIdx] = ['span' => 0];
                     }
-                } else {
-                    // Infant or extra person
-                    $accSpans[$currentIdx] = ['span' => 1, 'totals' => []];
-                    foreach ($rows[$i]['rate'] ?? [] as $r) {
-                        $d = $r['date'] ?? '';
-                        if ($d) $accSpans[$currentIdx]['totals'][$d] = (float)($r['val'] ?? 0);
-                    }
+                    $processedReservations[] = $rows[$k];
                 }
-                $processedReservations[] = $rows[$i];
             }
         }
         $reservations = $processedReservations;
@@ -1034,7 +1164,7 @@ class ReservationController extends Controller
             foreach ($res['rate'] ?? [] as $r) {
                 $date = $r['date'] ?? '';
                 if ($date) {
-                    $grouped[$key]['_rateMap'][$date] = ($grouped[$key]['_rateMap'][$date] ?? 0) + (float)($r['val'] ?? 0);
+                    $grouped[$key]['_rateMap'][$date] = ($grouped[$key]['_rateMap'][$date] ?? 0) + (float) ($r['val'] ?? 0);
                 }
             }
         }
