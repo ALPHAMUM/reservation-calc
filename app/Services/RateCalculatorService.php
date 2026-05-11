@@ -177,7 +177,8 @@ class RateCalculatorService
             'han' => $hangar,
             'avi' => $aof,
             'env' => $env,
-            'is_employee' => $isEmployee
+            'is_employee' => $isEmployee,
+            'base_pax' => $basePax
         ];
     }
 

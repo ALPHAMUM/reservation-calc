@@ -120,20 +120,6 @@
     </div>
 
     @php
-        // PASS 1: Collect all unique dates across all reservations
-        $allDates = [];
-        foreach ($reservations as $res) {
-            foreach ($res['rate'] ?? [] as $r) {
-                $d = $r['date'] ?? '';
-                if ($d && !str_contains($d, ' to ')) {
-                    $allDates[$d] = true;
-                }
-            }
-        }
-        ksort($allDates);
-        $dateCols = array_keys($allDates);
-        $dateCount = count($dateCols);
-
         $grandTotals = ['air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0];
         $dateTotals = array_fill_keys($dateCols, 0);
         $accGrandTotal = 0;
@@ -152,7 +138,7 @@
                 <th rowspan="2">NATIONALITY</th>
                 <th rowspan="2">CHECK-IN</th>
                 <th rowspan="2">CHECK-OUT</th>
-                <th colspan="{{ $dateCount }}" class="dh" style="text-align: center;">ACCOMMODATION</th>
+                <th colspan="{{ count($dateCols) }}" class="dh" style="text-align: center;">ACCOMMODATION</th>
                 <th rowspan="2">AIRFARE</th>
                 <th rowspan="2">HANGAR</th>
                 <th rowspan="2">AVIATION</th>
@@ -217,16 +203,29 @@
                     <td>{{ $res['arrdt'] ?? $res['arrDt'] ?? '' }}</td>
                     <td>{{ $res['depdt'] ?? $res['depDt'] ?? '' }}</td>
 
-                    @php $passengerAccTotal = 0; @endphp
+                    @php 
+                        $passengerAccTotal = 0;
+                        $spanInfo = $accSpans[$loop->index] ?? ['span' => 1, 'totals' => []];
+                    @endphp
+
+                    @if($spanInfo['span'] > 0)
+                        @foreach($dateCols as $d)
+                            @php 
+                                $val = $spanInfo['totals'][$d] ?? 0;
+                                $valFloor = floor($val);
+                                $dateTotals[$d] += $valFloor;
+                            @endphp
+                            <td class="num" rowspan="{{ $spanInfo['span'] }}">{{ $val > 0 ? number_format($val, 2) : '' }}</td>
+                        @endforeach
+                    @endif
+
                     @foreach($dateCols as $d)
                         @php 
                             $val = $rateMap[$d] ?? 0;
-                            $valFloor = floor($val);
-                            $dateTotals[$d] += $valFloor;
-                            $passengerAccTotal += $valFloor;
+                            $passengerAccTotal += floor($val);
                         @endphp
-                            <td class="num">{{ isset($rateMap[$d]) ? number_format($val, 2) : '' }}</td>
                     @endforeach
+
                     @php $accGrandTotal += $passengerAccTotal; @endphp
                         <td class="num">{{ number_format($rates['air'], 2) }}</td>
                         <td class="num">{{ number_format($rates['han'], 2) }}</td>
@@ -239,8 +238,8 @@
                     <?php
                         $overallGrandTotal = $accGrandTotal + $grandTotals['air'] + $grandTotals['han'] + $grandTotals['avi'] + $grandTotals['env'];
                         $totalPax = count($reservations);
-                        $fullColspan = 9 + $dateCount + 4;
-                        $labelColspan = 9 + $dateCount + 3;
+                        $fullColspan = 9 + count($dateCols) + 4;
+                        $labelColspan = 9 + count($dateCols) + 3;
                     ?>
                 </td>
             </tr>
@@ -261,32 +260,32 @@
             <tr><td colspan="{{ $fullColspan }}" style="border: none; padding: 10px;"></td></tr>
             <tr>
                 <td colspan="9" style="text-align: right; border: none; font-weight: bold;">TOTAL AMOUNT DUE:</td>
-                <td colspan="{{ $dateCount }}" style="border: none;"></td>
+                <td colspan="{{ count($dateCols) }}" style="border: none;"></td>
                 <td colspan="4" class="num" style="border: none; font-weight: bold;">&#8369;{{ number_format($overallGrandTotal, 2) }}</td>
             </tr>
             <tr>
                 <td colspan="9" style="text-align: right; border: none; font-style: italic; color: #64748b; padding-bottom: 15px;">Room Rates include service charge (10%) and VAT (12%)</td>
-                <td colspan="{{ $dateCount + 4 }}" style="border: none;"></td>
+                <td colspan="{{ count($dateCols) + 4 }}" style="border: none;"></td>
             </tr>
             
             <tr>
                 <td colspan="9" style="text-align: right; border: none; font-weight: bold;">LESS PAYMENT/S:</td>
-                <td colspan="{{ $dateCount }}" style="border: none;"></td>
+                <td colspan="{{ count($dateCols) }}" style="border: none;"></td>
                 <td colspan="4" style="border: none;"></td>
             </tr>
             <tr>
                 <td colspan="9" style="text-align: right; border: none;">OVERPAYMENT/CREDIT FROM FOLIO</td>
-                <td colspan="{{ $dateCount }}" style="border: none;"></td>
+                <td colspan="{{ count($dateCols) }}" style="border: none;"></td>
                 <!-- <td colspan="4" class="num" style="border: none;">&#8369;0.00</td> -->
             </tr>
             <tr>
                 <td colspan="9" style="text-align: right; border: none; padding-bottom: 20px;">COLLECTION RECEIPT</td>
-                <td colspan="{{ $dateCount }}" style="border: none;"></td>
+                <td colspan="{{ count($dateCols) }}" style="border: none;"></td>
                 <!-- <td colspan="4" class="num" style="border: none; padding-bottom: 20px;">&#8369;0.00</td> -->
             </tr>
             <tr>
                 <td colspan="9" style="text-align: right; border: none; font-weight: bold;">BALANCE TO SETTLE</td>
-                <td colspan="{{ $dateCount }}" style="border: none;"></td>
+                <td colspan="{{ count($dateCols) }}" style="border: none;"></td>
                 <td colspan="4" class="num" style="border: none; font-weight: bold; border-top: 1px solid #000;">&#8369;{{ number_format($overallGrandTotal, 2) }}</td>
             </tr>
         </tfoot>

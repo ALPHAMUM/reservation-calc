@@ -509,6 +509,7 @@ class ReservationController extends Controller
                     $allRows[] = [
                         'res' => $res,
                         'rates' => $calcResult,
+                        'paxIndex' => $paxIndex,
                         'rateDates' => $rd,
                     ];
                 }
@@ -564,16 +565,53 @@ class ReservationController extends Controller
             }
             echo '</tr>';
 
-            // Data rows
+            // Group rows by reservation for robust span calculation
+            $groupedRows = [];
+            foreach ($allRows as $row) {
+                $rn = trim($row['res']['resNo'] ?? $row['res']['conf'] ?? 'N/A');
+                $groupedRows[$rn][] = $row;
+            }
+
+            $processedRows = [];
+            foreach ($groupedRows as $resNo => $rows) {
+                $count = count($rows);
+                if ($count === 0) continue;
+                $basePax = $rows[0]['rates']['base_pax'] ?? 4;
+                $baseSize = min($count, $basePax);
+                
+                for ($i = 0; $i < $count; $i++) {
+                    if ($i === 0) {
+                        $rows[$i]['accRowSpan'] = $baseSize;
+                        $rows[$i]['accGroupTotals'] = [];
+                        foreach ($dateCols as $d) {
+                            $sum = 0;
+                            for ($k = 0; $k < $baseSize; $k++) {
+                                $sum += (float)($rows[$k]['rateDates'][$d] ?? 0);
+                            }
+                            $rows[$i]['accGroupTotals'][$d] = $sum;
+                        }
+                    } elseif ($i < $baseSize) {
+                        $rows[$i]['accRowSpan'] = 0;
+                    } else {
+                        $rows[$i]['accRowSpan'] = 1;
+                        $rows[$i]['accGroupTotals'] = $rows[$i]['rateDates'];
+                    }
+                    $processedRows[] = $rows[$i];
+                }
+            }
+            $allRows = $processedRows;
+            
             $totals = ['air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0];
             $dateTotals = array_fill_keys($dateCols, 0);
             $accGrandTotal = 0;
             $last = null;
 
-            foreach ($allRows as $row) {
+            foreach ($allRows as $idx => $row) {
                 $res = $row['res'];
                 $rates = $row['rates'];
                 $rateDates = $row['rateDates'];
+                $accRowSpan = $row['accRowSpan'] ?? 1;
+                $accGroupTotals = $row['accGroupTotals'] ?? [];
 
                 $resNo = $res['resNo'] ?? $res['conf'] ?? '';
                 $isFirst = ($resNo !== $last);
@@ -608,19 +646,20 @@ class ReservationController extends Controller
                 echo '<td>' . htmlspecialchars($res['arrdt'] ?? $res['arrDt'] ?? '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['depdt'] ?? $res['depDt'] ?? '') . '</td>';
 
-                $passengerAccTotal = 0;
-                foreach ($dateCols as $d) {
-                    if (isset($rateDates[$d])) {
-                        $val = $rateDates[$d];
-                        echo '<td class="num">' . number_format($val, 2) . '</td>';
-                        $valToSum = floor($val);
-                        $dateTotals[$d] += $valToSum;
-                        $passengerAccTotal += $valToSum;
-                    } else {
-                        echo '<td></td>';
+                if ($accRowSpan > 0) {
+                    foreach ($dateCols as $d) {
+                        $val = $accGroupTotals[$d] ?? 0;
+                        echo '<td class="num" rowspan="' . $accRowSpan . '">' . ($val > 0 ? number_format($val, 2) : '') . '</td>';
+                        $dateTotals[$d] += floor($val);
                     }
                 }
+
+                $passengerAccTotal = 0;
+                foreach ($dateCols as $d) {
+                    $passengerAccTotal += floor($rateDates[$d] ?? 0);
+                }
                 $accGrandTotal += $passengerAccTotal;
+
                 echo '<td class="num">' . number_format($rates['air'], 2) . '</td>';
                 echo '<td class="num">' . number_format($rates['han'], 2) . '</td>';
                 echo '<td class="num">' . number_format($rates['avi'], 2) . '</td>';
@@ -800,7 +839,88 @@ class ReservationController extends Controller
                 $reservations = array_merge($reservations, $msgs);
             }
         }
-        return view('print', compact('reservations'));
+
+        // Collect all unique dates across all reservations to define columns
+        $allDates = [];
+        foreach ($reservations as $res) {
+            foreach ($res['rate'] ?? [] as $r) {
+                $d = $r['date'] ?? '';
+                if ($d && !str_contains($d, ' to ')) {
+                    $allDates[$d] = true;
+                }
+            }
+        }
+        ksort($allDates);
+        $dateCols = array_keys($allDates);
+
+        // Group rows by reservation for robust span calculation in print view
+        $groupedReservations = [];
+        foreach ($reservations as $res) {
+            $rn = trim($res['resNo'] ?? $res['conf'] ?? 'N/A');
+            $groupedReservations[$rn][] = $res;
+        }
+
+        $processedReservations = [];
+        $accSpans = []; // We will store span info per index in the final list
+        foreach ($groupedReservations as $resNo => $rows) {
+            $count = count($rows);
+            if ($count === 0) continue;
+            
+            // Note: Infants are already included in $reservations but don't count towards basePax index
+            // We need to identify billable vs infant to match RateCalculator logic
+            $billableRows = [];
+            foreach ($rows as $idx => $r) {
+                $gt = strtolower($r['gstType'] ?? '');
+                $age = (int)($r['age'] ?? 99);
+                $isInfant = str_contains($gt, 'infant') || (isset($r['age']) && $age >= 0 && $age <= 1);
+                if (!$isInfant) {
+                    $billableRows[] = $idx;
+                }
+            }
+
+            $basePax = $rows[0]['calculated_rates']['base_pax'] ?? 4;
+            $baseBillableIndices = array_slice($billableRows, 0, $basePax);
+            
+            for ($i = 0; $i < $count; $i++) {
+                $currentIdx = count($processedReservations);
+                if (in_array($i, $baseBillableIndices)) {
+                    if ($i === $baseBillableIndices[0]) {
+                        // First billable person gets the span for the whole base group
+                        // But wait, the span must cover ALL rows (including infants) in this range?
+                        // Usually infants are at the end, but let's be safe.
+                        // Actually, if we merge, we merge all rows from first billable to last billable in base group.
+                        $first = $baseBillableIndices[0];
+                        $last = end($baseBillableIndices);
+                        $span = $last - $first + 1;
+                        
+                        $accSpans[$currentIdx] = ['span' => $span, 'totals' => []];
+                        foreach ($dateCols as $d) {
+                            $sum = 0;
+                            for ($k = $first; $k <= $last; $k++) {
+                                // Sum rates
+                                foreach ($rows[$k]['rate'] ?? [] as $r) {
+                                    if (($r['date'] ?? '') === $d) $sum += (float)($r['val'] ?? 0);
+                                }
+                            }
+                            $accSpans[$currentIdx]['totals'][$d] = $sum;
+                        }
+                    } else {
+                        $accSpans[$currentIdx] = ['span' => 0];
+                    }
+                } else {
+                    // Infant or extra person
+                    $accSpans[$currentIdx] = ['span' => 1, 'totals' => []];
+                    foreach ($rows[$i]['rate'] ?? [] as $r) {
+                        $d = $r['date'] ?? '';
+                        if ($d) $accSpans[$currentIdx]['totals'][$d] = (float)($r['val'] ?? 0);
+                    }
+                }
+                $processedReservations[] = $rows[$i];
+            }
+        }
+        $reservations = $processedReservations;
+
+        return view('print', compact('reservations', 'accSpans', 'dateCols'));
     }
 
     private function consolidateRates(array &$msgs)
