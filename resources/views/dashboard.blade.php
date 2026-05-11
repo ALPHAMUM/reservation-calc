@@ -848,6 +848,11 @@
                                                     foreach($rows[$k]['rate'] ?? [] as $rt) {
                                                         if (($rt['date'] ?? '') === $d) { $dayVal = (float)($rt['val'] ?? 0); break; }
                                                     }
+                                                    // Special case for FVN: prioritize it and don't sum multiples
+                                                    if (round($dayVal, 2) == 0.01 || round($dayVal, 2) == 0.02) {
+                                                        $sum = $dayVal;
+                                                        break;
+                                                    }
                                                     $sum += $dayVal;
                                                 }
                                                 $totals[$d] = $sum;
@@ -1508,7 +1513,9 @@
                 const b = r.breakdown;
                 if (!b) return;
 
-                overallTotal += parseFloat(r.val || 0);
+                if (!b.is_fvn) {
+                    overallTotal += parseFloat(r.val || 0);
+                }
                 if (b.is_discounted) hasDiscount = true;
 
                 const dateStr = r.date;
@@ -1536,7 +1543,7 @@
                             <td style="color: rgba(255,255,255,0.2);">-</td>
                             <td style="color: rgba(255,255,255,0.2);">-</td>
                             <td style="font-weight: bold; text-align: right; color: #ef4444;">
-                                ${parseFloat(b.fvn_rate).toFixed(2)} FVN
+                                0.00 FVN
                             </td>
                         </tr>
                     `;

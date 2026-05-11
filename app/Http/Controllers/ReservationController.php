@@ -803,10 +803,10 @@ class ReservationController extends Controller
                 if ($isFirst)
                     $last = $resNo;
 
-                $totals['air'] += floor($rates['air']);
-                $totals['han'] += floor($rates['han']);
-                $totals['avi'] += floor($rates['avi']);
-                $totals['env'] += floor($rates['env']);
+                $totals['air'] += (float) ($rates['air'] ?? 0);
+                $totals['han'] += (float) ($rates['han'] ?? 0);
+                $totals['avi'] += (float) ($rates['avi'] ?? 0);
+                $totals['env'] += (float) ($rates['env'] ?? 0);
 
                 echo '<tr>';
                 echo '<td>' . ($isFirst ? htmlspecialchars($resNo) : '') . '</td>';
@@ -845,11 +845,7 @@ class ReservationController extends Controller
                     }
                 }
 
-                $passengerAccTotal = 0;
-                foreach ($dateCols as $d) {
-                    $passengerAccTotal += (float) ($rateDates[$d] ?? 0);
-                }
-                $accGrandTotal += $passengerAccTotal;
+                // accGrandTotal will be calculated at the end from dateTotals to avoid double counting merged cells
 
                 $air = (float) ($res['calculated_rates']['air'] ?? 0);
                 $han = (float) ($res['calculated_rates']['han'] ?? 0);
@@ -880,6 +876,7 @@ class ReservationController extends Controller
             echo '<td class="num">' . number_format($totals['env'], 2) . '</td>';
             echo '</tr>';
 
+            $accGrandTotal = array_sum($dateTotals);
             $overallGrandTotal = $accGrandTotal + $totals['air'] + $totals['han'] + $totals['avi'] + $totals['env'];
 
             $fullColspan = 10 + $dateCount + 4;
@@ -1164,7 +1161,15 @@ class ReservationController extends Controller
             foreach ($res['rate'] ?? [] as $r) {
                 $date = $r['date'] ?? '';
                 if ($date) {
-                    $grouped[$key]['_rateMap'][$date] = ($grouped[$key]['_rateMap'][$date] ?? 0) + (float) ($r['val'] ?? 0);
+                    $v = (float) ($r['val'] ?? 0);
+                    // Special case for FVN magic numbers: don't sum, just take the first one found
+                    if ($v == 0.01 || $v == 0.02) {
+                        if (!isset($grouped[$key]['_rateMap'][$date])) {
+                            $grouped[$key]['_rateMap'][$date] = $v;
+                        }
+                    } else {
+                        $grouped[$key]['_rateMap'][$date] = ($grouped[$key]['_rateMap'][$date] ?? 0) + $v;
+                    }
                 }
             }
         }

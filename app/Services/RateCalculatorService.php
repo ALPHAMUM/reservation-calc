@@ -58,6 +58,7 @@ class RateCalculatorService
         if ($divisor < 1)
             $divisor = 1;
 
+        $fvnApplied = false;
         foreach ($passenger['rate'] ?? [] as $idx => $r) {
             $v = (float) ($r['val'] ?? 0);
             $d = strtolower($r['desc'] ?? '');
@@ -92,13 +93,14 @@ class RateCalculatorService
                     $grossAmount = 0;
                     if (!$isExtra) {
 
-                        // 1. Magic numbers are always FVN (respects manual user input on any day)
-                        if ($originalVal == 0.01 || $originalVal == 0.02) {
-                            $unitRate = $originalVal;
+                        // 1. Magic numbers: only apply as FVN if not already applied
+                        if (($originalVal == 0.01 || $originalVal == 0.02) && !$fvnApplied) {
+                            $unitRate = 0.01; // Force to .01 as requested
                             $isFVN = true;
+                            $fvnApplied = true;
                         }
                         // 2. Automatic detection from metadata only on Day 1
-                        elseif ($idx === 0) {
+                        elseif ($idx === 0 && !$fvnApplied) {
                             $rCodeRaw = $passenger['rateCode'] ?? $passenger['rate_code'] ?? '';
                             $rCode = is_string($rCodeRaw) ? strtoupper($rCodeRaw) : '';
 
@@ -107,16 +109,13 @@ class RateCalculatorService
 
                             if (
                                 str_contains($rateMetadata, 'KEY-VILLA') || str_contains($rName, 'KEY-VILLA') ||
-                                str_contains($rateMetadata, '.01') || $rCode === '.01'
-                            ) {
-                                $unitRate = 0.01;
-                                $isFVN = true;
-                            } elseif (
+                                str_contains($rateMetadata, '.01') || $rCode === '.01' ||
                                 str_contains($rateMetadata, 'KEY-SUITE') || str_contains($rName, 'KEY-SUITE') ||
                                 str_contains($rateMetadata, '.02') || $rCode === '.02'
                             ) {
-                                $unitRate = 0.02;
+                                $unitRate = 0.01; // Force to .01
                                 $isFVN = true;
+                                $fvnApplied = true;
                             }
                         }
 
