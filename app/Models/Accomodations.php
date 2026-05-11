@@ -16,5 +16,6 @@ class Accomodations extends Model
         'status',
         'base_rate'
     ];
+
     public $timestamps = true;
 }
