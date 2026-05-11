@@ -241,6 +241,8 @@ class ReservationController extends Controller
                 $allConfIds = array_unique(array_filter(explode(',', $resNoList)));
                 $chunks = array_chunk($allConfIds, 25);
                 $calculator = app(\App\Services\RateCalculatorService::class);
+                $paxIndices = [];
+                $reservationPaxCounts = [];
                 foreach ($chunks as $chunk) {
                     $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                         ->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
@@ -252,12 +254,47 @@ class ReservationController extends Controller
 
                     $msgs = $resp->json()['msg'] ?? [];
                     $this->consolidateRates($msgs);
+
+                    foreach ($msgs as $res) {
+                        $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
+                        if (!isset($reservationPaxCounts[$resNo])) $reservationPaxCounts[$resNo] = 0;
+                        $age = (int)($res['age'] ?? 99);
+                        $gstType = strtolower($res['gstType'] ?? '');
+                        $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
+                        if (!$isInfant) $reservationPaxCounts[$resNo]++;
+                    }
+
                     foreach ($msgs as &$res) {
                         $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
                         $res['rate_metadata'] = $rateMap[$resNo] ?? '';
-                        $res['calculated_rates'] = $calculator->calculatePassengerRates($res);
+                        
+                        $age = (int)($res['age'] ?? 99);
+                        $gstType = strtolower($res['gstType'] ?? '');
+                        $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
+                        
+                        if (!isset($paxIndices[$resNo])) $paxIndices[$resNo] = 0;
+                        $paxIndex = $paxIndices[$resNo];
+                        $roomType = $res['roomtyp'] ?? $res['roomType'] ?? '';
+                        $totalBillable = $reservationPaxCounts[$resNo] ?? 1;
+
+                        $res['calculated_rates'] = $calculator->calculatePassengerRates($res, $paxIndex, $roomType, $totalBillable);
+                        
+                        // Sync rates back to the rate array for display (replaces original accommodation values)
+                        foreach($res['rate'] as &$r) {
+                            $d = $r['date'] ?? '';
+                            if ($d && isset($res['calculated_rates']['acc_dates'][$d])) {
+                                $r['val'] = $res['calculated_rates']['acc_dates'][$d]['val'];
+                                $r['breakdown'] = $res['calculated_rates']['acc_dates'][$d]['breakdown'];
+                            }
+                        }
+                        unset($r);
+
+                        if (!$isInfant) {
+                            $paxIndices[$resNo]++;
+                        }
+
                         $res['is_employee'] = $res['calculated_rates']['is_employee'] ?? false;
-                        $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
+                        $res['village_name'] = $this->getVillageName($roomType);
                         $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
                     }
                     unset($res); // Fix reference leak
@@ -407,36 +444,74 @@ class ReservationController extends Controller
         $allDates = [];
         $calculator = app(\App\Services\RateCalculatorService::class);
 
+        $paxIndices = [];
+        $reservationPaxCounts = [];
         foreach (array_chunk($ids, 40) as $chunk) {
             $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                 ->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
             if ($resp->successful()) {
                 $msgs = $resp->json()['msg'] ?? [];
                 $this->consolidateRates($msgs);
-                    foreach ($msgs as &$res) {
-                        $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
-                        $res['rate_metadata'] = $rateMap[$resNo] ?? '';
-                        $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
-                        $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
-                        
-                        $rd = [];
-                        foreach ($res['rate'] as $r) {
-                            $d = $r['date'] ?? '';
-                            if ($d) {
-                                $rd[$d] = (float)($r['val'] ?? 0);
-                                $allDates[$d] = true;
-                            }
-                        }
 
-                        $calcResult = $calculator->calculatePassengerRates($res);
-                        $res['is_employee'] = $calcResult['is_employee'] ?? false;
-                        
-                        $allRows[] = [
-                            'res' => $res,
-                            'rates' => $calcResult,
-                            'rateDates' => $rd,
-                        ];
+                foreach ($msgs as $res) {
+                    $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
+                    if (!isset($reservationPaxCounts[$resNo])) $reservationPaxCounts[$resNo] = 0;
+                    $age = (int)($res['age'] ?? 99);
+                    $gstType = strtolower($res['gstType'] ?? '');
+                    $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
+                    if (!$isInfant) $reservationPaxCounts[$resNo]++;
+                }
+
+                foreach ($msgs as &$res) {
+                    $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
+                    $res['rate_metadata'] = $rateMap[$resNo] ?? '';
+                    $roomType = $res['roomtyp'] ?? $res['roomType'] ?? '';
+                    $res['village_name'] = $this->getVillageName($roomType);
+                    $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
+                    
+                    $rd = [];
+                    foreach ($res['rate'] as $r) {
+                        $d = $r['date'] ?? '';
+                        if ($d) {
+                            $rd[$d] = (float)($r['val'] ?? 0);
+                            $allDates[$d] = true;
+                        }
                     }
+
+                    $age = (int)($res['age'] ?? 99);
+                    $gstType = strtolower($res['gstType'] ?? '');
+                    $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
+                    
+                    if (!isset($paxIndices[$resNo])) $paxIndices[$resNo] = 0;
+                    $paxIndex = $paxIndices[$resNo];
+                    $totalBillable = $reservationPaxCounts[$resNo] ?? 1;
+
+                    $calcResult = $calculator->calculatePassengerRates($res, $paxIndex, $roomType, $totalBillable);
+                    
+                    // Sync rates back to the rate array for display
+                    foreach($res['rate'] as &$r) {
+                        $d = $r['date'] ?? '';
+                        if ($d && isset($calcResult['acc_dates'][$d])) {
+                            $r['val'] = $calcResult['acc_dates'][$d]['val'];
+                            $r['breakdown'] = $calcResult['acc_dates'][$d]['breakdown'];
+                            // Update $rd for export
+                            $rd[$d] = $r['val'];
+                        }
+                    }
+                    unset($r);
+
+                    if (!$isInfant) {
+                        $paxIndices[$resNo]++;
+                    }
+
+                    $res['is_employee'] = $calcResult['is_employee'] ?? false;
+                    
+                    $allRows[] = [
+                        'res' => $res,
+                        'rates' => $calcResult,
+                        'rateDates' => $rd,
+                    ];
+                }
             }
         }
 
@@ -671,17 +746,54 @@ class ReservationController extends Controller
 
         $reservations = [];
         $calculator = app(\App\Services\RateCalculatorService::class);
+        $paxIndices = [];
+        $reservationPaxCounts = [];
         foreach (array_chunk(array_slice($ids, 0, 1000), 50) as $chunk) {
             $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
             if ($resp->successful()) {
                 $msgs = $resp->json()['msg'] ?? [];
                 $this->consolidateRates($msgs);
+
+                foreach ($msgs as $res) {
+                    $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
+                    if (!isset($reservationPaxCounts[$resNo])) $reservationPaxCounts[$resNo] = 0;
+                    $age = (int)($res['age'] ?? 99);
+                    $gstType = strtolower($res['gstType'] ?? '');
+                    $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
+                    if (!$isInfant) $reservationPaxCounts[$resNo]++;
+                }
+
                 foreach ($msgs as &$res) {
                     $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
                     $res['rate_metadata'] = $rateMap[$resNo] ?? '';
-                    $res['calculated_rates'] = $calculator->calculatePassengerRates($res);
+                    
+                    $age = (int)($res['age'] ?? 99);
+                    $gstType = strtolower($res['gstType'] ?? '');
+                    $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
+                    
+                    if (!isset($paxIndices[$resNo])) $paxIndices[$resNo] = 0;
+                    $paxIndex = $paxIndices[$resNo];
+                    $roomType = $res['roomtyp'] ?? $res['roomType'] ?? '';
+                    $totalBillable = $reservationPaxCounts[$resNo] ?? 1;
+
+                    $res['calculated_rates'] = $calculator->calculatePassengerRates($res, $paxIndex, $roomType, $totalBillable);
+                    
+                    // Sync rates back to the rate array for display
+                    foreach($res['rate'] as &$r) {
+                        $d = $r['date'] ?? '';
+                        if ($d && isset($res['calculated_rates']['acc_dates'][$d])) {
+                            $r['val'] = $res['calculated_rates']['acc_dates'][$d]['val'];
+                            $r['breakdown'] = $res['calculated_rates']['acc_dates'][$d]['breakdown'];
+                        }
+                    }
+                    unset($r);
+
+                    if (!$isInfant) {
+                        $paxIndices[$resNo]++;
+                    }
+
                     $res['is_employee'] = $res['calculated_rates']['is_employee'] ?? false;
-                    $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
+                    $res['village_name'] = $this->getVillageName($roomType);
                     $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
                 }
                 unset($res); // Fix reference leak

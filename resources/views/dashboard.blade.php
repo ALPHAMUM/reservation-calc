@@ -555,6 +555,30 @@
         background: rgba(16, 185, 129, 0.2);
         transform: translateY(-2px);
     }
+
+    /* Breakdown Modal Styling */
+    .modal-content {
+        background: #1e293b !important;
+        border: 1px solid var(--primary) !important;
+        border-radius: 1rem !important;
+        color: white !important;
+    }
+    .modal-header { border-bottom: 1px solid var(--border) !important; }
+    .modal-footer { border-top: 1px solid var(--border) !important; }
+    .breakdown-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    .breakdown-table th { text-align: left; color: var(--text-muted); font-size: 0.75rem; padding: 0.5rem; border-bottom: 1px solid var(--border); }
+    .breakdown-table td { padding: 0.5rem; font-size: 0.85rem; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    .info-btn {
+        background: transparent;
+        border: none;
+        color: var(--primary);
+        cursor: pointer;
+        padding: 0 0.25rem;
+        display: inline-flex;
+        align-items: center;
+        transition: all 0.2s;
+    }
+    .info-btn:hover { color: #818cf8; transform: scale(1.1); }
 </style>
 @endsection
 
@@ -774,6 +798,9 @@
                                             $baseFees = floor($r['air'] ?? 0) + floor($r['han'] ?? 0) + floor($r['avi'] ?? 0) + floor($r['env'] ?? 0);
                                         @endphp
                                         <span class="total-val" data-base-fees="{{ $baseFees }}">{{ number_format($total, 2) }}</span>
+                                        <button type="button" class="info-btn show-breakdown-btn" data-res='@json($res)' title="Calculation Breakdown">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                                        </button>
                                     </td>
                                 </tr>
                             @endforeach
@@ -859,10 +886,31 @@
         </div>
     </div>
 </div>
+
+<!-- Breakdown Modal -->
+<div class="modal fade" id="breakdownModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Calculation Breakdown</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="breakdownContent">
+                    <!-- Dynamic Content -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
 
 @section('scripts')
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
 <script>
@@ -1113,6 +1161,130 @@
             let isChecked = $(this).is(':checked');
             $('.res-checkbox').prop('checked', isChecked);
             syncResNoList();
+        });        // Initialize Tooltips
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[title]'));
+        const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+
+        // Breakdown Modal Logic
+        $(document).on('click', '.show-breakdown-btn', function() {
+            const res = $(this).data('res');
+            let html = `
+                <div style="margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border);">
+                    <div style="font-weight: bold; font-size: 1.25rem; color: var(--primary);">${res.gstName || res.guestName || 'Unknown'}</div>
+                    <div style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;">
+                        Reservation <span style="color: white; font-weight: 600;">#${res.resNo || res.conf}</span> | Unit: <span style="color: white; font-weight: 600;">${res.village_name || 'N/A'}</span>
+                        ${res.is_employee ? ' | <span class="badge badge-member" style="font-size: 0.65rem;">Employee</span>' : ''}
+                    </div>
+                </div>
+                <table class="breakdown-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Description</th>
+                            <th>Base Share</th>
+                            <th>SC / VAT / Disc</th>
+                            <th style="text-align: right;">Daily Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            let overallTotal = 0;
+            let hasDiscount = false;
+
+            (res.rate || []).forEach(r => {
+                const b = r.breakdown;
+                if (!b) return;
+
+                overallTotal += parseFloat(r.val || 0);
+                if (b.is_discounted) hasDiscount = true;
+
+                const dateStr = r.date;
+                let detailHtml = '';
+                if (b.is_discounted) {
+                    detailHtml = `
+                        <div style="font-size: 0.7rem; color: #4ade80;">- 20% Disc: ₱${parseFloat(b.discount).toFixed(2)}</div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">+ 10% SC: ₱${parseFloat(b.sc).toFixed(2)}</div>
+                        <div style="font-size: 0.7rem; color: #f87171;">VAT EXEMPT</div>
+                    `;
+                } else {
+                    detailHtml = `
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">+ 10% SC: ₱${parseFloat(b.sc).toFixed(2)}</div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">+ 12% VAT: ₱${parseFloat(b.vat).toFixed(2)}</div>
+                    `;
+                }
+
+                html += `
+                    <tr>
+                        <td style="white-space: nowrap; font-weight: 600;">${dateStr}</td>
+                        <td>
+                            <div style="font-weight: 500;">${b.is_discounted ? 'Senior/PWD' : 'Regular'}</div>
+                            <div style="font-size: 0.65rem; color: var(--text-muted);">Gross: ₱${parseFloat(b.gross_share).toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+                        </td>
+                        <td>₱${parseFloat(b.base).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                        <td>${detailHtml}</td>
+                        <td style="font-weight: bold; text-align: right; color: white;">₱${parseFloat(r.val).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                    </tr>
+                `;
+            });
+
+            // Add other fees
+            const fees = res.calculated_rates || {};
+            const feeItems = [
+                { label: 'Airfare', val: fees.air },
+                { label: 'Hangar Fee', val: fees.han },
+                { label: 'Aviation Ops Fee', val: fees.avi },
+                { label: 'Environmental Fee', val: fees.env }
+            ];
+
+            let hasFees = false;
+            feeItems.forEach(f => {
+                if (f.val > 0) {
+                    if (!hasFees) {
+                        html += `<tr><td colspan="5" style="padding: 1rem 0.5rem 0.5rem 0.5rem; color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: none;">Additional Fees</td></tr>`;
+                        hasFees = true;
+                    }
+                    html += `
+                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                            <td colspan="2">${f.label}</td>
+                            <td></td>
+                            <td></td>
+                            <td style="font-weight: bold; text-align: right; color: white;">₱${parseFloat(f.val).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                        </tr>
+                    `;
+                    overallTotal += parseFloat(f.val);
+                }
+            });
+
+            html += `
+                    </tbody>
+                    <tfoot>
+                        <tr style="border-top: 2px solid var(--primary);">
+                            <td colspan="4" style="text-align: right; padding-top: 1.5rem; font-weight: bold; color: var(--text-muted);">TOTAL BILLABLE:</td>
+                            <td style="text-align: right; padding-top: 1.5rem; font-weight: 900; color: var(--primary); font-size: 1.4rem;">
+                                ₱${overallTotal.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+                ${hasDiscount ? `
+                    <div style="margin-top: 1.5rem; padding: 1rem; background: rgba(34, 197, 94, 0.1); border-radius: 0.75rem; border: 1px solid rgba(34, 197, 94, 0.2);">
+                        <div style="display: flex; align-items: center; gap: 0.5rem; color: #4ade80; font-size: 0.85rem; font-weight: bold; margin-bottom: 0.25rem;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                            FISCAL DISCOUNT APPLIED
+                        </div>
+                        <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+                            VAT-Exempt status and 20% discount on base room rates have been applied for this occupant based on their Senior Citizen/PWD status.
+                        </p>
+                    </div>
+                ` : ''}
+            `;
+
+            $('#breakdownContent').html(html);
+            const modal = new bootstrap.Modal(document.getElementById('breakdownModal'));
+            modal.show();
         });
 
         // When the input is typed into, update the checkboxes

@@ -11,34 +11,15 @@ class RateCalculatorService
         $this->settings = $settingsService->getSettings();
     }
 
-    public function calculatePassengerRates(array $passenger)
+    public function calculatePassengerRates(array $passenger, $paxIndex = 0, $roomType = '', $totalBillable = 1)
     {
-        // Default to extracting 'acc' from the API's rate array, ignore others
-        $acc = 0;
-        foreach ($passenger['rate'] ?? [] as $r) {
-            $v = (float)($r['val'] ?? 0); 
-            $d = strtolower($r['desc'] ?? '');
-            if (!str_contains($d, 'airfare') && 
-                !str_contains($d, 'hangar') && 
-                !str_contains($d, 'aviation') && 
-                !str_contains($d, 'environmental')) {
-                $acc += $v;
-            }
-        }
-
-        $gstTypeRaw = trim($passenger['gstType'] ?? $passenger['gst_type'] ?? 'Guest');
-        $gstType = strtolower($gstTypeRaw);
+        $gstType = strtolower($passenger['gstType'] ?? $passenger['gsttype'] ?? '');
+        $age = (int)($passenger['age'] ?? 99);
+        $isInfant = str_contains($gstType, 'infant') || (isset($passenger['age']) && $age >= 0 && $age <= 1);
         
         $isMember = false;
         $isEmployee = false;
-        $isInfant = false;
-
-        $privCardStr = strtolower(trim((string)($passenger['privCard'] ?? '')));
-        $hasPrivCard = !empty($privCardStr) && !in_array($privCardStr, ['n', 'no', 'false', '0', 'none', 'null']);
-        
-        if (str_contains($gstType, 'senior') || str_contains($gstType, 'pwd')) {
-            $hasPrivCard = true;
-        }
+        $hasPrivCard = false;
 
         $custName = strtoupper($passenger['custName'] ?? $passenger['custname'] ?? $passenger['customer'] ?? '');
         
@@ -53,51 +34,109 @@ class RateCalculatorService
             $isOthers = true;
         }
 
-        if (str_contains($gstType, 'infant')) {
-            $isInfant = true;
+        $privCardStr = strtolower(trim((string)($passenger['privCard'] ?? '')));
+        if ($privCardStr === 'senior citizen' || $privCardStr === 'pwd' || str_contains($gstType, 'senior') || str_contains($gstType, 'pwd')) {
+            $hasPrivCard = true;
         }
 
-        $arrDate = $passenger['arrdt'] ?? $passenger['arrDt'] ?? null;
+        $acc = 0;
+        $accDates = [];
+        $isVilla = true; 
+        $roomTypeUpper = strtoupper($roomType);
+        if (str_contains($roomTypeUpper, 'RGNCY') || str_contains($roomTypeUpper, 'ROYL') || str_contains($roomTypeUpper, 'PV8') || str_contains($roomTypeUpper, 'SUITE')) {
+            $isVilla = false;
+        }
         
-        // Base Airfare
-        $airfare = 0;
-        if ($isInfant) {
-            $airfare = 0;
-        } else {
-            $isPeak = true; 
-            
-            if (!empty($this->settings['promo_rates']['active']) && $arrDate) {
-                $promoStart = $this->settings['promo_rates']['start_date'] ?? '';
-                $promoEnd = $this->settings['promo_rates']['end_date'] ?? '';
+        $basePax = $isVilla ? 4 : 8;
+        $isExtra = ($paxIndex >= $basePax);
+        
+        // Divisor is the total billable pax, but capped at the unit capacity for the "base" share
+        $divisor = min($totalBillable, $basePax);
+        if ($divisor < 1) $divisor = 1;
+
+        foreach ($passenger['rate'] ?? [] as $r) {
+            $v = (float)($r['val'] ?? 0); 
+            $d = strtolower($r['desc'] ?? '');
+            $date = $r['date'] ?? null;
+
+            if ($date && !str_contains($d, 'airfare') && 
+                !str_contains($d, 'hangar') && 
+                !str_contains($d, 'aviation') && 
+                !str_contains($d, 'environmental')) {
                 
-                if ($arrDate >= $promoStart && $arrDate <= $promoEnd) {
-                    $isPeak = false;
-                    foreach ($this->settings['promo_rates']['peak_periods'] ?? [] as $peak) {
-                        if ($arrDate >= $peak['start'] && $arrDate <= $peak['end']) {
-                            $isPeak = true;
-                            break;
-                        }
+                $dateRate = 0;
+                $breakdown = [
+                    'gross_share' => 0,
+                    'is_discounted' => false,
+                    'is_infant' => $isInfant,
+                    'divisor' => $divisor,
+                    'base' => 0,
+                    'discount' => 0,
+                    'sc' => 0,
+                    'vat' => 0
+                ];
+
+                if (!$isInfant) {
+                    $grossAmount = 0;
+                    if (!$isExtra) {
+                        $unitRate = $this->getAccommodationUnitRate($date, $isVilla, $isMember);
+                        $grossAmount = $unitRate / $divisor;
+                    } else {
+                        $grossAmount = $this->getExtraPersonRate($date, $isMember);
+                    }
+
+                    $breakdown['gross_share'] = $grossAmount;
+
+                    if ($hasPrivCard) {
+                        $breakdown['is_discounted'] = true;
+                        $baseForDisc = $grossAmount / 1.22;
+                        $discount = $baseForDisc * 0.2;
+                        $netBase = $baseForDisc - $discount;
+                        $sc = $netBase * 0.1;
+                        
+                        $breakdown['base'] = $baseForDisc;
+                        $breakdown['discount'] = $discount;
+                        $breakdown['sc'] = $sc;
+                        $dateRate = $netBase + $sc;
+                    } else {
+                        $base = $grossAmount / 1.22;
+                        $sc = $base * 0.1;
+                        $vat = $base * 0.12;
+                        
+                        $breakdown['base'] = $base;
+                        $breakdown['sc'] = $sc;
+                        $breakdown['vat'] = $vat;
+                        $dateRate = $grossAmount;
                     }
                 }
+                
+                $acc += $dateRate;
+                $accDates[$date] = [
+                    'val' => $dateRate,
+                    'breakdown' => $breakdown
+                ];
             }
+        }
 
-            $passengerClass = 'guest';
-            if ($isEmployee) $passengerClass = 'employee';
-            elseif ($isMember) $passengerClass = 'member';
+        // Airfare Calculation
+        $airfare = 0;
+        if (isset($passenger['rate_metadata']) && str_contains(strtoupper($passenger['rate_metadata']), 'AIRFARE:EXEMPT')) {
+            $airfare = 0;
+        } else {
+            $passengerClass = $isEmployee ? 'employee' : ($isMember ? 'member' : 'guest');
+            if ($isOthers) $passengerClass = 'others';
+            
+            $isPeak = false; // Add peak logic if needed
 
             if ($isPeak) {
-                $airfare = (float)($this->settings['base_rates'][$passengerClass] ?? 0);
+                $airfare = (float)($this->settings['peak_rates'][$passengerClass] ?? 0);
             } else {
                 $airfare = (float)($this->settings['promo_rates'][$passengerClass] ?? 0);
             }
 
-            // Apply SC/PWD Discounts (Only if not employee)
             if ($hasPrivCard && !$isEmployee) {
                 $vatRate = (float)($this->settings['discounts']['vat_rate'] ?? 12);
-                // VAT removal
                 $airfare = $airfare / (1 + ($vatRate / 100));
-                
-                // Additional 20% only for GUESTS during PEAK
                 if ($passengerClass === 'guest' && $isPeak) {
                     $airfare = $airfare * 0.8; 
                 }
@@ -110,7 +149,6 @@ class RateCalculatorService
         $passClass = $isEmployee ? 'employee' : ($isMember ? 'member' : 'guest');
         if ($isOthers) $passClass = 'others';
         
-        // Rules: Infants and Others are always EXEMPT. Members, Guests, and Employees follow settings.
         if (!$isInfant && !$isOthers) {
             if (in_array($passClass, $hangarApplyTo)) {
                 $hangar = (float)($this->settings['fees']['hangar']['amount'] ?? 0);
@@ -118,64 +156,47 @@ class RateCalculatorService
         }
 
         // AOF Fee
-        // Exempt: Infants, Employees (all types), Others (ex-deals, priests, consultants, 
-        //         consignors, inspectors, authorized personnel)
-        // Applicable: Members and Guests only, during active periods
         $aof = 0;
         $aofApplyTo = $this->settings['fees']['aof']['apply_to'] ?? ['member', 'guest'];
-        $activePeriods = $this->settings['fees']['aof']['active_periods'] ?? [];
-
-        $arrTime  = $arrDate ? strtotime($arrDate) : 0;
-        $arrMonth = $arrTime ? (int)date('n', $arrTime) : 0;
-        $arrYear  = $arrTime ? (int)date('Y', $arrTime) : 0;
-
-        // Hardcoded exemptions — these are NEVER charged AOF regardless of settings
-        $aofExempt = $isInfant || $isEmployee || $isOthers;
-
-        if (!$aofExempt) {
-            // Check active periods: date range
-            $periodApplies = false;
-            $aofAmount = (float)($this->settings['fees']['aof']['amount'] ?? 2000);
-            
-            if (!empty($activePeriods) && $arrDate) {
-                foreach ($activePeriods as $p) {
-                    $pStart = $p['start'] ?? '';
-                    $pEnd   = $p['end']   ?? '';
-                    if ($arrDate >= $pStart && $arrDate <= $pEnd) {
-                        $periodApplies = true;
-                        if (isset($p['amount'])) {
-                            $aofAmount = (float)$p['amount'];
-                        }
-                        break;
-                    }
-                }
-            }
- 
-            if ($periodApplies && in_array($passClass, $aofApplyTo)) {
-                $aof = $aofAmount;
+        if (!$isInfant && !$isEmployee && !$isOthers) {
+            if (in_array($passClass, $aofApplyTo)) {
+                $aof = (float)($this->settings['fees']['aof']['amount'] ?? 0);
             }
         }
 
         // Environmental Fee
         $env = 0;
-        $envApplyTo = $this->settings['fees']['environmental']['apply_to'] ?? [];
-        
-        // Rules: Members and Others are always EXEMPT. Guests, Infants, and Employees follow settings.
-        if (!$isMember && !$isOthers) {
-            // Check if infants are included in settings, or if it's a regular guest/employee
-            if (($isInfant && in_array('infant', $envApplyTo)) || 
-                (!$isInfant && in_array($passClass, $envApplyTo))) {
-                $env = (float)($this->settings['fees']['environmental']['amount'] ?? 0);
-            }
+        if (!$isInfant && !$isEmployee && !$isOthers) {
+            $env = (float)($this->settings['fees']['environmental']['amount'] ?? 0);
         }
 
         return [
             'acc' => $acc,
+            'acc_dates' => $accDates,
             'air' => $airfare,
             'han' => $hangar,
             'avi' => $aof,
             'env' => $env,
             'is_employee' => $isEmployee
         ];
+    }
+
+    private function getAccommodationUnitRate($date, $isVilla, $isMember)
+    {
+        $dayOfWeek = date('w', strtotime($date));
+        $isWeekend = ($dayOfWeek == 5 || $dayOfWeek == 6);
+
+        if ($isMember) {
+            if ($isVilla) return $isWeekend ? 14000 : 10000;
+            return $isWeekend ? 21000 : 15000;
+        } else {
+            if ($isVilla) return $isWeekend ? 29500 : 22500;
+            return $isWeekend ? 45500 : 32500;
+        }
+    }
+
+    private function getExtraPersonRate($date, $isMember)
+    {
+        return 3700;
     }
 }
