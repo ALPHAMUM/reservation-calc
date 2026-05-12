@@ -47,7 +47,7 @@
 
         th,
         td {
-            border: 1px solid #94a3b8;
+            border: 1px solid #cbd5e1;
             padding: 8px;
             text-align: left;
             vertical-align: middle;
@@ -95,7 +95,7 @@
             }
 
             table, th, td {
-                border: 1px solid #000 !important;
+                border: 1px solid #cbd5e1 !important;
             }
         }
     </style>
@@ -218,10 +218,12 @@
                         @foreach($dateCols as $d)
                             @php 
                                 $val = $groupTotals[$d] ?? 0;
-                                $isWhole = (round($val, 2) == floor(round($val, 2)));
-                                // If it was already summed (whole number), just add the value. 
-                                // If it's a unit rate (FVN), multiply by the group size.
-                                $dateTotals[$d] += $isWhole ? (float)$val : ((float)$val * $span);
+                                // FVN rates (0.01, 0.02, 0.5) do not contribute to the grand total sum
+                                $rv = round($val, 2);
+                                if ($rv !== 0.01 && $rv !== 0.02 && $rv !== 0.5) {
+                                    $isWhole = ($rv == floor($rv));
+                                    $dateTotals[$d] += $isWhole ? (float)$val : ((float)$val * $span);
+                                }
                                 
                                 $displayVal = ($val > 0 ? number_format($val, 2) : '');
                                 $rv = round($val, 2);
@@ -237,7 +239,11 @@
                     @foreach($dateCols as $d)
                         @php 
                             $val = $rateMap[$d] ?? 0;
-                            $passengerAccTotal += (float)$val;
+                            $rv = round($val, 2);
+                            // FVN rates do not contribute to the total amount due
+                            if ($rv !== 0.01 && $rv !== 0.02 && $rv !== 0.5) {
+                                $passengerAccTotal += (float)$val;
+                            }
                         @endphp
                     @endforeach
 
