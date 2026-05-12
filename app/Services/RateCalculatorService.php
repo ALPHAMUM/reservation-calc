@@ -121,26 +121,14 @@ class RateCalculatorService
                             }
                         }
                         if (!$isFVN) {
-                            // Trust the API value if it's non-zero
-                            if ($originalVal > 0) {
-                                $grossAmount = $originalVal;
-                            } else {
-                                $isMemberUnit = $isMember;
-                                $meta = strtoupper($rateMetadata);
-                                if (str_contains($meta, 'M-VILLA') || str_contains($meta, 'M-SUITE') || str_contains($meta, 'KEY-VILLA') || str_contains($meta, 'KEY-SUITE')) {
-                                    $isMemberUnit = true;
-                                } elseif (str_contains($meta, 'G-VILLA') || str_contains($meta, 'G-SUITE')) {
-                                    $isMemberUnit = false;
-                                }
-                                $unitRate = $this->getAccommodationUnitRate($date, $isVilla, $isMemberUnit);
-                                $grossAmount = $unitRate / $divisor;
-                            }
+                            // Always trust the API value, even if it's 0.00
+                            $grossAmount = $originalVal;
                         } else {
                             $grossAmount = $unitRate;
                         }
                     } else {
-                        // Trust API for extra person as well
-                        $grossAmount = ($originalVal > 0) ? $originalVal : $this->getExtraPersonRate($date, $isMember);
+                        // Always trust the API value for extra persons as well
+                        $grossAmount = $originalVal;
                     }
 
                     if (!$isFVN) {
