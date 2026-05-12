@@ -318,9 +318,9 @@
                 <strong>Additional Fees</strong>
                 <div>Configure mandatory surcharges. 
                 <br>• Hangar Fee: Per passenger fee for terminal usage.
-                <br>• AOF (₱2,000): Aviation Operational Fee. Applies to Members &amp; Guests during active periods.
-                <br>&nbsp;&nbsp;<strong>Always exempt:</strong> Infants, Employees, Ex-deals, Priests, Consultants, Consignors, Inspectors, and other Authorized Personnel.
-                <br>• Environmental Fee: Island maintenance fee, typically applied to Guests.</div>
+                <br>• Aviation Operational Fee (AOF): Applies to Members &amp; Guests.
+                <br>&nbsp;&nbsp;<strong>Note:</strong> Spouse and Dependent are treated as 'Members' if the option is enabled above.
+                <br>&nbsp;&nbsp;<strong>Always exempt:</strong> Infants, Employees (unless specified), and authorized personnel (treated as Members).</div>
             </div>
             
             <div class="form-group" style="padding-bottom: 1.5rem; border-bottom: 1px solid var(--border);">
@@ -333,7 +333,7 @@
                     <div>
                         <label class="form-label">Apply To</label>
                         @php $hangarApplies = $settings['fees']['hangar']['apply_to'] ?? ['member', 'guest']; @endphp
-                        <div class="checkbox-wrap"><input type="checkbox" name="fees[hangar][apply_to][]" value="member" {{ in_array('member', $hangarApplies) ? 'checked' : '' }}> Members</div>
+                        <div class="checkbox-wrap"><input type="checkbox" name="fees[hangar][apply_to][]" value="member" {{ in_array('member', $hangarApplies) ? 'checked' : '' }}> Members <span style="font-size: 0.65rem; color: var(--text-muted); margin-left: 4px;">(incl. Spouse/Dependent)</span></div>
                         <div class="checkbox-wrap"><input type="checkbox" name="fees[hangar][apply_to][]" value="guest" {{ in_array('guest', $hangarApplies) ? 'checked' : '' }}> Guests</div>
                         <div class="checkbox-wrap"><input type="checkbox" name="fees[hangar][apply_to][]" value="employee" {{ in_array('employee', $hangarApplies) ? 'checked' : '' }}> Employees</div>
                         <div class="checkbox-wrap"><input type="checkbox" name="fees[hangar][apply_to][]" value="infant" {{ in_array('infant', $hangarApplies) ? 'checked' : '' }}> Infants</div>
@@ -373,7 +373,7 @@
                     <div>
                         <label class="form-label">Apply To</label>
                         @php $aofApplies = $settings['fees']['aof']['apply_to'] ?? ['member', 'guest']; @endphp
-                        <div class="checkbox-wrap"><input type="checkbox" name="fees[aof][apply_to][]" value="member" {{ in_array('member', $aofApplies) ? 'checked' : '' }}> Members</div>
+                        <div class="checkbox-wrap"><input type="checkbox" name="fees[aof][apply_to][]" value="member" {{ in_array('member', $aofApplies) ? 'checked' : '' }}> Members <span style="font-size: 0.65rem; color: var(--text-muted); margin-left: 4px;">(incl. Spouse/Dependent)</span></div>
                         <div class="checkbox-wrap"><input type="checkbox" name="fees[aof][apply_to][]" value="guest" {{ in_array('guest', $aofApplies) ? 'checked' : '' }}> Guests</div>
                         <div class="checkbox-wrap"><input type="checkbox" name="fees[aof][apply_to][]" value="employee" {{ in_array('employee', $aofApplies) ? 'checked' : '' }}> Employees</div>
                         <div class="checkbox-wrap"><input type="checkbox" name="fees[aof][apply_to][]" value="infant" {{ in_array('infant', $aofApplies) ? 'checked' : '' }}> Infants</div>

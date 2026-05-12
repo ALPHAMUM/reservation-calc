@@ -666,7 +666,7 @@ class ReservationController extends Controller
             echo '<td colspan="' . $dateCount . '" class="dh">ACCOMMODATION</td>';
             echo '<td rowspan="2" class="hdr">AIRFARE</td>';
             echo '<td rowspan="2" class="hdr">HANGAR</td>';
-            echo '<td rowspan="2" class="hdr">AVIATION</td>';
+            echo '<td rowspan="2" class="hdr">AVIATION OPERATIONAL FEE</td>';
             echo '<td rowspan="2" class="hdr" style="width: 100px;">ENVIRONMENTAL</td>';
             echo '</tr>';
 

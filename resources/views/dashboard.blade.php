@@ -1586,7 +1586,7 @@
             const feeItems = [
                 { label: 'Airfare', val: fees.air },
                 { label: 'Hangar Fee', val: fees.han },
-                { label: 'Aviation Ops Fee', val: fees.avi },
+                { label: 'Aviation Operational Fee', val: fees.avi },
                 { label: 'Environmental Fee', val: fees.env }
             ];
 

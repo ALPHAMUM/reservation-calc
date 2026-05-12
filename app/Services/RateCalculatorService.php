@@ -25,9 +25,13 @@ class RateCalculatorService
         $custName = strtoupper($passenger['custName'] ?? $passenger['custname'] ?? $passenger['customer'] ?? '');
 
         $isOthers = false;
-        if (str_contains($gstType, 'member') || str_contains($gstType, 'spouse') || str_contains($gstType, 'dependent')) {
+        // Always treat Spouse and Dependent as Members for airfare and fees
+        if ($gstType === 'member' || str_starts_with($gstType, 'member')) {
+            $isMember = true;
+        } elseif ($gstType === 'spouse' || $gstType === 'dependent') {
             $isMember = true;
         } elseif (
+            $gstType === 'employee' || 
             str_contains($gstType, 'employee') ||
             (isset($passenger['rate_metadata']) && str_contains(strtoupper($passenger['rate_metadata']), 'EMPLOYEE')) ||
             str_contains($custName, 'ALPHALAND EMPLOYEE')
@@ -35,6 +39,7 @@ class RateCalculatorService
             $isEmployee = true;
         } elseif (str_contains($gstType, 'others') || str_contains($gstType, 'authorized') || str_contains($gstType, 'priest') || str_contains($gstType, 'contractor')) {
             $isOthers = true;
+            $isMember = true; // Treat authorized personnel as members for fee purposes
         }
 
         $privCardStr = strtolower(trim((string) ($passenger['privCard'] ?? '')));
@@ -202,22 +207,37 @@ class RateCalculatorService
             }
         }
 
-        // Hangar Fee - Applies to all except infants
+        // Determine classification for fee application
+        if ($isEmployee) {
+            $paxClass = 'employee';
+        } elseif ($isMember) {
+            $paxClass = 'member';
+        } elseif ($isInfant) {
+            $paxClass = 'infant';
+        } else {
+            $paxClass = 'guest';
+        }
+
+        // Hangar Fee
         $hangar = 0;
-        if (!$isInfant) {
+        $hangarApplies = $this->settings['fees']['hangar']['apply_to'] ?? ['member', 'guest'];
+        if (in_array($paxClass, $hangarApplies)) {
             $hangar = (float) ($this->settings['fees']['hangar']['amount'] ?? 400);
         }
 
-        // AOF Fee - Applies to all except infants
+        // AOF Fee
         $aof = 0;
-        if (!$isInfant) {
+        $aofApplies = $this->settings['fees']['aof']['apply_to'] ?? ['member', 'guest'];
+        if (in_array($paxClass, $aofApplies)) {
             $checkInDate = $passenger['arrdt'] ?? $passenger['arrDt'] ?? null;
             $aof = $this->calculateAof($checkInDate);
         }
 
-        // Environmental Fee - Applies to all except infants
+        // Environmental Fee
         $env = 0;
-        if (!$isInfant) {
+        $envApplies = $this->settings['fees']['environmental']['apply_to'] ?? ['guest'];
+        // Note: isInfant check is removed here because 'infant' is now a valid paxClass
+        if (in_array($paxClass, $envApplies)) {
             $env = (float) ($this->settings['fees']['environmental']['amount'] ?? 200);
         }
 

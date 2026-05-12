@@ -89,6 +89,7 @@ class SettingsController extends Controller
 
         // Infants
         $settings['infants']['airfare_free'] = isset($input['infants']['airfare_free']);
+        
 
         $this->settingsService->saveSettings($settings);
 

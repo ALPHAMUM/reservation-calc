@@ -146,7 +146,7 @@
                 <th colspan="{{ count($dateCols) }}" class="dh" style="text-align: center;">ACCOMMODATION</th>
                 <th rowspan="2">AIRFARE</th>
                 <th rowspan="2">HANGAR</th>
-                <th rowspan="2">AVIATION</th>
+                <th rowspan="2">AVIATION OPERATIONAL FEE</th>
                 <th rowspan="2">ENVIRONMENTAL</th>
             </tr>
             <tr class="hdr">
