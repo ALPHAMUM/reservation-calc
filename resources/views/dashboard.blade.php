@@ -1547,16 +1547,18 @@
                 }
 
                 if (b.is_fvn) {
+                    const fvnLabelMap = { 0.01: '1', 0.02: '1.5', 0.5: '.5' };
+                    const fvnLabel = fvnLabelMap[b.fvn_rate] || b.fvn_rate;
                     html += `
                         <tr style="background: rgba(239, 68, 68, 0.1);">
                             <td style="white-space: nowrap; font-weight: 600;">${dateStr}</td>
                             <td>
-                                <div style="font-weight: 500; color: #ef4444;">Villa/Suite</div>
+                                <div style="font-weight: 500; color: #ef4444;">${fvnLabel} Free Villa Night</div>
                             </td>
                             <td style="color: rgba(255,255,255,0.2);">-</td>
                             <td style="color: rgba(255,255,255,0.2);">-</td>
                             <td style="font-weight: bold; text-align: right; color: #ef4444;">
-                                ₱0.00 FVN
+                                ₱0.00
                             </td>
                         </tr>
                     `;
