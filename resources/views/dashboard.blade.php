@@ -834,42 +834,49 @@
                                 foreach($resGroups as $rn => $rows) {
                                     $count = count($rows);
                                     $basePax = $rows[0]['calculated_rates']['base_pax'] ?? 4;
-                                    $baseSize = min($count, $basePax);
                                     
-                                    for ($i = 0; $i < $count; $i++) {
-                                        $span = 0;
-                                        $totals = [];
-                                        if ($i === 0) {
-                                            $span = $baseSize;
-                                            foreach($dateCols as $d) {
-                                                $sum = 0;
-                                                for ($k = 0; $k < $baseSize; $k++) {
-                                                    $dayVal = 0;
-                                                    foreach($rows[$k]['rate'] ?? [] as $rt) {
-                                                        if (($rt['date'] ?? '') === $d) { $dayVal = (float)($rt['val'] ?? 0); break; }
-                                                    }
-                                                    // Special case for FVN: prioritize it and don't sum multiples
-                                                    if (round($dayVal, 2) == 0.01 || round($dayVal, 2) == 0.02) {
-                                                        $sum = $dayVal;
-                                                        break;
-                                                    }
-                                                    $sum += $dayVal;
-                                                }
-                                                $totals[$d] = $sum;
-                                            }
-                                        } elseif ($i < $baseSize) {
-                                            $span = 0;
-                                        } else {
-                                            $span = 1;
-                                            foreach($dateCols as $d) {
-                                                $dayVal = 0;
-                                                foreach($rows[$i]['rate'] ?? [] as $rt) {
-                                                    if (($rt['date'] ?? '') === $d) { $dayVal = (float)($rt['val'] ?? 0); break; }
-                                                }
-                                                $totals[$d] = $dayVal;
-                                            }
+                                    $curr = 0;
+                                    while ($curr < $count) {
+                                        $blockStart = $curr;
+                                        $blockSize = min($count - $curr, $basePax);
+                                        
+                                        // Check if this block has FVN
+                                        $hasFvn = false;
+                                        foreach ($rows[$blockStart]['rate'] ?? [] as $rt) {
+                                            $rv = round((float)($rt['val'] ?? 0), 2);
+                                            if (in_array($rv, [0.01, 0.02, 0.5])) { $hasFvn = true; break; }
                                         }
-                                        $accSpans[] = ['span' => $span, 'totals' => $totals];
+                                        
+                                        if ($hasFvn) {
+                                            for ($i = 0; $i < $blockSize; $i++) {
+                                                $span = ($i === 0) ? $blockSize : 0;
+                                                $totals = [];
+                                                if ($i === 0) {
+                                                    foreach($dateCols as $d) {
+                                                        $uv = 0;
+                                                        foreach($rows[$blockStart]['rate'] ?? [] as $rt) {
+                                                            if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                                                        }
+                                                        $totals[$d] = $uv;
+                                                    }
+                                                }
+                                                $accSpans[] = ['span' => $span, 'totals' => $totals];
+                                            }
+                                            $curr += $blockSize;
+                                        } else {
+                                            for ($i = 0; $i < $blockSize; $i++) {
+                                                $totals = [];
+                                                foreach($dateCols as $d) {
+                                                    $uv = 0;
+                                                    foreach($rows[$blockStart + $i]['rate'] ?? [] as $rt) {
+                                                        if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                                                    }
+                                                    $totals[$d] = $uv;
+                                                }
+                                                $accSpans[] = ['span' => 1, 'totals' => $totals];
+                                            }
+                                            $curr += $blockSize;
+                                        }
                                     }
                                 }
                                 $renderedRes = [];
@@ -907,13 +914,20 @@
                                                 $dayRate = (float)($spanInfo['totals'][$date] ?? 0);
                                             @endphp
                                             <td class="rate-cell" data-date="{{ $date }}" rowspan="{{ $spanInfo['span'] }}" style="vertical-align: middle; text-align: center; cursor: pointer;">
-                                                @if($dayRate > 0)
-                                                    @php $isFvnRate = in_array($dayRate, [0.01, 0.02, 0.5]); @endphp
+                                                @if(isset($spanInfo['totals'][$date]))
+                                                    @php $dayRate = (float)($spanInfo['totals'][$date]); @endphp
+                                                    @php $isFvnRate = in_array(round($dayRate, 2), [0.01, 0.02, 0.5]); @endphp
                                                     <div class="stay-block" draggable="true" onclick="openRateEditor(this)">
                                                         {{-- Display mode --}}
                                                         <span class="rate-display {{ $isFvnRate ? 'fvn-display' : '' }}">
-                                                            @if($isFvnRate)
-                                                                {{ number_format($dayRate, 2) }} FVN
+                                                            @if(round($dayRate, 2) == 0.01)
+                                                                1 FVN
+                                                            @elseif(round($dayRate, 2) == 0.02)
+                                                                1.5 FVN
+                                                            @elseif(round($dayRate, 2) == 0.5)
+                                                                .5 FVN
+                                                            @elseif(round($dayRate, 2) == 3700.01)
+                                                                3700.01
                                                             @else
                                                                 {{ number_format($dayRate, 2) }}
                                                             @endif
@@ -941,13 +955,12 @@
                                         @endforeach
                                     @endif
                                     
-                                    <td class="row-total" style="text-align: right; font-weight: 700; color: var(--primary);">
-                                        @php
+                                    @php
                                             $r = $res['calculated_rates'] ?? [];
                                             $total = ($r['acc'] ?? 0) + ($r['air'] ?? 0) + ($r['han'] ?? 0) + ($r['avi'] ?? 0) + ($r['env'] ?? 0);
-                                            // Store base fees for live calc
                                             $baseFees = ($r['air'] ?? 0) + ($r['han'] ?? 0) + ($r['avi'] ?? 0) + ($r['env'] ?? 0);
-                                        @endphp
+                                    @endphp
+                                    <td class="row-total" style="text-align: right; font-weight: 700; color: var(--primary);">
                                         <span class="total-val" data-base-fees="{{ $baseFees }}">{{ number_format($total, 2) }}</span>
                                         <button type="button" class="info-btn show-breakdown-btn" data-res-idx="{{ $idx }}" data-bs-toggle="modal" data-bs-target="#breakdownModal" title="Calculation Breakdown">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -1175,7 +1188,7 @@
                     rObj.val = val;
                     
                     // Simple live breakdown calculation
-                    const isFvn = (val === 0.01 || val === 0.02 || val === 0.5);
+                    const isFvn = (Math.round(val * 100) / 100 === 0.01 || Math.round(val * 100) / 100 === 0.02 || Math.round(val * 100) / 100 === 0.5);
                     if (isFvn) {
                         rObj.breakdown = { is_fvn: true, fvn_rate: val, base: val, sc: 0, vat: 0, gross_share: val };
                     } else {
@@ -1328,13 +1341,13 @@
             let defaultDisplay   = '';
             let isFvn = false;
 
-            if (isFvn01)      { defaultSelectVal = '0.01'; defaultInputVal = 0.01; defaultDisplay = '.01 FVN'; isFvn = true; }
-            else if (isFvn02) { defaultSelectVal = '0.02'; defaultInputVal = 0.02; defaultDisplay = '.02 FVN'; isFvn = true; }
+            if (isFvn01)      { defaultSelectVal = '0.01'; defaultInputVal = 0.01; defaultDisplay = '1 FVN'; isFvn = true; }
+            else if (isFvn02) { defaultSelectVal = '0.02'; defaultInputVal = 0.02; defaultDisplay = '1.5 FVN'; isFvn = true; }
             else if (isFvn05) { defaultSelectVal = '0.5';  defaultInputVal = 0.5;  defaultDisplay = '.5 FVN';  isFvn = true; }
             else {
                 // Not automatically FVN, but check if it's currently a magic number
-                if (defaultInputVal == 0.01) { defaultSelectVal = '0.01'; defaultDisplay = '.01 FVN'; isFvn = true; }
-                else if (defaultInputVal == 0.02) { defaultSelectVal = '0.02'; defaultDisplay = '.02 FVN'; isFvn = true; }
+                if (defaultInputVal == 0.01) { defaultSelectVal = '0.01'; defaultDisplay = '1 FVN'; isFvn = true; }
+                else if (defaultInputVal == 0.02) { defaultSelectVal = '0.02'; defaultDisplay = '1.5 FVN'; isFvn = true; }
                 else if (defaultInputVal == 0.5) { defaultSelectVal = '0.5';  defaultDisplay = '.5 FVN';  isFvn = true; }
                 else { defaultDisplay = defaultInputVal.toLocaleString(undefined, {minimumFractionDigits: 2}); }
             }
@@ -1543,7 +1556,7 @@
                             <td style="color: rgba(255,255,255,0.2);">-</td>
                             <td style="color: rgba(255,255,255,0.2);">-</td>
                             <td style="font-weight: bold; text-align: right; color: #ef4444;">
-                                0.00 FVN
+                                ₱0.00 FVN
                             </td>
                         </tr>
                     `;
@@ -1631,6 +1644,49 @@
         });
     });
 
+    function recalculateRow(row) {
+        const cells = row.find('td.rate-cell');
+        let accTotal = 0;
+        
+        cells.each(function() {
+            const stayBlock = $(this).find('.stay-block');
+            if (stayBlock.length) {
+                const input = stayBlock.find('.rate-input');
+                const val = parseFloat(input.val()) || 0;
+                // FVN rates (0.01, 0.02, 0.5) count as 0 for the mathematical sum
+                if (val !== 0.01 && val !== 0.02 && val !== 0.5) {
+                    accTotal += val;
+                }
+            }
+        });
+        
+        const totalValSpan = row.find('.total-val');
+        const baseFees = parseFloat(totalValSpan.data('base-fees')) || 0;
+        const grandTotal = accTotal + baseFees;
+        
+        totalValSpan.text(grandTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+        
+        // Sync with window.__resData model if it exists (for the Breakdown Modal)
+        const resBtn = row.find('.show-breakdown-btn');
+        if (resBtn.length) {
+            const resIdx = parseInt(resBtn.data('res-idx'), 10);
+            if (!isNaN(resIdx) && window.__resData && window.__resData[resIdx]) {
+                const res = window.__resData[resIdx];
+                cells.each(function() {
+                    const date = $(this).data('date');
+                    const input = $(this).find('.rate-input');
+                    if (input.length) {
+                        const val = parseFloat(input.val()) || 0;
+                        const rateObj = (res.rate || []).find(r => r.date === date);
+                        if (rateObj) {
+                            rateObj.val = val;
+                        }
+                    }
+                });
+            }
+        }
+    }
+
     window.openRateEditor = function(block) {
         const display = block.querySelector('.rate-display');
         const editor  = block.querySelector('.rate-editor');
@@ -1646,9 +1702,17 @@
         const block   = inp.closest('.stay-block');
         const display = block.querySelector('.rate-display');
         const val     = parseFloat(inp.value) || 0;
-        const fvnMap  = { 0.01: '.01 FVN', 0.02: '.02 FVN', 0.5: '.5 FVN' };
-        display.textContent = fvnMap[val] ? fvnMap[val] : (val > 0 ? val.toLocaleString(undefined,{minimumFractionDigits:2}) : '');
-        display.className = 'rate-display' + (fvnMap[val] ? ' fvn-display' : '');
+        const fvnMap  = { 0.01: '1 FVN', 0.02: '1.5 FVN', 0.5: '.5 FVN' };
+        if (fvnMap[val]) {
+            display.textContent = fvnMap[val];
+            display.className = 'rate-display fvn-display';
+        } else if (Math.round(val * 100) / 100 === 3700.01) {
+            display.textContent = '3700.01';
+            display.className = 'rate-display';
+        } else {
+            display.textContent = val > 0 ? val.toLocaleString(undefined,{minimumFractionDigits:2}) : '';
+            display.className = 'rate-display';
+        }
         editor.style.display = 'none';
         display.style.display = '';
     }
@@ -1662,7 +1726,7 @@
         const block   = btn.closest('.stay-block');
         const display = block.querySelector('.rate-display');
         const inp     = editor.querySelector('.rate-input');
-        const fvnMap  = { '0.01': '.01 FVN', '0.02': '.02 FVN', '0.5': '.5 FVN' };
+        const fvnMap  = { '0.01': '1 FVN', '0.02': '1.5 FVN', '0.5': '.5 FVN' };
 
         inp.value = val;
         display.textContent = fvnMap[val] || val;

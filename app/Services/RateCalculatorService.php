@@ -95,8 +95,8 @@ class RateCalculatorService
                     $grossAmount = 0;
                     if (!$isExtra) {
 
-                        // 1. Magic numbers: only apply as FVN if not already applied
-                        if (($originalVal == 0.01 || $originalVal == 0.02) && !$fvnApplied) {
+                        // 1. Magic numbers: always honor if sent by API
+                        if ($originalVal == 0.01 || $originalVal == 0.02) {
                             $unitRate = 0.01; // Force to .01 as requested
                             $isFVN = true;
                             $fvnApplied = true;
@@ -120,13 +120,27 @@ class RateCalculatorService
                                 $fvnApplied = true;
                             }
                         }
-
                         if (!$isFVN) {
-                            $unitRate = $this->getAccommodationUnitRate($date, $isVilla, $isMember);
+                            // Trust the API value if it's non-zero
+                            if ($originalVal > 0) {
+                                $grossAmount = $originalVal;
+                            } else {
+                                $isMemberUnit = $isMember;
+                                $meta = strtoupper($rateMetadata);
+                                if (str_contains($meta, 'M-VILLA') || str_contains($meta, 'M-SUITE') || str_contains($meta, 'KEY-VILLA') || str_contains($meta, 'KEY-SUITE')) {
+                                    $isMemberUnit = true;
+                                } elseif (str_contains($meta, 'G-VILLA') || str_contains($meta, 'G-SUITE')) {
+                                    $isMemberUnit = false;
+                                }
+                                $unitRate = $this->getAccommodationUnitRate($date, $isVilla, $isMemberUnit);
+                                $grossAmount = $unitRate / $divisor;
+                            }
+                        } else {
+                            $grossAmount = $unitRate;
                         }
-                        $grossAmount = $unitRate / $divisor;
                     } else {
-                        $grossAmount = $this->getExtraPersonRate($date, $isMember);
+                        // Trust API for extra person as well
+                        $grossAmount = ($originalVal > 0) ? $originalVal : $this->getExtraPersonRate($date, $isMember);
                     }
 
                     if (!$isFVN) {

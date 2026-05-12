@@ -742,17 +742,19 @@ class ReservationController extends Controller
                                 // This means the merged cell SHOWS THE SUM.
                                 // If 4 people share 10,000, each person is 2,500. The merged cell shows 10,000.
                                 // This seems to be the intended behavior for "unit-based" merging.
-                                // Sum whole numbers, but keep unit rate for FVN (0.01/0.02)
-                                $sum = 0;
-                                $firstVal = (float) ($rows[$startIdx]['rateDates'][$d] ?? 0);
-                                if (round($firstVal, 2) == floor(round($firstVal, 2))) {
-                                    for ($m = $startIdx; $m < $i; $m++) {
-                                        $sum += (float) ($rows[$m]['rateDates'][$d] ?? 0);
-                                    }
-                                } else {
-                                    $sum = $firstVal;
+                                // Only merge/span if the rate is an FVN rate
+                                $firstRow = $rows[$startIdx];
+                                $hasFvn = false;
+                                foreach ($firstRow['rateDates'] as $d => $v) {
+                                    $rv = round((float)$v, 2);
+                                    if (in_array($rv, [0.01, 0.02, 0.5])) { $hasFvn = true; break; }
                                 }
-                                $rows[$k]['accGroupTotals'][$d] = $sum;
+
+                                if ($hasFvn) {
+                                    $rows[$k]['accGroupTotals'][$d] = (float)($rows[$startIdx]['rateDates'][$d] ?? 0);
+                                } else {
+                                    $rows[$k]['accGroupTotals'][$d] = (float)($rows[$k]['rateDates'][$d] ?? 0);
+                                }
                             }
 
                             $rows[$k]['feeGroupTotals'] = [
@@ -805,10 +807,10 @@ class ReservationController extends Controller
                 if ($isFirst)
                     $last = $resNo;
 
-                $totals['air'] += floor($rates['air']);
-                $totals['han'] += floor($rates['han']);
-                $totals['avi'] += floor($rates['avi']);
-                $totals['env'] += floor($rates['env']);
+                $totals['air'] += (float) ($rates['air'] ?? 0);
+                $totals['han'] += (float) ($rates['han'] ?? 0);
+                $totals['avi'] += (float) ($rates['avi'] ?? 0);
+                $totals['env'] += (float) ($rates['env'] ?? 0);
 
                 echo '<tr>';
                 echo '<td>' . ($isFirst ? htmlspecialchars($resNo) : '') . '</td>';
@@ -838,10 +840,13 @@ class ReservationController extends Controller
                     foreach ($dateCols as $d) {
                         $val = $accGroupTotals[$d] ?? 0;
                         $isWhole = (round($val, 2) == floor(round($val, 2)));
-                        $formattedVal = ($val > 0 ? number_format($val, 2) : '');
-                        if (!$isWhole && (round($val, 2) == 0.01 || round($val, 2) == 0.02)) {
-                            $formattedVal = number_format($val, 2) . ' FVN';
-                        }
+                        $rv = round($val, 2);
+                        if ($rv == 0.01) $formattedVal = '1 FVN';
+                        elseif ($rv == 0.02) $formattedVal = '1.5 FVN';
+                        elseif ($rv == 0.5) $formattedVal = '.5 FVN';
+                        elseif ($rv == 3700.01) $formattedVal = '3700.01';
+                        else $formattedVal = ($val > 0 ? number_format($val, 2) : '');
+
                         $style = $accRowSpan > 1 ? ' style="text-align: center;"' : '';
                         echo '<td class="num" rowspan="' . $accRowSpan . '"' . $style . '>' . $formattedVal . '</td>';
                         // If it was already summed (whole number), just add the value. 
@@ -875,7 +880,7 @@ class ReservationController extends Controller
             echo '<tr style="font-weight:bold;background:#f1f5f9">';
             echo '<td colspan="2" style="text-align:right">TOTAL PAX:</td>';
             echo '<td style="text-align:center">' . $totalPax . '</td>';
-            echo '<td colspan="7" style="text-align:right">GRAND TOTALS:</td>';
+            echo '<td colspan="6" style="text-align:right">GRAND TOTALS:</td>';
             foreach ($dateCols as $d) {
                 echo '<td class="num">' . number_format($dateTotals[$d], 2) . '</td>';
             }
@@ -891,15 +896,38 @@ class ReservationController extends Controller
             $labelColspan = 10 + $dateCount + 3;
 
             echo '<tr><td colspan="' . $fullColspan . '" style="border:none;">&nbsp;</td></tr>';
-            echo '<tr>';
-            echo '<td colspan="10" style="border:none; font-weight:bold; text-align:right;">TOTAL AMOUNT DUE:</td>';
-            echo '<td colspan="' . $dateCount . '" style="border:none;"></td>';
-            echo '<td colspan="4" class="num" style="border:none; font-weight:bold; text-align:right;">&#8369;' . number_format($overallGrandTotal, 2) . '</td>';
-            echo '</tr>';
-            echo '<tr>';
-            echo '<td colspan="10" style="border:none; font-style:italic; text-align:right;">Room Rates include service charge (10%) and VAT (12%)</td>';
-            echo '<td colspan="' . ($dateCount + 4) . '" style="border:none;"></td>';
-            echo '</tr>';
+            echo '<tr>
+            <td colspan="9" style="text-align:right;border:none;font-weight:bold">TOTAL AMOUNT DUE:</td>
+            <td colspan="' . count($dateCols) . '" style="border:none"></td>
+            <td colspan="4" class="num" style="border:none;font-weight:bold">&#8369;' . number_format($overallGrandTotal, 2) . '</td>
+            </tr>';
+
+            echo '<tr>
+            <td colspan="9" style="text-align:right;border:none;font-style:italic;color:#64748b">Room Rates include service charge (10%) and VAT (12%)</td>
+            <td colspan="' . (count($dateCols) + 4) . '" style="border:none"></td>
+            </tr>';
+
+            echo '<tr>
+            <td colspan="9" style="text-align:right;border:none;font-weight:bold">LESS PAYMENT/S:</td>
+            <td colspan="' . count($dateCols) . '" style="border:none"></td>
+            <td colspan="4" style="border:none"></td>
+            </tr>';
+
+            echo '<tr>
+            <td colspan="9" style="text-align:right;border:none">OVERPAYMENT/CREDIT FROM FOLIO</td>
+            <td colspan="' . count($dateCols) . '" style="border:none"></td>
+            </tr>';
+
+            echo '<tr>
+            <td colspan="9" style="text-align:right;border:none;padding-bottom:20px">COLLECTION RECEIPT</td>
+            <td colspan="' . count($dateCols) . '" style="border:none"></td>
+            </tr>';
+
+            echo '<tr>
+            <td colspan="9" style="text-align:right;border:none;font-weight:bold">BALANCE TO SETTLE</td>
+            <td colspan="' . count($dateCols) . '" style="border:none"></td>
+            <td colspan="4" class="num" style="border:none;font-weight:bold;border-top:1px solid #000">&#8369;' . number_format($overallGrandTotal, 2) . '</td>
+            </tr>';
 
             echo '</table></body></html>';
         }, 200, ['Content-Type' => 'application/vnd.ms-excel', 'Content-Disposition' => 'attachment; filename="' . $filename . '"']);
@@ -1092,74 +1120,36 @@ class ReservationController extends Controller
             $i = 0;
             while ($i < $count) {
                 $startIdx = $i;
-                $currentRow = $rows[$i];
-
-                $getRateKey = function ($row) use ($dateCols) {
-                    $resNo = trim($row['resNo'] ?? $row['conf'] ?? '');
-                    $key = $resNo;
-                    foreach ($dateCols as $d) {
-                        $val = 0;
-                        foreach ($row['rate'] ?? [] as $r) {
-                            if (($r['date'] ?? '') === $d) {
-                                $val = (float) ($r['val'] ?? 0);
-                                break;
-                            }
-                        }
-                        $v = round($val, 2);
-                        $key .= '|' . sprintf("%.2f", $v);
-                    }
-                    return $key;
-                };
-
-                $currentKey = $getRateKey($currentRow);
-                $i++;
-
-                while ($i < $count && $getRateKey($rows[$i]) === $currentKey) {
-                    $i++;
+                
+                $firstRow = $rows[$startIdx];
+                $basePax = $firstRow['calculated_rates']['base_pax'] ?? 4;
+                
+                // Determine if block should be merged (only for FVN)
+                $hasFvn = false;
+                foreach ($firstRow['rate'] ?? [] as $rt) {
+                    $rv = round((float)($rt['val'] ?? 0), 2);
+                    if (in_array($rv, [0.01, 0.02, 0.5])) { $hasFvn = true; break; }
                 }
+                
+                if ($hasFvn) {
+                    $mergeLimit = min($count, $startIdx + $basePax);
+                    $span = $mergeLimit - $startIdx;
+                } else {
+                    $mergeLimit = $startIdx + 1;
+                    $span = 1;
+                }
+                $i = $mergeLimit;
 
-                $span = $i - $startIdx;
-
-                for ($k = $startIdx; $k < $i; $k++) {
-                    $currentIdx = count($processedReservations);
+                for ($k = $startIdx; $k < $mergeLimit; $k++) {
                     if ($k === $startIdx) {
-                        $accSpans[$currentIdx] = ['span' => $span, 'totals' => [], 'fee_totals' => []];
+                        $rows[$k]['acc_span'] = $span;
+                        $rows[$k]['acc_group_totals'] = [];
                         foreach ($dateCols as $d) {
-                            // Sum whole numbers, but keep unit rate for FVN
-                            $firstVal = 0;
-                            foreach ($rows[$startIdx]['rate'] ?? [] as $r) {
-                                if (($r['date'] ?? '') === $d) {
-                                    $firstVal = (float) ($r['val'] ?? 0);
-                                    break;
-                                }
-                            }
-
-                            if (round($firstVal, 2) == floor(round($firstVal, 2))) {
-                                $sum = 0;
-                                for ($m = $startIdx; $m < $i; $m++) {
-                                    foreach ($rows[$m]['rate'] ?? [] as $r) {
-                                        if (($r['date'] ?? '') === $d) {
-                                            $sum += (float) ($r['val'] ?? 0);
-                                            break;
-                                        }
-                                    }
-                                }
-                                $accSpans[$currentIdx]['totals'][$d] = $sum;
-                            } else {
-                                $accSpans[$currentIdx]['totals'][$d] = $firstVal;
-                            }
+                            // Display the rate from the first occupant for this block
+                            $rows[$k]['acc_group_totals'][$d] = (float) ($rows[$startIdx]['calculated_rates']['acc_dates'][$d]['val'] ?? 0);
                         }
-
-                        $ftotals = ['air' => 0, 'han' => 0, 'avi' => 0, 'env' => 0];
-                        for ($m = $startIdx; $m < $i; $m++) {
-                            $ftotals['air'] += (float) ($rows[$m]['calculated_rates']['air'] ?? 0);
-                            $ftotals['han'] += (float) ($rows[$m]['calculated_rates']['han'] ?? 0);
-                            $ftotals['avi'] += (float) ($rows[$m]['calculated_rates']['avi'] ?? 0);
-                            $ftotals['env'] += (float) ($rows[$m]['calculated_rates']['env'] ?? 0);
-                        }
-                        $accSpans[$currentIdx]['fee_totals'] = $ftotals;
                     } else {
-                        $accSpans[$currentIdx] = ['span' => 0];
+                        $rows[$k]['acc_span'] = 0;
                     }
                     $processedReservations[] = $rows[$k];
                 }
