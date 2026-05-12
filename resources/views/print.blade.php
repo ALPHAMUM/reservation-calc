@@ -47,7 +47,7 @@
 
         th,
         td {
-            border: 1px solid #e2e8f0;
+            border: 1px solid #94a3b8;
             padding: 8px;
             text-align: left;
             vertical-align: middle;
@@ -94,8 +94,8 @@
                 padding: 0;
             }
 
-            table {
-                border-color: #000;
+            table, th, td {
+                border: 1px solid #000 !important;
             }
         }
     </style>
