@@ -15,8 +15,15 @@ class RateCalculatorService
     {
         $gstType = strtolower($passenger['gstType'] ?? $passenger['gsttype'] ?? '');
         $rateMetadata = strtoupper($passenger['rate_metadata'] ?? '');
-        $age = (int) ($passenger['age'] ?? 99);
-        $isInfant = str_contains($gstType, 'infant') || (isset($passenger['age']) && $age >= 0 && $age <= 1);
+        $age = null;
+        if (isset($passenger['age']) && $passenger['age'] !== '' && $passenger['age'] !== null) {
+            $age = (int) $passenger['age'];
+        }
+
+        $isInfant = str_contains($gstType, 'infant');
+        if ($age !== null && $age >= 0 && $age <= 1) {
+            $isInfant = true;
+        }
 
         $isMember = false;
         $isEmployee = false;
@@ -208,26 +215,38 @@ class RateCalculatorService
         }
 
         // Determine classification for fee application
+        $paxClass = 'guest';
         if ($isEmployee) {
             $paxClass = 'employee';
         } elseif ($isMember) {
             $paxClass = 'member';
         } elseif ($isInfant) {
             $paxClass = 'infant';
-        } else {
-            $paxClass = 'guest';
         }
 
         // Hangar Fee
         $hangar = 0;
-        $hangarApplies = $this->settings['fees']['hangar']['apply_to'] ?? ['member', 'guest'];
+        $hangarSettings = $this->settings['fees']['hangar'] ?? [];
+        $hangarApplies = $hangarSettings['apply_to'] ?? ['member', 'guest'];
+        
+        // Ensure $hangarApplies is always an array for in_array
+        if (!is_array($hangarApplies)) {
+            $hangarApplies = ['member', 'guest'];
+        }
+
         if (in_array($paxClass, $hangarApplies)) {
-            $hangar = (float) ($this->settings['fees']['hangar']['amount'] ?? 400);
+            $hangar = (float) ($hangarSettings['amount'] ?? 400);
         }
 
         // AOF Fee
         $aof = 0;
-        $aofApplies = $this->settings['fees']['aof']['apply_to'] ?? ['member', 'guest'];
+        $aofSettings = $this->settings['fees']['aof'] ?? [];
+        $aofApplies = $aofSettings['apply_to'] ?? ['member', 'guest'];
+        
+        if (!is_array($aofApplies)) {
+            $aofApplies = ['member', 'guest'];
+        }
+
         if (in_array($paxClass, $aofApplies)) {
             $checkInDate = $passenger['arrdt'] ?? $passenger['arrDt'] ?? null;
             $aof = $this->calculateAof($checkInDate);
@@ -235,10 +254,15 @@ class RateCalculatorService
 
         // Environmental Fee
         $env = 0;
-        $envApplies = $this->settings['fees']['environmental']['apply_to'] ?? ['guest'];
-        // Note: isInfant check is removed here because 'infant' is now a valid paxClass
+        $envSettings = $this->settings['fees']['environmental'] ?? [];
+        $envApplies = $envSettings['apply_to'] ?? ['guest'];
+        
+        if (!is_array($envApplies)) {
+            $envApplies = ['guest'];
+        }
+
         if (in_array($paxClass, $envApplies)) {
-            $env = (float) ($this->settings['fees']['environmental']['amount'] ?? 200);
+            $env = (float) ($envSettings['amount'] ?? 200);
         }
 
         return [

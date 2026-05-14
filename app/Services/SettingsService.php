@@ -66,7 +66,18 @@ class SettingsService
         try {
             $stored = Setting::getValue(self::KEY);
             if ($stored && is_array($stored)) {
-                return array_replace_recursive($this->getDefaultSettings(), $stored);
+                $defaults = $this->getDefaultSettings();
+                
+                // For apply_to arrays, we want to OVERWRITE defaults, not merge
+                // array_replace_recursive can sometimes cause issues with sequential arrays
+                foreach (['hangar', 'aof', 'environmental'] as $fee) {
+                    if (isset($stored['fees'][$fee]['apply_to']) && isset($defaults['fees'][$fee]['apply_to'])) {
+                        // Clear the default so the stored one wins completely
+                        unset($defaults['fees'][$fee]['apply_to']);
+                    }
+                }
+
+                return array_replace_recursive($defaults, $stored);
             }
         } catch (\Exception $e) {
             // DB not yet available (e.g. first migration) — fall back to defaults
