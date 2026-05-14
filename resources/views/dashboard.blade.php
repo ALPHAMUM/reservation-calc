@@ -773,7 +773,11 @@
                         </div>
                         <div class="multi-select-dropdown" id="statusDropdown">
                             @php $selectedStatuses = (array)($statusFilter ?? []); @endphp
-                            @foreach(['CONFIRMED', 'NOT-CONFIRMED', 'ARRIVED', 'CANCELLED', 'SYSTEM CANCELLED', 'PARTLY ARRIVED', 'PARTIAL SYS CANCELLED', 'PARTLY CANCELLED', 'NC-SYS CANCELLED'] as $st)
+                            <label class="multi-select-option" style="border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.5rem;">
+                                <input type="checkbox" id="selectAllStatus" {{ count($selectedStatuses) === 12 ? 'checked' : '' }}>
+                                <span style="font-weight: 600; color: var(--primary);">SELECT ALL</span>
+                            </label>
+                            @foreach(['CONFIRMED', 'NOT-CONFIRMED', 'ARRIVED', 'DEPARTED', 'CANCELLED', 'NOSHOW', 'SYSTEM CANCELLED', 'PARTLY ARRIVED', 'PARTIAL SYS CANCELLED', 'PARTLY CANCELLED', 'NC-SYS CANCELLED', 'VOID'] as $st)
                                 <label class="multi-select-option">
                                     <input type="checkbox" name="status_filter[]" value="{{ $st }}" {{ in_array($st, $selectedStatuses) ? 'checked' : '' }} class="status-option-checkbox">
                                     <span>{{ $st }}</span>
@@ -1136,6 +1140,18 @@
             }
         });
 
+        $('#selectAllStatus').on('change', function() {
+            $('.status-option-checkbox').prop('checked', this.checked);
+            updateStatusLabel();
+        });
+
+        $(document).on('change', '.status-option-checkbox', function() {
+            const allCount = $('.status-option-checkbox').length;
+            const checkedCount = $('.status-option-checkbox:checked').length;
+            $('#selectAllStatus').prop('checked', allCount === checkedCount);
+            updateStatusLabel();
+        });
+
         function updateStatusLabel() {
             const selected = [];
             $('.status-option-checkbox:checked').each(function() {
@@ -1176,12 +1192,15 @@
                 const inp  = cell.find('.rate-input');
                 const val  = parseFloat(inp.val()) || 0;
                 
+                /*
                 // Determine if FVN before adding to accTotal
                 const isFvn = (Math.round(val * 100) / 100 === 0.01 || Math.round(val * 100) / 100 === 0.02 || Math.round(val * 100) / 100 === 0.5);
                 
                 if (!isFvn) {
                     accTotal += val;
                 }
+                */
+                accTotal += val;
 
                 // Sync with __resData model if available
                 if (res && date) {
