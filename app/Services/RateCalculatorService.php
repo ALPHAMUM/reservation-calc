@@ -180,7 +180,9 @@ class RateCalculatorService
                     $breakdown['fvn_rate'] = $unitRate;
                 }
 
-                $acc += $dateRate;
+                if (!$isFVN) {
+                    $acc += $dateRate;
+                }
                 $accDates[$date] = [
                     'val' => $dateRate,
                     'breakdown' => $breakdown

@@ -1175,7 +1175,13 @@
                 const date = cell.data('date');
                 const inp  = cell.find('.rate-input');
                 const val  = parseFloat(inp.val()) || 0;
-                accTotal += val;
+                
+                // Determine if FVN before adding to accTotal
+                const isFvn = (Math.round(val * 100) / 100 === 0.01 || Math.round(val * 100) / 100 === 0.02 || Math.round(val * 100) / 100 === 0.5);
+                
+                if (!isFvn) {
+                    accTotal += val;
+                }
 
                 // Sync with __resData model if available
                 if (res && date) {
@@ -1188,7 +1194,6 @@
                     rObj.val = val;
                     
                     // Simple live breakdown calculation
-                    const isFvn = (Math.round(val * 100) / 100 === 0.01 || Math.round(val * 100) / 100 === 0.02 || Math.round(val * 100) / 100 === 0.5);
                     if (isFvn) {
                         rObj.breakdown = { is_fvn: true, fvn_rate: val, base: val, sc: 0, vat: 0, gross_share: val };
                     } else {
