@@ -5,6 +5,13 @@ use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
+<?php
+
+use App\Http\Controllers\ReservationController;
+use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
 | Web Routes
 |--------------------------------------------------------------------------
 */
@@ -12,6 +19,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', [ReservationController::class, 'index'])->name('dashboard');
 Route::get('/export', [ReservationController::class, 'export'])->name('export');
 Route::get('/print', [ReservationController::class, 'print'])->name('print');
+Route::get('/api/reservations/rates', [ReservationController::class, 'getRates']);
 
 use App\Http\Controllers\SettingsController;
 Route::get('/setup', [SettingsController::class, 'index'])->name('setup');

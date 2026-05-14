@@ -668,6 +668,7 @@ class ReservationController extends Controller
             echo '<td rowspan="2" class="hdr">HANGAR</td>';
             echo '<td rowspan="2" class="hdr">AVIATION OPERATIONAL FEE</td>';
             echo '<td rowspan="2" class="hdr" style="width: 100px;">ENVIRONMENTAL</td>';
+            echo '<td rowspan="2" class="hdr">TOTAL RATE</td>';
             echo '</tr>';
 
             // Header Row 2: date sub-columns + TOTAL
@@ -857,7 +858,12 @@ class ReservationController extends Controller
 
                 $passengerAccTotal = 0;
                 foreach ($dateCols as $d) {
-                    $passengerAccTotal += (float) ($rateDates[$d] ?? 0);
+                    $val = (float) ($rateDates[$d] ?? 0);
+                    $rv = round($val, 2);
+                    // FVN rates do not contribute to the total amount due
+                    if ($rv !== 0.01 && $rv !== 0.02 && $rv !== 0.5) {
+                        $passengerAccTotal += $val;
+                    }
                 }
                 $accGrandTotal += $passengerAccTotal;
 
@@ -866,10 +872,13 @@ class ReservationController extends Controller
                 $avi = (float) ($res['calculated_rates']['avi'] ?? 0);
                 $env = (float) ($res['calculated_rates']['env'] ?? 0);
 
+                $passengerTotalRate = $passengerAccTotal + $air + $han + $avi + $env;
+
                 echo '<td class="num">' . ($air > 0 ? number_format($air, 2) : '') . '</td>';
                 echo '<td class="num">' . ($han > 0 ? number_format($han, 2) : '') . '</td>';
                 echo '<td class="num">' . ($avi > 0 ? number_format($avi, 2) : '') . '</td>';
                 echo '<td class="num">' . ($env > 0 ? number_format($env, 2) : '') . '</td>';
+                echo '<td class="num" style="font-weight:bold">' . ($passengerTotalRate > 0 ? number_format($passengerTotalRate, 2) : '') . '</td>';
                 echo '</tr>';
                 flush();
             }
@@ -880,7 +889,7 @@ class ReservationController extends Controller
             echo '<tr style="font-weight:bold;background:#f1f5f9">';
             echo '<td colspan="2" style="text-align:right">TOTAL PAX:</td>';
             echo '<td style="text-align:center">' . $totalPax . '</td>';
-            echo '<td colspan="6" style="text-align:right">GRAND TOTALS:</td>';
+            echo '<td colspan="7" style="text-align:right">GRAND TOTALS:</td>';
             foreach ($dateCols as $d) {
                 echo '<td class="num">' . number_format($dateTotals[$d], 2) . '</td>';
             }
@@ -888,12 +897,15 @@ class ReservationController extends Controller
             echo '<td class="num">' . number_format($totals['han'], 2) . '</td>';
             echo '<td class="num">' . number_format($totals['avi'], 2) . '</td>';
             echo '<td class="num">' . number_format($totals['env'], 2) . '</td>';
+            
+            $overallGrandTotal = $accGrandTotal + $totals['air'] + $totals['han'] + $totals['avi'] + $totals['env'];
+            echo '<td class="num" style="font-weight:bold">' . number_format($overallGrandTotal, 2) . '</td>';
             echo '</tr>';
 
             $overallGrandTotal = $accGrandTotal + $totals['air'] + $totals['han'] + $totals['avi'] + $totals['env'];
 
-            $fullColspan = 10 + $dateCount + 4;
-            $labelColspan = 10 + $dateCount + 3;
+            $fullColspan = 10 + $dateCount + 5;
+            $labelColspan = 10 + $dateCount + 4;
 
             echo '<tr><td colspan="' . $fullColspan . '" style="border:none;">&nbsp;</td></tr>';
             echo '<tr>
@@ -904,7 +916,7 @@ class ReservationController extends Controller
 
             echo '<tr>
             <td colspan="9" style="text-align:right;border:none;font-style:italic;color:#64748b">Room Rates include service charge (10%) and VAT (12%)</td>
-            <td colspan="' . (count($dateCols) + 4) . '" style="border:none"></td>
+            <td colspan="' . (count($dateCols) + 5) . '" style="border:none"></td>
             </tr>';
 
             echo '<tr>

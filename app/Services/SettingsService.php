@@ -12,51 +12,51 @@ class SettingsService
     {
         return [
             'base_rates' => [
-                'member'   => 5600,
-                'guest'    => 12320,
+                'member' => 5600,
+                'guest' => 12320,
                 'employee' => 2800,
             ],
             'promo_rates' => [
-                'active'      => true,
-                'member'      => 4200,
-                'guest'       => 6200,
-                'employee'    => 2800,
-                'start_date'  => '2026-02-23',
-                'end_date'    => '2026-11-30',
+                'active' => true,
+                'member' => 4200,
+                'guest' => 6200,
+                'employee' => 2800,
+                'start_date' => '2026-02-23',
+                'end_date' => '2026-11-30',
                 'description' => '',
                 'peak_periods' => [
-                    ['label' => 'Holy Week',       'start' => '2026-03-29', 'end' => '2026-04-05'],
-                    ['label' => 'Halloween',        'start' => '2026-10-30', 'end' => '2026-11-02'],
-                    ['label' => 'Christmas/New Year','start' => '2026-12-20', 'end' => '2027-01-05'],
+                    ['label' => 'Holy Week', 'start' => '2026-03-29', 'end' => '2026-04-05'],
+                    ['label' => 'Halloween', 'start' => '2026-10-30', 'end' => '2026-11-02'],
+                    ['label' => 'Christmas/New Year', 'start' => '2026-12-20', 'end' => '2027-01-05'],
                 ],
             ],
             'fees' => [
                 'hangar' => [
-                    'amount'   => 400,
+                    'amount' => 400,
                     'apply_to' => ['member', 'guest'],
                 ],
                 'aof' => [
-                    'amount'         => 2000,
-                    'apply_to'       => ['member', 'guest'],
+                    'amount' => 2000,
+                    'apply_to' => ['member', 'guest'],
                     'active_periods' => [
-                        ['start' => '2026-04-01', 'end' => '2026-05-31', 'amount' => 2000], 
+                        ['start' => '2026-04-01', 'end' => '2026-05-31', 'amount' => 2000],
                     ],
                 ],
                 'environmental' => [
-                    'amount'   => 200,
+                    'amount' => 200,
                     'apply_to' => ['guest', 'infant'],
                 ],
             ],
             'discounts' => [
                 'vat_rate' => 12,
-                'sc_pwd'   => [
-                    'remove_vat'                  => true,
+                'sc_pwd' => [
+                    'remove_vat' => true,
                     'additional_discount_percent' => 20,
                 ],
             ],
             'infants' => [
                 'max_age_months' => 23,
-                'airfare_free'   => true,
+                'airfare_free' => true,
             ],
         ];
     }
@@ -67,7 +67,7 @@ class SettingsService
             $stored = Setting::getValue(self::KEY);
             if ($stored && is_array($stored)) {
                 $defaults = $this->getDefaultSettings();
-                
+
                 // For apply_to arrays, we want to OVERWRITE defaults, not merge
                 // array_replace_recursive can sometimes cause issues with sequential arrays
                 foreach (['hangar', 'aof', 'environmental'] as $fee) {

@@ -742,12 +742,12 @@
                 </div>
                 <div style="display: flex; gap: 0.5rem;">
                     <button type="submit" class="btn btn-primary">Refresh Data</button>
-                    <a href="{{ route('export', ['fromdate' => $fromDate, 'todate' => $toDate, 'resnolist' => $resNoList]) }}" class="btn btn-primary btn-export-excel" style="background: var(--success)">
+                    <button type="submit" formaction="{{ route('export') }}" class="btn btn-primary btn-export-excel" style="background: var(--success)">
                         Export Excel
-                    </a>
-                    <a href="{{ route('print', ['fromdate' => $fromDate, 'todate' => $toDate, 'resnolist' => $resNoList]) }}" target="_blank" class="btn btn-primary btn-export-pdf" style="background: #ef4444">
+                    </button>
+                    <button type="submit" formaction="{{ route('print') }}" formtarget="_blank" class="btn btn-primary btn-export-pdf" style="background: #ef4444">
                         Export PDF
-                    </a>
+                    </button>
                 </div>
             </div>
 

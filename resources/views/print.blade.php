@@ -148,6 +148,7 @@
                 <th rowspan="2">HANGAR</th>
                 <th rowspan="2">AVIATION OPERATIONAL FEE</th>
                 <th rowspan="2">ENVIRONMENTAL</th>
+                <th rowspan="2">TOTAL RATE</th>
             </tr>
             <tr class="hdr">
                 @foreach($dateCols as $d)
@@ -252,6 +253,8 @@
                     <td class="num">{{ ($res['calculated_rates']['han'] ?? 0) > 0 ? number_format($res['calculated_rates']['han'], 2) : '' }}</td>
                     <td class="num">{{ ($res['calculated_rates']['avi'] ?? 0) > 0 ? number_format($res['calculated_rates']['avi'], 2) : '' }}</td>
                     <td class="num">{{ ($res['calculated_rates']['env'] ?? 0) > 0 ? number_format($res['calculated_rates']['env'], 2) : '' }}</td>
+                    @php $passengerTotalRate = $passengerAccTotal + ($res['calculated_rates']['air'] ?? 0) + ($res['calculated_rates']['han'] ?? 0) + ($res['calculated_rates']['avi'] ?? 0) + ($res['calculated_rates']['env'] ?? 0); @endphp
+                    <td class="num" style="font-weight: bold;">{{ $passengerTotalRate > 0 ? number_format($passengerTotalRate, 2) : '' }}</td>
                     </tr>
             @endforeach
             <tr style="display: none;">
@@ -259,8 +262,8 @@
                     <?php
                         $overallGrandTotal = $accGrandTotal + $grandTotals['air'] + $grandTotals['han'] + $grandTotals['avi'] + $grandTotals['env'];
                         $totalPax = count($reservations);
-                        $fullColspan = 9 + count($dateCols) + 4;
-                        $labelColspan = 9 + count($dateCols) + 3;
+                        $fullColspan = 9 + count($dateCols) + 5;
+                        $labelColspan = 9 + count($dateCols) + 4;
                     ?>
                 </td>
             </tr>
@@ -277,6 +280,7 @@
                 <td class="num">{{ number_format($grandTotals['han'], 2) }}</td>
                 <td class="num">{{ number_format($grandTotals['avi'], 2) }}</td>
                 <td class="num">{{ number_format($grandTotals['env'], 2) }}</td>
+                <td class="num" style="font-weight: bold;">{{ number_format($overallGrandTotal, 2) }}</td>
             </tr>
             <tr><td colspan="{{ $fullColspan }}" style="border: none; padding: 10px;"></td></tr>
             <tr>
@@ -286,7 +290,7 @@
             </tr>
             <tr>
                 <td colspan="9" style="text-align: right; border: none; font-style: italic; color: #64748b; padding-bottom: 15px;">Room Rates include service charge (10%) and VAT (12%)</td>
-                <td colspan="{{ count($dateCols) + 4 }}" style="border: none;"></td>
+                <td colspan="{{ count($dateCols) + 5 }}" style="border: none;"></td>
             </tr>
             
             <tr>
