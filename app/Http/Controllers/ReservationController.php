@@ -858,11 +858,10 @@ class ReservationController extends Controller
 
                         $style = $accRowSpan > 1 ? ' style="text-align: center;"' : '';
                         echo '<td class="num" rowspan="' . $accRowSpan . '"' . $style . '>' . $formattedVal . '</td>';
-                        // If it was already summed (whole number), just add the value. 
-                        // If it's a unit rate (FVN), multiply by the group size.
+                        
                         // FVN rates (0.01, 0.02, 0.5) do not contribute to the grand total sum
                         if ($rv !== 0.01 && $rv !== 0.02 && $rv !== 0.5) {
-                            $dateTotals[$d] += $isWhole ? (float) $val : ((float) $val * $accRowSpan);
+                            $dateTotals[$d] += ((float) $val * $accRowSpan);
                         }
                     }
                 }

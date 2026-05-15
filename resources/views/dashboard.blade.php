@@ -1194,9 +1194,10 @@
                 
                 // Determine if FVN before adding to accTotal
                 const isFvn = (Math.round(val * 100) / 100 === 0.01 || Math.round(val * 100) / 100 === 0.02 || Math.round(val * 100) / 100 === 0.5);
+                const span = parseInt(cell.attr('rowspan')) || 1;
                 
                 if (!isFvn) {
-                    accTotal += val;
+                    accTotal += (val * span);
                 }
 
                 // Sync with __resData model if available
@@ -1667,48 +1668,7 @@
         });
     });
 
-    function recalculateRow(row) {
-        const cells = row.find('td.rate-cell');
-        let accTotal = 0;
-        
-        cells.each(function() {
-            const stayBlock = $(this).find('.stay-block');
-            if (stayBlock.length) {
-                const input = stayBlock.find('.rate-input');
-                const val = parseFloat(input.val()) || 0;
-                // FVN rates (0.01, 0.02, 0.5) count as 0 for the mathematical sum
-                if (val !== 0.01 && val !== 0.02 && val !== 0.5) {
-                    accTotal += val;
-                }
-            }
-        });
-        
-        const totalValSpan = row.find('.total-val');
-        const baseFees = parseFloat(totalValSpan.data('base-fees')) || 0;
-        const grandTotal = accTotal + baseFees;
-        
-        totalValSpan.text(grandTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}));
-        
-        // Sync with window.__resData model if it exists (for the Breakdown Modal)
-        const resBtn = row.find('.show-breakdown-btn');
-        if (resBtn.length) {
-            const resIdx = parseInt(resBtn.data('res-idx'), 10);
-            if (!isNaN(resIdx) && window.__resData && window.__resData[resIdx]) {
-                const res = window.__resData[resIdx];
-                cells.each(function() {
-                    const date = $(this).data('date');
-                    const input = $(this).find('.rate-input');
-                    if (input.length) {
-                        const val = parseFloat(input.val()) || 0;
-                        const rateObj = (res.rate || []).find(r => r.date === date);
-                        if (rateObj) {
-                            rateObj.val = val;
-                        }
-                    }
-                });
-            }
-        }
-    }
+
 
     window.openRateEditor = function(block) {
         const display = block.querySelector('.rate-display');

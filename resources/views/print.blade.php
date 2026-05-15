@@ -223,8 +223,7 @@
                                 // FVN rates (0.01, 0.02, 0.5) do not contribute to the grand total sum
                                 $rv = round($val, 2);
                                 if ($rv !== 0.01 && $rv !== 0.02 && $rv !== 0.5) {
-                                    $isWhole = ($rv == floor($rv));
-                                    $dateTotals[$d] += $isWhole ? (float) $val : ((float) $val * $span);
+                                    $dateTotals[$d] += ((float) $val * $span);
                                 }
 
                                 $displayVal = ($val > 0 ? number_format($val, 2) : '');
