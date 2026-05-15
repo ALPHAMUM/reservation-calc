@@ -1192,15 +1192,12 @@
                 const inp  = cell.find('.rate-input');
                 const val  = parseFloat(inp.val()) || 0;
                 
-                /*
                 // Determine if FVN before adding to accTotal
                 const isFvn = (Math.round(val * 100) / 100 === 0.01 || Math.round(val * 100) / 100 === 0.02 || Math.round(val * 100) / 100 === 0.5);
                 
                 if (!isFvn) {
                     accTotal += val;
                 }
-                */
-                accTotal += val;
 
                 // Sync with __resData model if available
                 if (res && date) {
