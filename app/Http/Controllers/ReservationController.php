@@ -668,7 +668,7 @@ class ReservationController extends Controller
             echo '<td rowspan="2" class="hdr">HANGAR</td>';
             echo '<td rowspan="2" class="hdr">AVIATION OPERATIONAL FEE</td>';
             echo '<td rowspan="2" class="hdr" style="width: 100px;">ENVIRONMENTAL</td>';
-            echo '<td rowspan="2" class="hdr">TOTAL RATE</td>';
+            echo '<td rowspan="2" class="hdr">TOTAL RATE (Per Occupant)</td>';
             echo '</tr>';
 
             // Header Row 2: date sub-columns + TOTAL
@@ -747,14 +747,17 @@ class ReservationController extends Controller
                                 $firstRow = $rows[$startIdx];
                                 $hasFvn = false;
                                 foreach ($firstRow['rateDates'] as $d => $v) {
-                                    $rv = round((float)$v, 2);
-                                    if (in_array($rv, [0.01, 0.02, 0.5])) { $hasFvn = true; break; }
+                                    $rv = round((float) $v, 2);
+                                    if (in_array($rv, [0.01, 0.02, 0.5])) {
+                                        $hasFvn = true;
+                                        break;
+                                    }
                                 }
 
                                 if ($hasFvn) {
-                                    $rows[$k]['accGroupTotals'][$d] = (float)($rows[$startIdx]['rateDates'][$d] ?? 0);
+                                    $rows[$k]['accGroupTotals'][$d] = (float) ($rows[$startIdx]['rateDates'][$d] ?? 0);
                                 } else {
-                                    $rows[$k]['accGroupTotals'][$d] = (float)($rows[$k]['rateDates'][$d] ?? 0);
+                                    $rows[$k]['accGroupTotals'][$d] = (float) ($rows[$k]['rateDates'][$d] ?? 0);
                                 }
                             }
 
@@ -842,17 +845,22 @@ class ReservationController extends Controller
                         $val = $accGroupTotals[$d] ?? 0;
                         $isWhole = (round($val, 2) == floor(round($val, 2)));
                         $rv = round($val, 2);
-                        if ($rv == 0.01) $formattedVal = '1 FVN';
-                        elseif ($rv == 0.02) $formattedVal = '1.5 FVN';
-                        elseif ($rv == 0.5) $formattedVal = '.5 FVN';
-                        elseif ($rv == 3700.01) $formattedVal = '3700.01';
-                        else $formattedVal = ($val > 0 ? number_format($val, 2) : '');
+                        if ($rv == 0.01)
+                            $formattedVal = '1 FVN';
+                        elseif ($rv == 0.02)
+                            $formattedVal = '1.5 FVN';
+                        elseif ($rv == 0.5)
+                            $formattedVal = '.5 FVN';
+                        elseif ($rv == 3700.01)
+                            $formattedVal = '3700.01';
+                        else
+                            $formattedVal = ($val > 0 ? number_format($val, 2) : '');
 
                         $style = $accRowSpan > 1 ? ' style="text-align: center;"' : '';
                         echo '<td class="num" rowspan="' . $accRowSpan . '"' . $style . '>' . $formattedVal . '</td>';
                         // If it was already summed (whole number), just add the value. 
                         // If it's a unit rate (FVN), multiply by the group size.
-                        $dateTotals[$d] += $isWhole ? (float)$val : ((float)$val * $accRowSpan);
+                        $dateTotals[$d] += $isWhole ? (float) $val : ((float) $val * $accRowSpan);
                     }
                 }
 
@@ -897,7 +905,7 @@ class ReservationController extends Controller
             echo '<td class="num">' . number_format($totals['han'], 2) . '</td>';
             echo '<td class="num">' . number_format($totals['avi'], 2) . '</td>';
             echo '<td class="num">' . number_format($totals['env'], 2) . '</td>';
-            
+
             $overallGrandTotal = $accGrandTotal + $totals['air'] + $totals['han'] + $totals['avi'] + $totals['env'];
             echo '<td class="num" style="font-weight:bold">' . number_format($overallGrandTotal, 2) . '</td>';
             echo '</tr>';
@@ -1032,8 +1040,10 @@ class ReservationController extends Controller
                 $localMetaMap = [];
                 foreach ($msgs as $m) {
                     $rn = trim($m['resNo'] ?? $m['conf'] ?? '');
-                    if ($rn === '') continue;
-                    if (!isset($localMetaMap[$rn])) $localMetaMap[$rn] = '';
+                    if ($rn === '')
+                        continue;
+                    if (!isset($localMetaMap[$rn]))
+                        $localMetaMap[$rn] = '';
                     $mCode = $m['rateCode'] ?? $m['rate_code'] ?? '';
                     if (is_string($mCode) && trim($mCode) !== '') {
                         $upper = strtoupper(trim($mCode));
@@ -1132,17 +1142,20 @@ class ReservationController extends Controller
             $i = 0;
             while ($i < $count) {
                 $startIdx = $i;
-                
+
                 $firstRow = $rows[$startIdx];
                 $basePax = $firstRow['calculated_rates']['base_pax'] ?? 4;
-                
+
                 // Determine if block should be merged (only for FVN)
                 $hasFvn = false;
                 foreach ($firstRow['rate'] ?? [] as $rt) {
-                    $rv = round((float)($rt['val'] ?? 0), 2);
-                    if (in_array($rv, [0.01, 0.02, 0.5])) { $hasFvn = true; break; }
+                    $rv = round((float) ($rt['val'] ?? 0), 2);
+                    if (in_array($rv, [0.01, 0.02, 0.5])) {
+                        $hasFvn = true;
+                        break;
+                    }
                 }
-                
+
                 if ($hasFvn) {
                     $mergeLimit = min($count, $startIdx + $basePax);
                     $span = $mergeLimit - $startIdx;

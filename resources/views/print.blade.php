@@ -150,7 +150,7 @@
                 <th rowspan="2">HANGAR</th>
                 <th rowspan="2">AVIATION OPERATIONAL FEE</th>
                 <th rowspan="2">ENVIRONMENTAL</th>
-                <th rowspan="2">TOTAL RATE</th>
+                <th rowspan="2">TOTAL RATE (Per Occupant)</th>
             </tr>
             <tr class="hdr">
                 @foreach($dateCols as $d)
@@ -212,62 +212,63 @@
                     <td>{{ $res['depdt'] ?? $res['depDt'] ?? '' }}</td>
 
                     @php 
-                                                                $passengerAccTotal = 0;
+                                                                                    $passengerAccTotal = 0;
                         $span = $res['acc_span'] ?? 1;
                         $groupTotals = $res['acc_group_totals'] ?? [];
                     @endphp
-                  @if($span > 0)
-                    @foreach($dateCols as $d)
-                        @php 
-                                                                $val = $groupTotals[$d] ?? 0;
-                            // FVN rates (0.01, 0.02, 0.5) do not contribute to the grand total sum
-                            $rv = round($val, 2);
-                            if ($rv !== 0.01 && $rv !== 0.02 && $rv !== 0.5) {
-                                $isWhole = ($rv == floor($rv));
-                                $dateTotals[$d] += $isWhole ? (float) $val : ((float) $val * $span);
-                            }
+                      @if($span > 0)
+                        @foreach($dateCols as $d)
+                            @php 
+                                                                                    $val = $groupTotals[$d] ?? 0;
+                                // FVN rates (0.01, 0.02, 0.5) do not contribute to the grand total sum
+                                $rv = round($val, 2);
+                                if ($rv !== 0.01 && $rv !== 0.02 && $rv !== 0.5) {
+                                    $isWhole = ($rv == floor($rv));
+                                    $dateTotals[$d] += $isWhole ? (float) $val : ((float) $val * $span);
+                                }
 
-                            $displayVal = ($val > 0 ? number_format($val, 2) : '');
-                            $rv = round($val, 2);
-                            if ($rv == 0.01)
-                                $displayVal = '1 FVN';
-                            elseif ($rv == 0.02)
-                                $displayVal = '1.5 FVN';
-                            elseif ($rv == 0.5)
-                                $displayVal = '.5 FVN';
-                            elseif ($rv == 3700.01)
-                                $displayVal = '3700.01';
-                        @endphp
-                        <td class="num {{ $span > 1 ? 'merged' : '' }}" rowspan="{{ $span }}">{{ $displayVal }}</td>
-                    @endforeach
-                @endif
+                                $displayVal = ($val > 0 ? number_format($val, 2) : '');
+                                $rv = round($val, 2);
+                                if ($rv == 0.01)
+                                    $displayVal = '1 FVN';
+                                elseif ($rv == 0.02)
+                                    $displayVal = '1.5 FVN';
+                                elseif ($rv == 0.5)
+                                    $displayVal = '.5 FVN';
+                                elseif ($rv == 3700.01)
+                                    $displayVal = '3700.01';
+                            @endphp
+                            <td class="num {{ $span > 1 ? 'merged' : '' }}" rowspan="{{ $span }}">{{ $displayVal }}</td>
+                        @endforeach
+                    @endif
 
-                                        @foreach($dateCols as $d)
-                                            @php 
-                                                                                            $val = $rateMap[$d] ?? 0;
-                                                $rv = round($val, 2);
-                                                // FVN rates do not contribute to the total amount due
-                                                if ($rv !== 0.01 && $rv !== 0.02 && $rv !== 0.5) {
-                                                    $passengerAccTotal += (float) $val;
-                                                }
-                                            @endphp
-                                        @endforeach
+                                            @foreach($dateCols as $d)
+                                                @php 
+                                                                                                                                        $val = $rateMap[$d] ?? 0;
+                                                    $rv = round($val, 2);
+                                                    // FVN rates do not contribute to the total amount due
+                                                    if ($rv !== 0.01 && $rv !== 0.02 && $rv !== 0.5) {
+                                                        $passengerAccTotal += (float) $val;
+                                                    }
+                                                @endphp
+                                            @endforeach
+                            @php $accGrandTotal += $passengerAccTotal; @endphp
+                                <td class="num">{{ ($res['calculated_rates']['air'] ?? 0) > 0 ? number_format($res['calculated_rates']['air'], 2) : '' }}</td>
+                                <td class="num">{{ ($res['calculated_rates']['han'] ?? 0) > 0 ? number_format($res['calculated_rates']['han'], 2) : '' }}</td>
+                                <td class="num">{{ ($res['calculated_rates']['avi'] ?? 0) > 0 ? number_format($res['calculated_rates']['avi'], 2) : '' }}</td>
+                                <td class="num">{{ ($res['calculated_rates']['env'] ?? 0) > 0 ? number_format($res['calculated_rates']['env'], 2) : '' }}</td>
 
-                        @php $accGrandTotal += $passengerAccTotal; @endphp
-                            <td class="num">{{ ($res['calculated_rates']['air'] ?? 0) > 0 ? number_format($res['calculated_rates']['air'], 2) : '' }}</td>
-                            <td class="num">{{ ($res['calculated_rates']['han'] ?? 0) > 0 ? number_format($res['calculated_rates']['han'], 2) : '' }}</td>
-                            <td class="num">{{ ($res['calculated_rates']['avi'] ?? 0) > 0 ? number_format($res['calculated_rates']['avi'], 2) : '' }}</td>
-                            <td class="num">{{ ($res['calculated_rates']['env'] ?? 0) > 0 ? number_format($res['calculated_rates']['env'], 2) : '' }}</td>
+                                @php $passengerTotalRate = $passengerAccTotal + ($res['calculated_rates']['air'] ?? 0) + ($res['calculated_rates']['han'] ?? 0) + ($res['calculated_rates']['avi'] ?? 0) + ($res['calculated_rates']['env'] ?? 0); @endphp
 
-                            @php $passengerTotalRate = $passengerAccTotal + ($res['calculated_rates']['air'] ?? 0) + ($res['calculated_rates']['han'] ?? 0) + ($res['calculated_rates']['avi'] ?? 0) + ($res['calculated_rates']['env'] ?? 0); @endphp
-                            <td class="num" style="font-weight: bold;">{{ $passengerTotalRate > 0 ? number_format($passengerTotalRate, 2) : '' }}</td>
-                            </tr>
+                                <td class="num" style="font-weight: bold;">{{ $passengerTotalRate > 0 ? number_format($passengerTotalRate, 2) : '' }}</td>
+                                </tr>
             @endforeach
 
     <tr style="display: none;">
 
-                                    <td>
-                    <?php
+                <td>
+
+                                        <?php
 $overallGrandTotal = $accGrandTotal + $grandTotals['air'] + $grandTotals['han'] + $grandTotals['avi'] + $grandTotals['env'];
 $totalPax = count($reservations);
 $fullColspan = 9 + count($dateCols) + 5;
@@ -292,7 +293,8 @@ $labelColspan = 9 + count($dateCols) + 4;
             </tr>
             <tr><td colspan="{{ $fullColspan }}" style="border: none; padding: 10px;"></td></tr>
 
-                                <tr>
+
+                                                    <tr>
                 <td colspan="9" style="text-align: right; border: none; font-weight: bold;">TOTAL AMOUNT DUE:</td>
                 <td colspan="{{ count($dateCols) }}" style="border: none;"></td>
 
