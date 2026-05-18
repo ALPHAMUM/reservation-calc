@@ -21,8 +21,22 @@ class RateCalculatorService
         }
 
         $isInfant = str_contains($gstType, 'infant');
-        if ($age !== null && $age >= 0 && $age <= 1) {
+        // Age-based infant detection: age < 2 identifies as infant
+        if ($age !== null && $age >= 0 && $age < 2) {
             $isInfant = true;
+        }
+        // DOB-based fallback: if no age set, calculate from dateOfBirth
+        if (!$isInfant && isset($passenger['dateOfBirth']) && $passenger['dateOfBirth'] !== '' && $passenger['dateOfBirth'] !== null) {
+            try {
+                $dob = new \DateTime($passenger['dateOfBirth']);
+                $today = new \DateTime();
+                $ageFromDob = (int) $today->diff($dob)->y;
+                if ($ageFromDob < 2) {
+                    $isInfant = true;
+                }
+            } catch (\Exception $e) {
+                // Ignore invalid date
+            }
         }
 
         $isMember = false;
@@ -192,7 +206,10 @@ class RateCalculatorService
 
         // Airfare Calculation
         $airfare = 0;
-        if (isset($passenger['rate_metadata']) && str_contains(strtoupper($passenger['rate_metadata']), 'AIRFARE:EXEMPT')) {
+        if ($isInfant) {
+            // Infants (age < 2) are exempt from airfare
+            $airfare = 0;
+        } elseif (isset($passenger['rate_metadata']) && str_contains(strtoupper($passenger['rate_metadata']), 'AIRFARE:EXEMPT')) {
             $airfare = 0;
         } else {
             $passengerClass = $isEmployee ? 'employee' : ($isMember ? 'member' : 'guest');
