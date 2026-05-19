@@ -73,8 +73,23 @@ class RateCalculatorService
         $isVilla = true;
         $roomTypeUpper = strtoupper($roomType);
         $metaUpper = strtoupper($rateMetadata);
-        if (str_contains($roomTypeUpper, 'RGNCY') || str_contains($roomTypeUpper, 'ROYL') || str_contains($roomTypeUpper, 'PV8') || str_contains($roomTypeUpper, 'SUITE') ||
-            str_contains($metaUpper, 'SUITE') || str_contains($metaUpper, 'ROYL') || str_contains($metaUpper, 'RGNCY')) {
+        if (
+            str_contains($roomTypeUpper, 'RGNCY') ||
+            str_contains($roomTypeUpper, 'RGNY') ||
+            str_contains($roomTypeUpper, 'REGENCY') ||
+            str_contains($roomTypeUpper, 'ROYL') ||
+            str_contains($roomTypeUpper, 'ROYAL') ||
+            str_contains($roomTypeUpper, 'PV8') ||
+            str_contains($roomTypeUpper, 'PRIVATE 8') ||
+            str_contains($roomTypeUpper, 'PRIVATE8') ||
+            str_contains($roomTypeUpper, 'SUITE') ||
+            str_contains($metaUpper, 'SUITE') ||
+            str_contains($metaUpper, 'ROYAL') ||
+            str_contains($metaUpper, 'ROYL') ||
+            str_contains($metaUpper, 'REGENCY') ||
+            str_contains($metaUpper, 'RGNCY') ||
+            str_contains($metaUpper, 'RGNY')
+        ) {
             $isVilla = false;
         }
 

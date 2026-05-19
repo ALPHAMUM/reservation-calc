@@ -131,6 +131,13 @@
         $dateTotals = array_fill_keys($dateCols, 0);
         $accGrandTotal = 0;
         $lastResNo = null;
+
+        // Pre-calculate rowspan counts per reservation number
+        $resGroupCounts = [];
+        foreach ($reservations as $r) {
+            $rn = trim((string)($r['resNo'] ?? $r['conf'] ?? ''));
+            $resGroupCounts[$rn] = ($resGroupCounts[$rn] ?? 0) + 1;
+        }
     @endphp
 
     <table>
@@ -169,7 +176,7 @@
         <tbody>
             @foreach($reservations as $idx => $res)
                 @php
-                    $resNo = $res['resNo'] ?? $res['conf'] ?? '';
+                    $resNo = trim((string)($res['resNo'] ?? $res['conf'] ?? ''));
                     $isFirst = ($resNo !== $lastResNo);
                     if ($isFirst)
                         $lastResNo = $resNo;
@@ -197,8 +204,10 @@
                     }
                 @endphp
                 <tr>
-                    <td>{{ $isFirst ? $resNo : '' }}</td>
-                    <td>{{ $isFirst ? ($res['village_name'] ?? $res['roomtyp'] ?? $res['roomType'] ?? '') : '' }}</td>
+                    @if($isFirst)
+                        <td rowspan="{{ $resGroupCounts[$resNo] ?? 1 }}" style="vertical-align: top; font-weight: 600;">{{ $resNo }}</td>
+                        <td rowspan="{{ $resGroupCounts[$resNo] ?? 1 }}" style="vertical-align: top;">{{ $res['village_name'] ?? $res['roomtyp'] ?? $res['roomType'] ?? '' }}</td>
+                    @endif
                     <td>{{ $res['gstName'] ?? $res['guestName'] ?? '' }}</td>
                     <td>
                         {{ $res['gstType'] ?? '' }}
@@ -211,55 +220,66 @@
                     <td>{{ $res['arrdt'] ?? $res['arrDt'] ?? '' }}</td>
                     <td>{{ $res['depdt'] ?? $res['depDt'] ?? '' }}</td>
 
-                    @php 
-                                                                                    $passengerAccTotal = 0;
-                        $span = $res['acc_span'] ?? 1;
+                    @php
+                        $span        = $res['acc_span'] ?? 1;
                         $groupTotals = $res['acc_group_totals'] ?? [];
-                    @endphp
-                      @if($span > 0)
-                        @foreach($dateCols as $d)
-                            @php 
-                                                                                    $val = $groupTotals[$d] ?? 0;
-                                // FVN rates (0.01, 0.02, 0.5) do not contribute to the grand total sum
-                                $rv = round($val, 2);
-                                if ($rv !== 0.01 && $rv !== 0.02 && $rv !== 0.5) {
-                                    $dateTotals[$d] += ((float) $val * $span);
-                                }
 
-                                $displayVal = ($val > 0 ? number_format($val, 2) : '');
+                        // Compute the total accommodation for this group (non-FVN only)
+                        $groupAccSum = 0;
+                        foreach ($groupTotals as $gv) {
+                            $grv = round((float)$gv, 2);
+                            if ($grv !== 0.01 && $grv !== 0.02 && $grv !== 0.5) {
+                                $groupAccSum += (float)$gv;
+                            }
+                        }
+                        // Each occupant's fair share of the shared accommodation
+                        $groupSize = max(1, (int) ($res['acc_group_size'] ?? $span ?? 1));
+                        $perOccupantAcc = $groupAccSum / $groupSize;
+                    @endphp
+                    @if($span > 0)
+                        @foreach($dateCols as $d)
+                            @php
+                                $val = $groupTotals[$d] ?? 0;
                                 $rv = round($val, 2);
-                                if ($rv == 0.01)
-                                    $displayVal = '1 FVN';
-                                elseif ($rv == 0.02)
-                                    $displayVal = '1.5 FVN';
-                                elseif ($rv == 0.5)
-                                    $displayVal = '.5 FVN';
-                                elseif ($rv == 3700.01)
-                                    $displayVal = '3700.01';
+                                $displayVal = ($val > 0 ? number_format($val, 2) : '');
+                                if ($rv == 0.01)        $displayVal = '1 FVN';
+                                elseif ($rv == 0.02)    $displayVal = '1.5 FVN';
+                                elseif ($rv == 0.5)     $displayVal = '.5 FVN';
+                                elseif ($rv == 3700.01) $displayVal = '3700.01';
                             @endphp
-                            <td class="num {{ $span > 1 ? 'merged' : '' }}" rowspan="{{ $span }}">{{ $displayVal }}</td>
+                            <td class="num {{ $span > 1 ? 'merged' : '' }}" rowspan="{{ $span }}" style="text-align: center;">{{ $displayVal }}</td>
                         @endforeach
                     @endif
 
-                                            @foreach($dateCols as $d)
-                                                @php 
-                                                                                                                                        $val = $rateMap[$d] ?? 0;
-                                                    $rv = round($val, 2);
-                                                    // FVN rates do not contribute to the total amount due
-                                                    if ($rv !== 0.01 && $rv !== 0.02 && $rv !== 0.5) {
-                                                        $passengerAccTotal += (float) $val;
-                                                    }
-                                                @endphp
-                                            @endforeach
-                            @php $accGrandTotal += $passengerAccTotal; @endphp
-                                <td class="num">{{ ($res['calculated_rates']['air'] ?? 0) > 0 ? number_format($res['calculated_rates']['air'], 2) : '' }}</td>
-                                <td class="num">{{ ($res['calculated_rates']['han'] ?? 0) > 0 ? number_format($res['calculated_rates']['han'], 2) : '' }}</td>
-                                <td class="num">{{ ($res['calculated_rates']['avi'] ?? 0) > 0 ? number_format($res['calculated_rates']['avi'], 2) : '' }}</td>
-                                <td class="num">{{ ($res['calculated_rates']['env'] ?? 0) > 0 ? number_format($res['calculated_rates']['env'], 2) : '' }}</td>
+                    {{-- Accumulate date totals only once per group (when the merged cell is first rendered) --}}
+                    @if($span > 0)
+                        @foreach($dateCols as $d)
+                            @php
+                                $val = $groupTotals[$d] ?? 0;
+                                $rv  = round($val, 2);
+                                // FVN marker rates do not contribute to grand totals
+                                if ($rv !== 0.01 && $rv !== 0.02 && $rv !== 0.5) {
+                                    $dateTotals[$d]    += (float) $val;
+                                }
+                            @endphp
+                        @endforeach
+                    @endif
+                    @php $accGrandTotal += $perOccupantAcc; @endphp
+                                <td style="text-align: center;">{{ ($res['calculated_rates']['air'] ?? 0) > 0 ? number_format($res['calculated_rates']['air'], 2) : '' }}</td>
+                                <td style="text-align: center;">{{ ($res['calculated_rates']['han'] ?? 0) > 0 ? number_format($res['calculated_rates']['han'], 2) : '' }}</td>
+                                <td style="text-align: center;">{{ ($res['calculated_rates']['avi'] ?? 0) > 0 ? number_format($res['calculated_rates']['avi'], 2) : '' }}</td>
+                                <td style="text-align: center;">{{ ($res['calculated_rates']['env'] ?? 0) > 0 ? number_format($res['calculated_rates']['env'], 2) : '' }}</td>
 
-                                @php $passengerTotalRate = $passengerAccTotal + ($res['calculated_rates']['air'] ?? 0) + ($res['calculated_rates']['han'] ?? 0) + ($res['calculated_rates']['avi'] ?? 0) + ($res['calculated_rates']['env'] ?? 0); @endphp
+                                @php
+                                    // Per-occupant total = distributed acc share + individual fees
+                                    $passengerTotalRate = $perOccupantAcc
+                                        + ($res['calculated_rates']['air'] ?? 0)
+                                        + ($res['calculated_rates']['han'] ?? 0)
+                                        + ($res['calculated_rates']['avi'] ?? 0)
+                                        + ($res['calculated_rates']['env'] ?? 0);
+                                @endphp
 
-                                <td class="num" style="font-weight: bold;">{{ $passengerTotalRate > 0 ? number_format($passengerTotalRate, 2) : '' }}</td>
+                                <td style="text-align: center; font-weight: bold;">{{ $passengerTotalRate > 0 ? number_format($passengerTotalRate, 2) : '' }}</td>
                                 </tr>
             @endforeach
 
@@ -282,13 +302,13 @@ $labelColspan = 9 + count($dateCols) + 4;
                 <td style="text-align: center;">{{ $totalPax }}</td>
                 <td colspan="6" style="text-align: right;">GRAND TOTALS:</td>
                 @foreach($dateCols as $d)
-                    <td class="num">{{ number_format($dateTotals[$d], 2) }}</td>
+                    <td class="num" style="text-align: center;">{{ number_format($dateTotals[$d], 2) }}</td>
                 @endforeach
-                <td class="num">{{ number_format($grandTotals['air'], 2) }}</td>
-                <td class="num">{{ number_format($grandTotals['han'], 2) }}</td>
-                <td class="num">{{ number_format($grandTotals['avi'], 2) }}</td>
-                <td class="num">{{ number_format($grandTotals['env'], 2) }}</td>
-                <td class="num" style="font-weight: bold;">{{ number_format($overallGrandTotal, 2) }}</td>
+                <td class="num" style="text-align: center;">{{ number_format($grandTotals['air'], 2) }}</td>
+                <td class="num" style="text-align: center;">{{ number_format($grandTotals['han'], 2) }}</td>
+                <td class="num" style="text-align: center;">{{ number_format($grandTotals['avi'], 2) }}</td>
+                <td class="num" style="text-align: center;">{{ number_format($grandTotals['env'], 2) }}</td>
+                <td class="num" style="font-weight: bold; text-align: center;">{{ number_format($overallGrandTotal, 2) }}</td>
             </tr>
             <tr><td colspan="{{ $fullColspan }}" style="border: none; padding: 10px;"></td></tr>
 

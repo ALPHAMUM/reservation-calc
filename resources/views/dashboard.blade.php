@@ -762,6 +762,9 @@
                         <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">To Date</label>
                         <input type="date" name="todate" value="{{ $toDate }}">
                     </div>
+                @else
+                    <input type="hidden" name="fromdate" value="{{ $fromDate }}">
+                    <input type="hidden" name="todate" value="{{ $toDate }}">
                 @endif
                 @if($viewType !== 'detail')
                 <div class="input-group">
@@ -837,50 +840,39 @@
                                 $accSpans = [];
                                 foreach($resGroups as $rn => $rows) {
                                     $count = count($rows);
-                                    $basePax = $rows[0]['calculated_rates']['base_pax'] ?? 4;
+                                    $basePax = 4;
+                                    foreach ($rows as $r) {
+                                        $bp = $r['calculated_rates']['base_pax'] ?? 4;
+                                        if ($bp === 8) {
+                                            $basePax = 8;
+                                            break;
+                                        }
+                                    }
                                     
                                     $curr = 0;
                                     while ($curr < $count) {
                                         $blockStart = $curr;
                                         $blockSize = min($count - $curr, $basePax);
                                         
-                                        // Check if this block has FVN
-                                        $hasFvn = false;
-                                        foreach ($rows[$blockStart]['rate'] ?? [] as $rt) {
-                                            $rv = round((float)($rt['val'] ?? 0), 2);
-                                            if (in_array($rv, [0.01, 0.02, 0.5])) { $hasFvn = true; break; }
-                                        }
-                                        
-                                        if ($hasFvn) {
-                                            for ($i = 0; $i < $blockSize; $i++) {
-                                                $span = ($i === 0) ? $blockSize : 0;
-                                                $totals = [];
-                                                if ($i === 0) {
-                                                    foreach($dateCols as $d) {
-                                                        $uv = 0;
-                                                        foreach($rows[$blockStart]['rate'] ?? [] as $rt) {
-                                                            if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
-                                                        }
-                                                        $totals[$d] = $uv;
-                                                    }
-                                                }
-                                                $accSpans[] = ['span' => $span, 'totals' => $totals];
+                                        $groupTotals = [];
+                                        foreach($dateCols as $d) {
+                                            $uv = 0;
+                                            foreach($rows[$blockStart]['rate'] ?? [] as $rt) {
+                                                if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
                                             }
-                                            $curr += $blockSize;
-                                        } else {
-                                            for ($i = 0; $i < $blockSize; $i++) {
-                                                $totals = [];
-                                                foreach($dateCols as $d) {
-                                                    $uv = 0;
-                                                    foreach($rows[$blockStart + $i]['rate'] ?? [] as $rt) {
-                                                        if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
-                                                    }
-                                                    $totals[$d] = $uv;
-                                                }
-                                                $accSpans[] = ['span' => 1, 'totals' => $totals];
-                                            }
-                                            $curr += $blockSize;
+                                            $groupTotals[$d] = $uv;
                                         }
+                                        for ($i = 0; $i < $blockSize; $i++) {
+                                            $span = ($i === 0) ? $blockSize : 0;
+                                            $totals = $groupTotals;
+                                            $accSpans[] = [
+                                                'span' => $span,
+                                                'totals' => $totals,
+                                                'group_size' => $blockSize,
+                                                'has_fvn' => false
+                                            ];
+                                        }
+                                        $curr += $blockSize;
                                     }
                                 }
                                 $renderedRes = [];
@@ -893,7 +885,7 @@
                                     $spanInfo = $accSpans[$idx] ?? ['span' => 1, 'totals' => []];
                                     $resDataForJs[$idx] = $res;
                                 @endphp
-                                <tr class="{{ $isFirstInGroup ? 'res-group-header' : '' }}">
+                                <tr class="{{ $isFirstInGroup ? 'res-group-header' : '' }}" data-res-no="{{ $resNo }}">
                                     @if($isFirstInGroup)
                                         <td rowspan="{{ count($resGroups[$resNo]) }}" class="sticky-col-1" style="vertical-align: top; padding-top: 1.5rem;">
                                             <span class="res-no">#{{ $resNo }}</span>
@@ -909,6 +901,14 @@
                                         <div style="font-size: 0.7rem; color: var(--text-muted)">
                                             {{ $res['gstType'] ?? 'Guest' }}
                                             @if(!empty($res['is_employee'])) (Emp) @endif
+                                            @php
+                                                $privCard = trim((string) ($res['privCard'] ?? $res['privcard'] ?? ''));
+                                                $privCardLower = strtolower($privCard);
+                                                $isValidCard = $privCard !== '' && !in_array($privCardLower, ['n', 'no', 'false', '0', 'none', 'null']);
+                                            @endphp
+                                            @if($isValidCard)
+                                                ({{ $privCard }})
+                                            @endif
                                         </div>
                                     </td>
                                     
@@ -960,8 +960,19 @@
                                     @endif
                                     
                                     @php
+                                            $spanInfo = $accSpans[$idx] ?? ['span' => 1, 'totals' => [], 'group_size' => 1, 'has_fvn' => false];
+                                            $groupAccSum = 0;
+                                            foreach(($spanInfo['totals'] ?? []) as $gv) {
+                                                $grv = round((float)$gv, 2);
+                                                if ($grv !== 0.01 && $grv !== 0.02 && $grv !== 0.5) {
+                                                    $groupAccSum += (float)$gv;
+                                                }
+                                            }
+                                            $groupSize = max(1, (int)($spanInfo['group_size'] ?? 1));
+                                            $perOccupantAcc = $groupAccSum / $groupSize;
+
                                             $r = $res['calculated_rates'] ?? [];
-                                            $total = ($r['acc'] ?? 0) + ($r['air'] ?? 0) + ($r['han'] ?? 0) + ($r['avi'] ?? 0) + ($r['env'] ?? 0);
+                                            $total = $perOccupantAcc + ($r['air'] ?? 0) + ($r['han'] ?? 0) + ($r['avi'] ?? 0) + ($r['env'] ?? 0);
                                             $baseFees = ($r['air'] ?? 0) + ($r['han'] ?? 0) + ($r['avi'] ?? 0) + ($r['env'] ?? 0);
                                     @endphp
                                     <td class="row-total" style="text-align: right; font-weight: 700; color: var(--primary);">
@@ -1181,26 +1192,21 @@
 
         // Live Editing Functions
         window.recalculateRow = function(row) {
-            let accTotal = 0;
-            const resBtn = $(row).find('.show-breakdown-btn');
+            const tr = $(row);
+            const resNo = tr.data('res-no');
+            const resBtn = tr.find('.show-breakdown-btn');
             const resIdx = resBtn.length ? parseInt(resBtn.data('res-idx'), 10) : -1;
             const res = (resIdx !== -1 && window.__resData) ? window.__resData[resIdx] : null;
 
-            $(row).find('.rate-cell').each(function() {
+            // 1. Sync target row's edited cell rate into model
+            tr.find('.rate-cell').each(function() {
                 const cell = $(this);
                 const date = cell.data('date');
                 const inp  = cell.find('.rate-input');
+                if (!inp.length) return;
                 const val  = parseFloat(inp.val()) || 0;
-                
-                // Determine if FVN before adding to accTotal
                 const isFvn = (Math.round(val * 100) / 100 === 0.01 || Math.round(val * 100) / 100 === 0.02 || Math.round(val * 100) / 100 === 0.5);
-                const span = parseInt(cell.attr('rowspan')) || 1;
-                
-                if (!isFvn) {
-                    accTotal += (val * span);
-                }
 
-                // Sync with __resData model if available
                 if (res && date) {
                     if (!res.rate) res.rate = [];
                     let rObj = res.rate.find(r => r.date === date);
@@ -1218,13 +1224,12 @@
                         let base, sc, vat, gross;
                         gross = val;
                         if (isDisc) {
-                            // Reverse engineer from disc logic (simplified)
-                            base = gross / 0.9; // 0.8 base + 0.1 sc
+                            base = gross / 0.9;
                             sc = base * 0.1;
                             vat = 0;
                             rObj.breakdown = { is_discounted: true, base: base, sc: sc, vat: 0, discount: base * 0.2, gross_share: base * 1.12 };
                         } else {
-                            base = gross / 1.22; // 1 base + 0.1 sc + 0.12 vat
+                            base = gross / 1.22;
                             sc = base * 0.1;
                             vat = base * 0.12;
                             rObj.breakdown = { is_discounted: false, base: base, sc: sc, vat: vat, gross_share: gross };
@@ -1232,17 +1237,68 @@
                     }
                 }
             });
-            
-            const totalSpan = $(row).find('.total-val');
-            const baseFees = parseFloat(totalSpan.data('base-fees')) || 0;
-            const grandTotal = accTotal + baseFees;
-            
-            totalSpan.text(grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-            
-            // Sync overall total in model
-            if (res) {
-                if (!res.calculated_rates) res.calculated_rates = {};
-                res.calculated_rates.acc = accTotal;
+
+            // 2. Perform group-wide calculation
+            if (resNo) {
+                const groupRows = $('tr[data-res-no="' + resNo + '"]');
+                const groupSize = Math.max(1, groupRows.length);
+
+                let groupAccTotal = 0;
+                groupRows.each(function() {
+                    $(this).find('.rate-cell').each(function() {
+                        const cell = $(this);
+                        const inp  = cell.find('.rate-input');
+                        if (!inp.length) return;
+                        const val  = parseFloat(inp.val()) || 0;
+                        const isFvn = (Math.round(val * 100) / 100 === 0.01 || Math.round(val * 100) / 100 === 0.02 || Math.round(val * 100) / 100 === 0.5);
+                        if (!isFvn) {
+                            groupAccTotal += val;
+                        }
+                    });
+                });
+
+                const perOccupantAcc = groupAccTotal / groupSize;
+
+                // Update the total rate and sync the model for all rows in the group
+                groupRows.each(function() {
+                    const currentRow = $(this);
+                    const totalSpan = currentRow.find('.total-val');
+                    const baseFees = parseFloat(totalSpan.data('base-fees')) || 0;
+                    const passengerTotal = perOccupantAcc + baseFees;
+
+                    totalSpan.text(passengerTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
+                    const rowResBtn = currentRow.find('.show-breakdown-btn');
+                    const rowResIdx = rowResBtn.length ? parseInt(rowResBtn.data('res-idx'), 10) : -1;
+                    const rowRes = (rowResIdx !== -1 && window.__resData) ? window.__resData[rowResIdx] : null;
+                    if (rowRes) {
+                        if (!rowRes.calculated_rates) rowRes.calculated_rates = {};
+                        rowRes.calculated_rates.acc = perOccupantAcc;
+                    }
+                });
+            } else {
+                // Fallback for single row
+                let accTotal = 0;
+                tr.find('.rate-cell').each(function() {
+                    const cell = $(this);
+                    const inp  = cell.find('.rate-input');
+                    if (!inp.length) return;
+                    const val  = parseFloat(inp.val()) || 0;
+                    const isFvn = (Math.round(val * 100) / 100 === 0.01 || Math.round(val * 100) / 100 === 0.02 || Math.round(val * 100) / 100 === 0.5);
+                    if (!isFvn) {
+                        accTotal += val;
+                    }
+                });
+                const totalSpan = tr.find('.total-val');
+                const baseFees = parseFloat(totalSpan.data('base-fees')) || 0;
+                const grandTotal = accTotal + baseFees;
+                
+                totalSpan.text(grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                
+                if (res) {
+                    if (!res.calculated_rates) res.calculated_rates = {};
+                    res.calculated_rates.acc = accTotal;
+                }
             }
 
             updateGlobalStats();
@@ -1520,12 +1576,24 @@
             const idx = $(this).data('res-idx');
             const res = window.__resData[idx];
             if (!res) return;
+
+            // Find all occupants of this reservation group to compute distributed share
+            const groupRows = window.__resData.filter(item => (item.resNo || item.conf) === (res.resNo || res.conf));
+            const groupSize = Math.max(1, groupRows.length);
+            const primaryRes = groupRows[0] || res;
+            const ratesToUse = primaryRes.rate || res.rate || [];
+
+            const privCard = (res.privCard || res.privcard || '').trim();
+            const privCardLower = privCard.toLowerCase();
+            const isValidCard = privCard !== '' && !['n', 'no', 'false', '0', 'none', 'null'].includes(privCardLower);
+
             let html = `
                 <div style="margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border);">
                     <div style="font-weight: bold; font-size: 1.25rem; color: var(--primary);">${res.gstName || res.guestName || 'Unknown'}</div>
                     <div style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;">
                         Reservation <span style="color: white; font-weight: 600;">#${res.resNo || res.conf}</span> | Unit: <span style="color: white; font-weight: 600;">${res.village_name || 'N/A'}</span>
                         ${res.is_employee ? ' | <span class="badge badge-member" style="font-size: 0.65rem;">Employee</span>' : ''}
+                        ${isValidCard ? ` | <span class="badge badge-member" style="font-size: 0.65rem; background: var(--primary); color: black;">${privCard}</span>` : ''}
                     </div>
                 </div>
                 <table class="breakdown-table">
@@ -1544,12 +1612,21 @@
             let overallTotal = 0;
             let hasDiscount = false;
 
-            (res.rate || []).forEach(r => {
+            (ratesToUse || []).forEach(r => {
                 const b = r.breakdown;
                 if (!b) return;
 
-                if (!b.is_fvn) {
-                    overallTotal += parseFloat(r.val || 0);
+                const isFvn = (Math.round(r.val * 100) / 100 === 0.01 || Math.round(r.val * 100) / 100 === 0.02 || Math.round(r.val * 100) / 100 === 0.5);
+
+                const dailyVal = isFvn ? r.val : (parseFloat(r.val || 0) / groupSize);
+                const baseVal = parseFloat(b.base || 0) / groupSize;
+                const scVal = parseFloat(b.sc || 0) / groupSize;
+                const vatVal = parseFloat(b.vat || 0) / groupSize;
+                const discVal = parseFloat(b.discount || 0) / groupSize;
+                const grossShareVal = parseFloat(b.gross_share || 0) / groupSize;
+
+                if (!isFvn) {
+                    overallTotal += dailyVal;
                 }
                 if (b.is_discounted) hasDiscount = true;
 
@@ -1557,18 +1634,18 @@
                 let detailHtml = '';
                 if (b.is_discounted) {
                     detailHtml = `
-                        <div style="font-size: 0.7rem; color: #4ade80;">- 20% Disc: ₱${parseFloat(b.discount).toFixed(2)}</div>
-                        <div style="font-size: 0.7rem; color: var(--text-muted);">+ 10% SC: ₱${parseFloat(b.sc).toFixed(2)}</div>
+                        <div style="font-size: 0.7rem; color: #4ade80;">- 20% Disc: ₱${discVal.toFixed(2)}</div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">+ 10% SC: ₱${scVal.toFixed(2)}</div>
                         <div style="font-size: 0.7rem; color: #f87171;">VAT EXEMPT</div>
                     `;
                 } else {
                     detailHtml = `
-                        <div style="font-size: 0.7rem; color: var(--text-muted);">+ 10% SC: ₱${parseFloat(b.sc).toFixed(2)}</div>
-                        <div style="font-size: 0.7rem; color: var(--text-muted);">+ 12% VAT: ₱${parseFloat(b.vat).toFixed(2)}</div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">+ 10% SC: ₱${scVal.toFixed(2)}</div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">+ 12% VAT: ₱${vatVal.toFixed(2)}</div>
                     `;
                 }
 
-                if (b.is_fvn) {
+                if (isFvn) {
                     const fvnLabelMap = { 0.01: '1', 0.02: '1.5', 0.5: '.5' };
                     const fvnLabel = fvnLabelMap[b.fvn_rate] || b.fvn_rate;
                     html += `
@@ -1589,13 +1666,13 @@
                         <tr>
                             <td style="white-space: nowrap; font-weight: 600;">${dateStr}</td>
                             <td>
-                                <div style="font-weight: 500;">${b.is_discounted ? 'Senior/PWD' : 'Regular'}</div>
-                                <div style="font-size: 0.65rem; color: var(--text-muted);">Gross: ₱${parseFloat(b.gross_share).toLocaleString(undefined, {minimumFractionDigits: 2})}</div>
+                                <div style="font-weight: 500;">${b.is_discounted ? (isValidCard ? privCard : 'Senior/PWD') : 'Regular'} ${groupSize > 1 ? '<span style="font-size: 0.7rem; color: var(--primary);">(' + groupSize + '-Pax Share)</span>' : ''}</div>
+                                <div style="font-size: 0.65rem; color: var(--text-muted);">Gross Share: ₱${grossShareVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
                             </td>
-                            <td>₱${parseFloat(b.base).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                            <td>₱${baseVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                             <td>${detailHtml}</td>
                             <td style="font-weight: bold; text-align: right; color: white;">
-                                ₱${parseFloat(r.val).toLocaleString(undefined, {minimumFractionDigits: 2})}
+                                ₱${dailyVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                             </td>
                         </tr>
                     `;
