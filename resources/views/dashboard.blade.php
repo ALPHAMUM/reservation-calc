@@ -921,7 +921,7 @@
                                                 @if(isset($spanInfo['totals'][$date]))
                                                     @php $dayRate = (float)($spanInfo['totals'][$date]); @endphp
                                                     @php $isFvnRate = in_array(round($dayRate, 2), [0.01, 0.02, 0.5]); @endphp
-                                                    <div class="stay-block" draggable="true" onclick="openRateEditor(this)">
+                                                    <div class="stay-block" draggable="true">
                                                         {{-- Display mode --}}
                                                         <span class="rate-display {{ $isFvnRate ? 'fvn-display' : '' }}">
                                                             @if(round($dayRate, 2) == 0.01)
@@ -936,21 +936,6 @@
                                                                 {{ number_format($dayRate, 2) }}
                                                             @endif
                                                         </span>
-                                                        {{-- Edit mode (hidden by default) --}}
-                                                            <div class="rate-editor" style="display:none;">
-                                                                <div class="quick-fvn-options" style="display: flex; gap: 4px; margin-bottom: 8px;" onclick="event.stopPropagation()">
-                                                                    <button type="button" class="btn-fvn" onclick="applyQuickRate(this, '0.01'); event.stopPropagation();">.01</button>
-                                                                    <button type="button" class="btn-fvn" onclick="applyQuickRate(this, '0.02'); event.stopPropagation();">.02</button>
-                                                                    <button type="button" class="btn-fvn" onclick="applyQuickRate(this, '0.5'); event.stopPropagation();">.5</button>
-                                                                    <button type="button" class="btn-fvn" onclick="toggleCustomInput(this); event.stopPropagation();" style="background: var(--primary)">₱</button>
-                                                                </div>
-                                                                <input type="number" class="rate-input" value="{{ $dayRate }}" step="0.01"
-                                                                       style="{{ $isFvnRate ? 'display:none;' : 'width: 80px;' }}"
-                                                                       onclick="event.stopPropagation()"
-                                                                       onblur="closeRateEditor(this)"
-                                                                       onkeydown="if(event.key==='Enter') { closeRateEditor(this); event.stopPropagation(); }">
-                                                            </div>
-                                                        <button type="button" class="remove-btn" onclick="removeRate(this); event.stopPropagation();">&times;</button>
                                                     </div>
                                                 @else
                                                     <button type="button" class="add-cell-btn" onclick="addRate(this)">+</button>
@@ -1431,22 +1416,8 @@
             }
 
             cell.html(`
-                <div class="stay-block" onclick="openRateEditor(this)">
+                <div class="stay-block">
                     <span class="rate-display ${isFvn ? 'fvn-display' : ''}">${defaultDisplay}</span>
-                    <div class="rate-editor" style="display:none;">
-                        <div class="quick-fvn-options" style="display: flex; gap: 4px; margin-bottom: 8px;" onclick="event.stopPropagation()">
-                            <button type="button" class="btn-fvn" onclick="applyQuickRate(this, '0.01'); event.stopPropagation();">.01</button>
-                            <button type="button" class="btn-fvn" onclick="applyQuickRate(this, '0.02'); event.stopPropagation();">.02</button>
-                            <button type="button" class="btn-fvn" onclick="applyQuickRate(this, '0.5'); event.stopPropagation();">.5</button>
-                            <button type="button" class="btn-fvn" onclick="toggleCustomInput(this); event.stopPropagation();" style="background: var(--primary)">₱</button>
-                        </div>
-                        <input type="number" class="rate-input" value="${defaultInputVal}" step="0.01"
-                               style="${isFvn ? 'display:none;' : 'width: 80px;'}"
-                               onclick="event.stopPropagation()"
-                               onblur="closeRateEditor(this)"
-                               onkeydown="if(event.key==='Enter') { closeRateEditor(this); event.stopPropagation(); }">
-                    </div>
-                    <button type="button" class="remove-btn" onclick="removeRate(this); event.stopPropagation();">&times;</button>
                 </div>
             `);
             
@@ -1748,13 +1719,8 @@
 
 
     window.openRateEditor = function(block) {
-        const display = block.querySelector('.rate-display');
-        const editor  = block.querySelector('.rate-editor');
-        if (!editor) return;
-        display.style.display = 'none';
-        editor.style.display = 'flex';
-        editor.style.flexDirection = 'column'; // Stack buttons and input
-        editor.style.alignItems = 'center';
+        // Disabled for now
+        return;
     }
 
     window.closeRateEditor = function(inp) {
