@@ -582,6 +582,7 @@ class ReservationController extends Controller
             echo '.hdr  { background-color: #bcd2ee; font-weight: bold; text-align: center; color: #1e293b; }';
             echo '.dh   { background-color: #bcd2ee; font-weight: bold; text-align: center; color: #1e293b; }';
             echo '.num  { mso-number-format:"\#\,\#\#0\.00"; text-align: right; }';
+            echo '.num-center { mso-number-format:"\#\,\#\#0\.00"; text-align: center; }';
             echo '</style></head><body><table border="1">';
 
             // Header Row 1: fixed cols (rowspan=2) + ACCOMMODATION (colspan = dateCount+1) + fee cols (rowspan=2)
@@ -590,7 +591,6 @@ class ReservationController extends Controller
             echo '<td rowspan="2" class="hdr">VILLAGE</td>';
             echo '<td rowspan="2" class="hdr" style="width: 150px;">OCCUPANTS</td>';
             echo '<td rowspan="2" class="hdr">RELATION</td>';
-            echo '<td rowspan="2" class="hdr">RATE CODE</td>';
             echo '<td rowspan="2" class="hdr">AGE</td>';
             echo '<td rowspan="2" class="hdr">BIRTHDAY</td>';
             echo '<td rowspan="2" class="hdr">NATIONALITY</td>';
@@ -717,7 +717,6 @@ class ReservationController extends Controller
                 }
 
                 echo '<td>' . $relation . '</td>';
-                echo '<td style="text-align: center;">' . htmlspecialchars($res['rate_metadata'] ?? '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['age'] ?? '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['dateOfBirth'] ?? '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['nationality_name'] ?? $res['nationality'] ?? '') . '</td>';
@@ -770,11 +769,11 @@ class ReservationController extends Controller
 
                 $passengerTotalRate = $passengerAccTotal + $air + $han + $avi + $env;
 
-                echo '<td class="num">' . ($air > 0 ? number_format($air, 2) : '') . '</td>';
-                echo '<td class="num">' . ($han > 0 ? number_format($han, 2) : '') . '</td>';
-                echo '<td class="num">' . ($avi > 0 ? number_format($avi, 2) : '') . '</td>';
-                echo '<td class="num">' . ($env > 0 ? number_format($env, 2) : '') . '</td>';
-                echo '<td class="num" style="font-weight:bold">' . ($passengerTotalRate > 0 ? number_format($passengerTotalRate, 2) : '') . '</td>';
+                echo '<td class="num-center">' . ($air > 0 ? number_format($air, 2) : '') . '</td>';
+                echo '<td class="num-center">' . ($han > 0 ? number_format($han, 2) : '') . '</td>';
+                echo '<td class="num-center">' . ($avi > 0 ? number_format($avi, 2) : '') . '</td>';
+                echo '<td class="num-center">' . ($env > 0 ? number_format($env, 2) : '') . '</td>';
+                echo '<td class="num-center" style="font-weight:bold">' . ($passengerTotalRate > 0 ? number_format($passengerTotalRate, 2) : '') . '</td>';
                 echo '</tr>';
                 flush();
             }
@@ -785,7 +784,7 @@ class ReservationController extends Controller
             echo '<tr style="font-weight:bold;background:#f1f5f9">';
             echo '<td colspan="2" style="text-align:right">TOTAL PAX:</td>';
             echo '<td style="text-align:center">' . $totalPax . '</td>';
-            echo '<td colspan="7" style="text-align:right">GRAND TOTALS:</td>';
+            echo '<td colspan="6" style="text-align:right">GRAND TOTALS:</td>';
             foreach ($dateCols as $d) {
                 echo '<td class="num" style="text-align:center;">' . number_format($dateTotals[$d], 2) . '</td>';
             }
@@ -800,39 +799,39 @@ class ReservationController extends Controller
 
             $overallGrandTotal = $accGrandTotal + $totals['air'] + $totals['han'] + $totals['avi'] + $totals['env'];
 
-            $fullColspan = 10 + $dateCount + 5;
-            $labelColspan = 10 + $dateCount + 4;
+            $fullColspan = 9 + $dateCount + 5;
+            $labelColspan = 9 + $dateCount + 4;
 
             echo '<tr><td colspan="' . $fullColspan . '" style="border:none;">&nbsp;</td></tr>';
             echo '<tr>
-            <td colspan="9" style="text-align:right;border:none;font-weight:bold">TOTAL AMOUNT DUE:</td>
+            <td colspan="8" style="text-align:right;border:none;font-weight:bold">TOTAL AMOUNT DUE:</td>
             <td colspan="' . count($dateCols) . '" style="border:none"></td>
             <td colspan="4" class="num" style="border:none;font-weight:bold">&#8369;' . number_format($overallGrandTotal, 2) . '</td>
             </tr>';
 
             echo '<tr>
-            <td colspan="9" style="text-align:right;border:none;font-style:italic;color:#64748b">Room Rates include service charge (10%) and VAT (12%)</td>
+            <td colspan="8" style="text-align:right;border:none;font-style:italic;color:#64748b">Room Rates include service charge (10%) and VAT (12%)</td>
             <td colspan="' . (count($dateCols) + 5) . '" style="border:none"></td>
             </tr>';
 
             echo '<tr>
-            <td colspan="9" style="text-align:right;border:none;font-weight:bold">LESS PAYMENT/S:</td>
+            <td colspan="8" style="text-align:right;border:none;font-weight:bold">LESS PAYMENT/S:</td>
             <td colspan="' . count($dateCols) . '" style="border:none"></td>
             <td colspan="4" style="border:none"></td>
             </tr>';
 
             echo '<tr>
-            <td colspan="9" style="text-align:right;border:none">OVERPAYMENT/CREDIT FROM FOLIO</td>
+            <td colspan="8" style="text-align:right;border:none">OVERPAYMENT/CREDIT FROM FOLIO</td>
             <td colspan="' . count($dateCols) . '" style="border:none"></td>
             </tr>';
 
             echo '<tr>
-            <td colspan="9" style="text-align:right;border:none;padding-bottom:20px">COLLECTION RECEIPT</td>
+            <td colspan="8" style="text-align:right;border:none;padding-bottom:20px">COLLECTION RECEIPT</td>
             <td colspan="' . count($dateCols) . '" style="border:none"></td>
             </tr>';
 
             echo '<tr>
-            <td colspan="9" style="text-align:right;border:none;font-weight:bold">BALANCE TO SETTLE</td>
+            <td colspan="8" style="text-align:right;border:none;font-weight:bold">BALANCE TO SETTLE</td>
             <td colspan="' . count($dateCols) . '" style="border:none"></td>
             <td colspan="4" class="num" style="border:none;font-weight:bold;border-top:1px solid #000">&#8369;' . number_format($overallGrandTotal, 2) . '</td>
             </tr>';
