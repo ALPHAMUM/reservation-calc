@@ -713,7 +713,7 @@ class ReservationController extends Controller
                     echo '<td rowspan="' . $resSpan . '" style="vertical-align:middle; text-align:center; font-weight:600">' . htmlspecialchars($resNo) . '</td>';
                     echo '<td rowspan="' . $resSpan . '" style="vertical-align:middle; text-align:center;">' . htmlspecialchars($res['village_name'] ?? $res['roomtyp'] ?? $res['roomType'] ?? '') . '</td>';
                 }
-                echo '<td>' . htmlspecialchars($res['gstName'] ?? $res['guestName'] ?? '') . '</td>';
+                echo '<td style="text-align:center">' . htmlspecialchars($res['gstName'] ?? $res['guestName'] ?? '') . '</td>';
                 $privCard = trim((string) ($res['privCard'] ?? $res['privcard'] ?? ''));
                 $privCardLower = strtolower($privCard);
                 $isValidCard = $privCard !== '' && !in_array($privCardLower, ['n', 'no', 'false', '0', 'none', 'null']);
@@ -727,7 +727,7 @@ class ReservationController extends Controller
                 }
 
                 echo '<td style="text-align:center">' . $relation . '</td>';
-                echo '<td>' . htmlspecialchars($res['age'] ?? '') . '</td>';
+                echo '<td style="text-align:center">' . htmlspecialchars($res['age'] ?? '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['dateOfBirth'] ?? '') . '</td>';
                 echo '<td style="text-align:center">' . strtoupper(htmlspecialchars($res['nationality_name'] ?? $res['nationality'] ?? '')) . '</td>';
                 echo '<td>' . htmlspecialchars($res['arrdt'] ?? $res['arrDt'] ?? '') . '</td>';
