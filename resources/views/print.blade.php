@@ -217,8 +217,8 @@
                     <td>{{ $res['age'] ?? '' }}</td>
                     <td>{{ $res['dateOfBirth'] ?? '' }}</td>
                     <td style="text-align: center; text-transform: uppercase;">{{ $res['nationality_name'] ?? $res['nationality'] ?? '' }}</td>
-                    <td>{{ $res['arrdt'] ?? $res['arrDt'] ?? '' }}</td>
-                    <td>{{ $res['depdt'] ?? $res['depDt'] ?? '' }}</td>
+                    <td>{{ ($d = $res['arrdt'] ?? $res['arrDt'] ?? '') ? date('m/d/Y', strtotime($d)) : '' }}</td>
+                    <td>{{ ($d = $res['depdt'] ?? $res['depDt'] ?? '') ? date('m/d/Y', strtotime($d)) : '' }}</td>
 
                     @php
                         $span        = $res['acc_span'] ?? 1;

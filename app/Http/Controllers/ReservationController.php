@@ -730,8 +730,10 @@ class ReservationController extends Controller
                 echo '<td style="text-align:center">' . htmlspecialchars($res['age'] ?? '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['dateOfBirth'] ?? '') . '</td>';
                 echo '<td style="text-align:center">' . strtoupper(htmlspecialchars($res['nationality_name'] ?? $res['nationality'] ?? '')) . '</td>';
-                echo '<td>' . htmlspecialchars($res['arrdt'] ?? $res['arrDt'] ?? '') . '</td>';
-                echo '<td>' . htmlspecialchars($res['depdt'] ?? $res['depDt'] ?? '') . '</td>';
+                $arrDt = $res['arrdt'] ?? $res['arrDt'] ?? '';
+                $depDt = $res['depdt'] ?? $res['depDt'] ?? '';
+                echo '<td style=\'mso-number-format:"\@";\'>' . ($arrDt ? date('m/d/Y', strtotime($arrDt)) : '') . '</td>';
+                echo '<td style=\'mso-number-format:"\@";\'>' . ($depDt ? date('m/d/Y', strtotime($depDt)) : '') . '</td>';
 
                 if ($accRowSpan > 0) {
                     foreach ($dateCols as $d) {
