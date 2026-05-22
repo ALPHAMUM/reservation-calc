@@ -597,11 +597,11 @@ class ReservationController extends Controller
             echo '<td rowspan="2" class="hdr">CHECK-IN</td>';
             echo '<td rowspan="2" class="hdr">CHECK-OUT</td>';
             echo '<td colspan="' . $dateCount . '" class="dh">ACCOMMODATION</td>';
-            echo '<td rowspan="2" class="hdr">AIRFARE</td>';
-            echo '<td rowspan="2" class="hdr">HANGAR</td>';
-            echo '<td rowspan="2" class="hdr">AVIATION OPERATIONAL FEE</td>';
-            echo '<td rowspan="2" class="hdr" style="width: 100px;">ENVIRONMENTAL</td>';
-            echo '<td rowspan="2" class="hdr">TOTAL RATE (Per Occupant)</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 100px; word-wrap:normal;">AIRFARE</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 100px; word-wrap:normal;">HANGAR FEE</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 100px; word-wrap:normal;">AVIATION OPERATIONAL FEE</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 100px; word-wrap:normal;">ENVIRONMENTAL FEE</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 100px; word-wrap:normal;">TOTAL RATE (Per Occupant)</td>';
             echo '</tr>';
 
             // Header Row 2: date sub-columns + TOTAL
@@ -683,6 +683,13 @@ class ReservationController extends Controller
             $accGrandTotal = 0;
             $last = null;
 
+            // Pre-calculate rowspan counts per reservation number for RSVN# and Village merging
+            $resGroupCounts = [];
+            foreach ($allRows as $r) {
+                $rn = trim($r['res']['resNo'] ?? $r['res']['conf'] ?? '');
+                $resGroupCounts[$rn] = ($resGroupCounts[$rn] ?? 0) + 1;
+            }
+
             foreach ($allRows as $idx => $row) {
                 $res = $row['res'];
                 $rates = $row['rates'];
@@ -701,25 +708,28 @@ class ReservationController extends Controller
                 $totals['env'] += (float) ($rates['env'] ?? 0);
 
                 echo '<tr>';
-                echo '<td>' . ($isFirst ? htmlspecialchars($resNo) : '') . '</td>';
-                echo '<td>' . ($isFirst ? htmlspecialchars($res['village_name'] ?? $res['roomtyp'] ?? $res['roomType'] ?? '') : '') . '</td>';
+                if ($isFirst) {
+                    $resSpan = $resGroupCounts[$resNo] ?? 1;
+                    echo '<td rowspan="' . $resSpan . '" style="vertical-align:middle; text-align:center; font-weight:600">' . htmlspecialchars($resNo) . '</td>';
+                    echo '<td rowspan="' . $resSpan . '" style="vertical-align:middle; text-align:center;">' . htmlspecialchars($res['village_name'] ?? $res['roomtyp'] ?? $res['roomType'] ?? '') . '</td>';
+                }
                 echo '<td>' . htmlspecialchars($res['gstName'] ?? $res['guestName'] ?? '') . '</td>';
                 $privCard = trim((string) ($res['privCard'] ?? $res['privcard'] ?? ''));
                 $privCardLower = strtolower($privCard);
                 $isValidCard = $privCard !== '' && !in_array($privCardLower, ['n', 'no', 'false', '0', 'none', 'null']);
 
-                $relation = htmlspecialchars($res['gstType'] ?? '');
+                $relation = strtoupper(htmlspecialchars($res['gstType'] ?? ''));
                 if (!empty($res['is_employee'])) {
-                    $relation .= ' (Employee)';
+                    $relation .= ' (EMPLOYEE)';
                 }
                 if ($isValidCard) {
-                    $relation .= ' (' . htmlspecialchars($privCard) . ')';
+                    $relation .= ' (' . strtoupper(htmlspecialchars($privCard)) . ')';
                 }
 
-                echo '<td>' . $relation . '</td>';
+                echo '<td style="text-align:center">' . $relation . '</td>';
                 echo '<td>' . htmlspecialchars($res['age'] ?? '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['dateOfBirth'] ?? '') . '</td>';
-                echo '<td>' . htmlspecialchars($res['nationality_name'] ?? $res['nationality'] ?? '') . '</td>';
+                echo '<td style="text-align:center">' . strtoupper(htmlspecialchars($res['nationality_name'] ?? $res['nationality'] ?? '')) . '</td>';
                 echo '<td>' . htmlspecialchars($res['arrdt'] ?? $res['arrDt'] ?? '') . '</td>';
                 echo '<td>' . htmlspecialchars($res['depdt'] ?? $res['depDt'] ?? '') . '</td>';
 

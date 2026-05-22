@@ -153,11 +153,11 @@
                 <th rowspan="2">CHECK-IN</th>
                 <th rowspan="2">CHECK-OUT</th>
                 <th colspan="{{ count($dateCols) }}" class="dh" style="text-align: center;">ACCOMMODATION</th>
-                <th rowspan="2">AIRFARE</th>
-                <th rowspan="2">HANGAR</th>
-                <th rowspan="2">AVIATION OPERATIONAL FEE</th>
-                <th rowspan="2">ENVIRONMENTAL</th>
-                <th rowspan="2">TOTAL RATE (Per Occupant)</th>
+                <th rowspan="2" style="width: 100px;">AIRFARE</th>
+                <th rowspan="2" style="width: 100px;">HANGAR FEE</th>
+                <th rowspan="2" style="width: 100px;">AVIATION OPERATIONAL FEE</th>
+                <th rowspan="2" style="width: 100px;">ENVIRONMENTAL FEE</th>
+                <th rowspan="2" style="width: 100px;">TOTAL RATE (Per Occupant)</th>
             </tr>
             <tr class="hdr">
                 @foreach($dateCols as $d)
@@ -205,18 +205,18 @@
                 @endphp
                 <tr>
                     @if($isFirst)
-                        <td rowspan="{{ $resGroupCounts[$resNo] ?? 1 }}" style="vertical-align: top; font-weight: 600;">{{ $resNo }}</td>
-                        <td rowspan="{{ $resGroupCounts[$resNo] ?? 1 }}" style="vertical-align: top;">{{ $res['village_name'] ?? $res['roomtyp'] ?? $res['roomType'] ?? '' }}</td>
+                        <td rowspan="{{ $resGroupCounts[$resNo] ?? 1 }}" style="vertical-align: middle; text-align: center; font-weight: 600;">{{ $resNo }}</td>
+                        <td rowspan="{{ $resGroupCounts[$resNo] ?? 1 }}" style="vertical-align: middle; text-align: center;">{{ $res['village_name'] ?? $res['roomtyp'] ?? $res['roomType'] ?? '' }}</td>
                     @endif
                     <td>{{ $res['gstName'] ?? $res['guestName'] ?? '' }}</td>
-                    <td>
+                    <td style="text-align: center; text-transform: uppercase;">
                         {{ $res['gstType'] ?? '' }}
-                        @if(!empty($res['is_employee'])) (Employee) @endif
+                        @if(!empty($res['is_employee'])) (EMPLOYEE) @endif
                         {{ $isValidCard ? ' (' . $privCard . ')' : '' }}
                     </td>
                     <td>{{ $res['age'] ?? '' }}</td>
                     <td>{{ $res['dateOfBirth'] ?? '' }}</td>
-                    <td>{{ $res['nationality_name'] ?? $res['nationality'] ?? '' }}</td>
+                    <td style="text-align: center; text-transform: uppercase;">{{ $res['nationality_name'] ?? $res['nationality'] ?? '' }}</td>
                     <td>{{ $res['arrdt'] ?? $res['arrDt'] ?? '' }}</td>
                     <td>{{ $res['depdt'] ?? $res['depDt'] ?? '' }}</td>
 
