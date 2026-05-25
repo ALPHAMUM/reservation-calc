@@ -85,7 +85,7 @@ class ReservationController extends Controller
             $toDate = date('Y-m-d');
             // Default status filter for fresh dashboard
             if (!$statusFilter) {
-                $statusFilter = ['CONFIRMED', 'PARTLY ARRIVED'];
+                $statusFilter = ['CONFIRMED'];
             }
         }
 
@@ -97,6 +97,7 @@ class ReservationController extends Controller
         try {
             // ALWAYS fetch List API first to get metadata like 'rate' (Employee Discount ref)
             $rateMap = [];
+            $memberMap = [];
             if ($fromDate && $toDate) {
                 $listResp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                     ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
@@ -108,8 +109,10 @@ class ReservationController extends Controller
                         $cust = strtoupper($lr['customer'] ?? $lr['custName'] ?? '');
                         if (str_contains($cust, 'ALPHALAND EMPLOYEE'))
                             $rateVal = 'EMPLOYEE';
-                        if ($c !== '')
+                        if ($c !== '') {
                             $rateMap[$c] = $rateVal;
+                            $memberMap[$c] = $cust;
+                        }
                     }
                 }
             }
@@ -170,8 +173,10 @@ class ReservationController extends Controller
                                         $cust = strtoupper($item['customer'] ?? $item['custName'] ?? '');
                                         if (str_contains($cust, 'ALPHALAND EMPLOYEE'))
                                             $rv = 'EMPLOYEE';
-                                        if ($cn !== '')
+                                        if ($cn !== '') {
                                             $rateMap[$cn] = $rv;
+                                            $memberMap[$cn] = $cust;
+                                        }
                                     }
                                 }
                             } catch (\Exception $e) { /* silently continue */
@@ -209,6 +214,8 @@ class ReservationController extends Controller
 
                     foreach ($msgs as &$res) {
                         $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
+                        
+                        $res['customer_name'] = $memberMap[$resNo] ?? '';
 
                         // Combine List API metadata with any found in Detail API chunk
                         $metadata = $rateMap[$resNo] ?? '';
@@ -572,8 +579,14 @@ class ReservationController extends Controller
         $dateCols = array_keys($allDates);
         $dateCount = count($dateCols);
 
-        // PASS 2: Stream HTML Excel output
+        // Pass 2: Stream HTML Excel output
         return response()->stream(function () use ($allRows, $dateCols, $dateCount) {
+            
+            $firstMemberName = '';
+            if (count($allRows) > 0) {
+                $firstMemberName = $allRows[0]['res']['customer_name'] ?? '';
+            }
+
             echo '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
             echo '<head><meta http-equiv="Content-type" content="text/html;charset=utf-8" />';
             echo '<style>';
@@ -583,7 +596,44 @@ class ReservationController extends Controller
             echo '.dh   { background-color: #bcd2ee; font-weight: bold; text-align: center; color: #1e293b; }';
             echo '.num  { mso-number-format:"\#\,\#\#0\.00"; text-align: right; }';
             echo '.num-center { mso-number-format:"\#\,\#\#0\.00"; text-align: center; }';
-            echo '</style></head><body><table border="1">';
+            echo '</style></head><body>';
+            
+            // Main Table start with header integrated
+            echo '<table border="1">';
+            $emptyColsSpan = $dateCount + 5; // Accommodation dates + 5 fee columns
+
+            echo '<tr>';
+            echo '<td rowspan="4" colspan="2" style="text-align: center; vertical-align: middle; padding: 10px; border: none; border-bottom: 20px solid transparent;">';
+            // Use a temporary public URL for Excel when testing locally to bypass Excel's 'Mark of the Web' local file blocking
+            $isLocal = app()->environment('local');
+            $logoSrc = $isLocal ? 'https://tmpfiles.org/dl/wkwxKRKNiDcT/balesin-logo.png' : asset('images/balesin-logo.png');
+            echo '<img src="' . $logoSrc . '" alt="Balesin Island" style="max-height: 70px;" />';
+            echo '</td>';
+            echo '<td style="font-weight: bold; background-color: #dbeafe; padding: 8px; text-align: center; color: #000;">MEMBER\'S NAME:</td>';
+            echo '<td colspan="6" style="padding: 8px; text-align: center; color: #000; font-weight: bold;">' . htmlspecialchars($firstMemberName) . '</td>';
+            echo '<td colspan="' . $emptyColsSpan . '" style="border: none;"></td>';
+            echo '</tr>';
+
+            echo '<tr>';
+            echo '<td style="font-weight: bold; background-color: #dbeafe; padding: 8px; text-align: center; color: #000;">MEMBERSHIP NUMBER:</td>';
+            echo '<td colspan="6" style="padding: 8px; text-align: center; color: #000; font-weight: bold;"></td>';
+            echo '<td colspan="' . $emptyColsSpan . '" style="border: none;"></td>';
+            echo '</tr>';
+
+            echo '<tr>';
+            echo '<td style="font-weight: bold; background-color: #dbeafe; padding: 8px; text-align: center; color: #000;">CONTACT NUMBER:</td>';
+            echo '<td colspan="6" style="padding: 8px; text-align: center; color: #000; font-weight: bold;"></td>';
+            echo '<td colspan="' . $emptyColsSpan . '" style="border: none;"></td>';
+            echo '</tr>';
+
+            echo '<tr>';
+            echo '<td style="font-weight: bold; background-color: #dbeafe; padding: 8px; text-align: center; color: #000;">BOOKING DATE:</td>';
+            echo '<td colspan="6" style="padding: 8px; text-align: center; color: #000; font-weight: bold;">' . date('l, d F Y') . '</td>';
+            echo '<td colspan="' . $emptyColsSpan . '" style="border: none;"></td>';
+            echo '</tr>';
+            
+            // Empty spacer row before main headers
+            echo '<tr><td colspan="' . (9 + $emptyColsSpan) . '" style="border: none; height: 10px;"></td></tr>';
 
             // Header Row 1: fixed cols (rowspan=2) + ACCOMMODATION (colspan = dateCount+1) + fee cols (rowspan=2)
             echo '<tr>';
@@ -728,12 +778,12 @@ class ReservationController extends Controller
 
                 echo '<td style="text-align:center">' . $relation . '</td>';
                 echo '<td style="text-align:center">' . htmlspecialchars($res['age'] ?? '') . '</td>';
-                echo '<td>' . htmlspecialchars($res['dateOfBirth'] ?? '') . '</td>';
+                echo '<td style="text-align:center">' . htmlspecialchars($res['dateOfBirth'] ?? '') . '</td>';
                 echo '<td style="text-align:center">' . strtoupper(htmlspecialchars($res['nationality_name'] ?? $res['nationality'] ?? '')) . '</td>';
                 $arrDt = $res['arrdt'] ?? $res['arrDt'] ?? '';
                 $depDt = $res['depdt'] ?? $res['depDt'] ?? '';
-                echo '<td style=\'mso-number-format:"\@";\'>' . ($arrDt ? date('m/d/Y', strtotime($arrDt)) : '') . '</td>';
-                echo '<td style=\'mso-number-format:"\@";\'>' . ($depDt ? date('m/d/Y', strtotime($depDt)) : '') . '</td>';
+                echo '<td style=\'mso-number-format:"\@"; text-align:center;\'>' . ($arrDt ? date('m/d/Y', strtotime($arrDt)) : '') . '</td>';
+                echo '<td style=\'mso-number-format:"\@"; text-align:center;\'>' . ($depDt ? date('m/d/Y', strtotime($depDt)) : '') . '</td>';
 
                 if ($accRowSpan > 0) {
                     foreach ($dateCols as $d) {

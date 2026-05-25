@@ -134,14 +134,44 @@
 
         // Pre-calculate rowspan counts per reservation number
         $resGroupCounts = [];
+        $firstMemberName = '';
         foreach ($reservations as $r) {
             $rn = trim((string)($r['resNo'] ?? $r['conf'] ?? ''));
             $resGroupCounts[$rn] = ($resGroupCounts[$rn] ?? 0) + 1;
+            if (!$firstMemberName && !empty($r['customer_name'])) {
+                $firstMemberName = $r['customer_name'];
+            }
         }
     @endphp
 
     <table>
         <thead>
+            <tr>
+                <td rowspan="4" colspan="2" style="text-align: center; vertical-align: middle; border: none; padding-right: 20px;">
+                    <img src="{{ asset('images/balesin-logo.png') }}" alt="Balesin Island" style="max-height: 70px; object-fit: contain;" />
+                </td>
+                <td style="font-weight: bold; background-color: #dbeafe; border: 1px solid #cbd5e1; padding: 5px; text-align: center;">MEMBER'S NAME:</td>
+                <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;">{{ $firstMemberName }}</td>
+                <td colspan="{{ count($dateCols) + 5 }}" style="border: none;"></td>
+            </tr>
+            <tr>
+                <td style="font-weight: bold; background-color: #dbeafe; border: 1px solid #cbd5e1; padding: 5px; text-align: center;">MEMBERSHIP NUMBER:</td>
+                <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;"></td>
+                <td colspan="{{ count($dateCols) + 5 }}" style="border: none;"></td>
+            </tr>
+            <tr>
+                <td style="font-weight: bold; background-color: #dbeafe; border: 1px solid #cbd5e1; padding: 5px; text-align: center;">CONTACT NUMBER:</td>
+                <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;"></td>
+                <td colspan="{{ count($dateCols) + 5 }}" style="border: none;"></td>
+            </tr>
+            <tr>
+                <td style="font-weight: bold; background-color: #dbeafe; border: 1px solid #cbd5e1; padding: 5px; text-align: center;">BOOKING DATE:</td>
+                <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;">{{ date('l, d F Y') }}</td>
+                <td colspan="{{ count($dateCols) + 5 }}" style="border: none;"></td>
+            </tr>
+            <tr>
+                <td colspan="{{ 9 + count($dateCols) + 5 }}" style="border: none; height: 10px;"></td>
+            </tr>
             <tr class="hdr">
                 <th rowspan="2">RSVN#</th>
                 <th rowspan="2">VILLAGE</th>
