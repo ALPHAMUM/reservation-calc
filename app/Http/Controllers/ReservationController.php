@@ -142,7 +142,7 @@ class ReservationController extends Controller
                             $reservationPaxCounts[$resNo] = 0;
                         $age = (int) ($res['age'] ?? 99);
                         $gstType = strtolower($res['gstType'] ?? '');
-                        $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
+                        $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $res['age'] !== '' && $age >= 0 && $age <= 1);
                         if (!$isInfant)
                             $reservationPaxCounts[$resNo]++;
                     }
@@ -227,7 +227,7 @@ class ReservationController extends Controller
 
                         $age = (int) ($res['age'] ?? 99);
                         $gstType = strtolower($res['gstType'] ?? '');
-                        $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
+                        $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $res['age'] !== '' && $age >= 0 && $age <= 1);
 
                         if (!isset($paxIndices[$resNo]))
                             $paxIndices[$resNo] = 0;

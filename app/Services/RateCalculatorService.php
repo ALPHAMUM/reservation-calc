@@ -95,6 +95,7 @@ class RateCalculatorService
 
         $basePax = $isVilla ? 4 : 8;
         $isExtra = ($paxIndex >= $basePax);
+        // echo "DEBUG_START: passenger=" . ($passenger['gstName'] ?? 'unknown') . ", paxIndex={$paxIndex}, isVilla=" . ($isVilla?'true':'false') . ", basePax={$basePax}, isExtra=" . ($isExtra?'true':'false') . "\n";
 
         // Divisor is the total billable pax, but capped at the unit capacity for the "base" share
         $divisor = min($totalBillable, $basePax);
@@ -168,8 +169,14 @@ class RateCalculatorService
                             $grossAmount = $unitRate;
                         }
                     } else {
-                        // Always trust the API value for extra persons as well
-                        $grossAmount = $originalVal;
+                        // Override to 3700 for extra persons if a value exists in the API
+                        echo "DEBUG: Extra Person check: paxIndex={$paxIndex}, roomType={$roomType}, isVilla=" . ($isVilla?'true':'false') . ", originalVal={$originalVal}\n";
+                        if ($originalVal > 0) {
+                            $grossAmount = 3700;
+                            echo "DEBUG: Override applied! grossAmount={$grossAmount}\n";
+                        } else {
+                            $grossAmount = $originalVal;
+                        }
                     }
 
                     if (!$isFVN) {
