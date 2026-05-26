@@ -291,11 +291,13 @@ class ReservationController extends Controller
             $rateMap = [];
             $listRateMap = [];
             $memberMap = [];
+            $listData = [];
             if ($fromDate && $toDate) {
                 $listResp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                     ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
                 if ($listResp->successful()) {
-                    foreach ($listResp->json()['msg'] ?? [] as $lr) {
+                    $listData = $listResp->json()['msg'] ?? [];
+                    foreach ($listData as $lr) {
                         $this->ingestListReservation($lr, $rateMap, $listRateMap, $memberMap);
                     }
                 }
@@ -453,11 +455,25 @@ class ReservationController extends Controller
                 $pagedReservations = $reservations;
             } else {
                 $viewType = 'list';
-                // If we didn't fetch listResp above or it failed, we might need to handle it, 
-                // but usually $fromDate/$toDate are there.
                 $all = $listData ?? [];
+
+                if ($statusFilter && is_array($statusFilter)) {
+                    $all = array_filter($all, function ($res) use ($statusFilter) {
+                        return in_array(strtoupper(trim($res['status'] ?? '')), array_map('strtoupper', $statusFilter));
+                    });
+                }
+
+                if ($search) {
+                    $search = strtolower(trim($search));
+                    $all = array_filter($all, function ($res) use ($search) {
+                        $resNo = strtolower($res['resNo'] ?? $res['conf'] ?? '');
+                        $name = strtolower($res['gstName'] ?? $res['guestName'] ?? $res['custName'] ?? $res['customer'] ?? '');
+                        return str_contains($resNo, $search) || str_contains($name, $search);
+                    });
+                }
+
                 $total = count($all);
-                $pagedReservations = $all;
+                $pagedReservations = array_values($all);
 
                 foreach ($pagedReservations as &$res) {
                     $roomType = $res['roomtyp'] ?? $res['roomType'] ?? '';
