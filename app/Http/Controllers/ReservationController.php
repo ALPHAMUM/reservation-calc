@@ -123,6 +123,7 @@ class ReservationController extends Controller
                 $chunks = array_chunk($allConfIds, 25);
                 $calculator = app(\App\Services\RateCalculatorService::class);
                 $paxIndices = [];
+                $occupantIndices = [];
                 $reservationPaxCounts = [];
                 foreach ($chunks as $chunk) {
                     $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
@@ -231,13 +232,22 @@ class ReservationController extends Controller
 
                         if (!isset($paxIndices[$resNo]))
                             $paxIndices[$resNo] = 0;
+                        if (!isset($occupantIndices[$resNo]))
+                            $occupantIndices[$resNo] = 0;
                         $paxIndex = $paxIndices[$resNo];
+                        $occupantIndex = $occupantIndices[$resNo];
                         $roomType = $resRoomTypeMap[$resNo] ?? $res['roomtyp'] ?? $res['roomType'] ?? '';
                         $res['roomtyp'] = $roomType;
                         $res['roomType'] = $roomType;
                         $totalBillable = $reservationPaxCounts[$resNo] ?? 1;
 
-                        $res['calculated_rates'] = $calculator->calculatePassengerRates($res, $paxIndex, $roomType, $totalBillable);
+                        $res['calculated_rates'] = $calculator->calculatePassengerRates(
+                            $res,
+                            $paxIndex,
+                            $roomType,
+                            $totalBillable,
+                            $occupantIndex
+                        );
 
                         // Sync rates back to the rate array for display (replaces original accommodation values)
                         foreach ($res['rate'] as &$r) {
@@ -249,6 +259,7 @@ class ReservationController extends Controller
                         }
                         unset($r);
 
+                        $occupantIndices[$resNo]++;
                         if (!$isInfant) {
                             $paxIndices[$resNo]++;
                         }
@@ -408,6 +419,7 @@ class ReservationController extends Controller
 
             // ALWAYS fetch List API to get metadata like 'rate' (Employee Discount ref)
             $rateMap = [];
+            $memberMap = [];
             if ($fromDate && $toDate) {
                 $listResp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                     ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
@@ -423,8 +435,10 @@ class ReservationController extends Controller
                         $cust = strtoupper($lr['customer'] ?? $lr['custName'] ?? '');
                         if (str_contains($cust, 'ALPHALAND EMPLOYEE'))
                             $rateVal = 'EMPLOYEE';
-                        if ($c !== '')
+                        if ($c !== '') {
                             $rateMap[$c] = $rateVal;
+                            $memberMap[$c] = $cust;
+                        }
                     }
                 }
             }
@@ -445,7 +459,9 @@ class ReservationController extends Controller
         $calculator = app(\App\Services\RateCalculatorService::class);
 
         $paxIndices = [];
+        $occupantIndices = [];
         $reservationPaxCounts = [];
+        $memberMap = $memberMap ?? [];
         foreach (array_chunk($ids, 40) as $chunk) {
             $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                 ->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
@@ -497,6 +513,7 @@ class ReservationController extends Controller
 
                 foreach ($msgs as &$res) {
                     $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
+                    $res['customer_name'] = $memberMap[$resNo] ?? '';
                     $metadata = $rateMap[$resNo] ?? '';
                     if (isset($localMetaMap[$resNo])) {
                         $metadata .= ($metadata ? '|' : '') . $localMetaMap[$resNo];
@@ -526,16 +543,25 @@ class ReservationController extends Controller
 
                     if (!isset($paxIndices[$resNo]))
                         $paxIndices[$resNo] = 0;
+                    if (!isset($occupantIndices[$resNo]))
+                        $occupantIndices[$resNo] = 0;
                     $paxIndex = $paxIndices[$resNo];
+                    $occupantIndex = $occupantIndices[$resNo];
                     $totalBillable = $reservationPaxCounts[$resNo] ?? 1;
 
-                    $calcResult = $calculator->calculatePassengerRates($res, $paxIndex, $roomType, $totalBillable);
+                    $calcResult = $calculator->calculatePassengerRates(
+                        $res,
+                        $paxIndex,
+                        $roomType,
+                        $totalBillable,
+                        $occupantIndex
+                    );
                     $res['calculated_rates'] = $calcResult;
 
                     $rd = [];
                     foreach ($res['rate'] as $r) {
                         $d = $r['date'] ?? '';
-                        if ($d) {
+                        if ($d && !str_contains($d, ' to ')) {
                             $rd[$d] = (float) ($r['val'] ?? 0);
                             $allDates[$d] = true;
                         }
@@ -544,8 +570,6 @@ class ReservationController extends Controller
                     $age = (int) ($res['age'] ?? 99);
                     $gstType = strtolower($res['gstType'] ?? '');
                     $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
-
-
 
                     // Sync rates back to the rate array for display
                     foreach ($res['rate'] as &$r) {
@@ -558,6 +582,7 @@ class ReservationController extends Controller
                     }
                     unset($r);
 
+                    $occupantIndices[$resNo]++;
                     if (!$isInfant) {
                         $paxIndices[$resNo]++;
                     }
@@ -974,6 +999,7 @@ class ReservationController extends Controller
 
             // ALWAYS fetch List API to get metadata like 'rate' (Employee Discount ref)
             $rateMap = [];
+            $memberMap = [];
             if ($fromDate && $toDate) {
                 $listResp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                     ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
@@ -982,11 +1008,16 @@ class ReservationController extends Controller
                     foreach ($listData as $lr) {
                         $c = trim($lr['conf'] ?? $lr['resNo'] ?? $lr['resno'] ?? '');
                         $rateVal = strtoupper(trim($lr['rate'] ?? ''));
+                        $rateCode = trim($lr['rateCode'] ?? $lr['rate_code'] ?? '');
+                        if ($rateCode !== '')
+                            $rateVal .= '|' . $rateCode;
                         $cust = strtoupper($lr['customer'] ?? $lr['custName'] ?? '');
                         if (str_contains($cust, 'ALPHALAND EMPLOYEE'))
                             $rateVal = 'EMPLOYEE';
-                        if ($c !== '')
+                        if ($c !== '') {
                             $rateMap[$c] = $rateVal;
+                            $memberMap[$c] = $cust;
+                        }
                     }
                 }
             }
@@ -997,7 +1028,9 @@ class ReservationController extends Controller
         $reservations = [];
         $calculator = app(\App\Services\RateCalculatorService::class);
         $paxIndices = [];
+        $occupantIndices = [];
         $reservationPaxCounts = [];
+        $memberMap = $memberMap ?? [];
         foreach (array_chunk(array_slice($ids, 0, 1000), 50) as $chunk) {
             $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
             if ($resp->successful()) {
@@ -1015,20 +1048,23 @@ class ReservationController extends Controller
                         $reservationPaxCounts[$resNo]++;
                 }
 
-                // Build localMetaMap from Detail records
                 $localMetaMap = [];
                 foreach ($msgs as $m) {
                     $rn = trim($m['resNo'] ?? $m['conf'] ?? '');
                     if ($rn === '')
                         continue;
+
+                    $mCode = $m['rateCode'] ?? $m['rate_code'] ?? '';
+                    $mType = $m['rate'] ?? '';
+
                     if (!isset($localMetaMap[$rn]))
                         $localMetaMap[$rn] = '';
-                    $mCode = $m['rateCode'] ?? $m['rate_code'] ?? '';
-                    if (is_string($mCode) && trim($mCode) !== '') {
-                        $upper = strtoupper(trim($mCode));
-                        if (!str_contains($localMetaMap[$rn], $upper)) {
-                            $localMetaMap[$rn] .= ($localMetaMap[$rn] ? '|' : '') . $upper;
-                        }
+
+                    if (is_string($mType) && trim($mType) !== '' && !str_contains($localMetaMap[$rn], strtoupper(trim($mType)))) {
+                        $localMetaMap[$rn] .= ($localMetaMap[$rn] ? '|' : '') . strtoupper(trim($mType));
+                    }
+                    if (is_string($mCode) && trim($mCode) !== '' && !str_contains($localMetaMap[$rn], strtoupper(trim($mCode)))) {
+                        $localMetaMap[$rn] .= ($localMetaMap[$rn] ? '|' : '') . strtoupper(trim($mCode));
                     }
                 }
 
@@ -1045,6 +1081,7 @@ class ReservationController extends Controller
 
                 foreach ($msgs as &$res) {
                     $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
+                    $res['customer_name'] = $memberMap[$resNo] ?? '';
                     $metadata = $rateMap[$resNo] ?? '';
                     if (isset($localMetaMap[$resNo])) {
                         $metadata .= ($metadata ? '|' : '') . $localMetaMap[$resNo];
@@ -1072,13 +1109,22 @@ class ReservationController extends Controller
 
                     if (!isset($paxIndices[$resNo]))
                         $paxIndices[$resNo] = 0;
+                    if (!isset($occupantIndices[$resNo]))
+                        $occupantIndices[$resNo] = 0;
                     $paxIndex = $paxIndices[$resNo];
+                    $occupantIndex = $occupantIndices[$resNo];
                     $roomType = $resRoomTypeMap[$resNo] ?? $res['roomtyp'] ?? $res['roomType'] ?? '';
                     $res['roomtyp'] = $roomType;
                     $res['roomType'] = $roomType;
                     $totalBillable = $reservationPaxCounts[$resNo] ?? 1;
 
-                    $res['calculated_rates'] = $calculator->calculatePassengerRates($res, $paxIndex, $roomType, $totalBillable);
+                    $res['calculated_rates'] = $calculator->calculatePassengerRates(
+                        $res,
+                        $paxIndex,
+                        $roomType,
+                        $totalBillable,
+                        $occupantIndex
+                    );
 
                     // Sync rates back to the rate array for display
                     foreach ($res['rate'] as &$r) {
@@ -1090,6 +1136,7 @@ class ReservationController extends Controller
                     }
                     unset($r);
 
+                    $occupantIndices[$resNo]++;
                     if (!$isInfant) {
                         $paxIndices[$resNo]++;
                     }
@@ -1154,8 +1201,16 @@ class ReservationController extends Controller
                     $rows[$k]['acc_group_size'] = $span;
                     $rows[$k]['acc_group_totals'] = [];
                     foreach ($dateCols as $d) {
-                        // Display the rate from the first occupant for this block
-                        $rows[$k]['acc_group_totals'][$d] = (float) ($rows[$startIdx]['calculated_rates']['acc_dates'][$d]['val'] ?? 0);
+                        $uv = (float) ($rows[$startIdx]['calculated_rates']['acc_dates'][$d]['val'] ?? 0);
+                        if ($uv == 0 && isset($rows[$startIdx]['rate'])) {
+                            foreach ($rows[$startIdx]['rate'] as $rt) {
+                                if (($rt['date'] ?? '') === $d) {
+                                    $uv = (float) ($rt['val'] ?? 0);
+                                    break;
+                                }
+                            }
+                        }
+                        $rows[$k]['acc_group_totals'][$d] = $uv;
                     }
                     if ($k === $startIdx) {
                         $rows[$k]['acc_span'] = $span;

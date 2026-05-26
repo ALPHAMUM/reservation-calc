@@ -4,6 +4,9 @@ namespace App\Services;
 
 class RateCalculatorService
 {
+    /** Extra person charge (villa 5th+, suite 9th+) — same for weekdays and weekends */
+    public const EXTRA_PERSON_CHARGE = 3700;
+
     protected $settings;
 
     public function __construct(SettingsService $settingsService)
@@ -11,8 +14,16 @@ class RateCalculatorService
         $this->settings = $settingsService->getSettings();
     }
 
-    public function calculatePassengerRates(array $passenger, $paxIndex = 0, $roomType = '', $totalBillable = 1)
-    {
+    public function calculatePassengerRates(
+        array $passenger,
+        $paxIndex = 0,
+        $roomType = '',
+        $totalBillable = 1,
+        $occupantIndex = null
+    ) {
+        if ($occupantIndex === null) {
+            $occupantIndex = $paxIndex;
+        }
         $gstType = strtolower($passenger['gstType'] ?? $passenger['gsttype'] ?? '');
         $rateMetadata = strtoupper($passenger['rate_metadata'] ?? '');
         $age = null;
@@ -93,8 +104,9 @@ class RateCalculatorService
             $isVilla = false;
         }
 
+        // Villa: 5th+ row (index 4+); suite: 9th+ row (index 8+). Uses occupant row order (matches export blocks).
         $basePax = $isVilla ? 4 : 8;
-        $isExtra = ($paxIndex >= $basePax);
+        $isExtra = $occupantIndex >= $basePax;
         // echo "DEBUG_START: passenger=" . ($passenger['gstName'] ?? 'unknown') . ", paxIndex={$paxIndex}, isVilla=" . ($isVilla?'true':'false') . ", basePax={$basePax}, isExtra=" . ($isExtra?'true':'false') . "\n";
 
         // Divisor is the total billable pax, but capped at the unit capacity for the "base" share
@@ -169,14 +181,8 @@ class RateCalculatorService
                             $grossAmount = $unitRate;
                         }
                     } else {
-                        // Override to 3700 for extra persons if a value exists in the API
-                        echo "DEBUG: Extra Person check: paxIndex={$paxIndex}, roomType={$roomType}, isVilla=" . ($isVilla?'true':'false') . ", originalVal={$originalVal}\n";
-                        if ($originalVal > 0) {
-                            $grossAmount = 3700;
-                            echo "DEBUG: Override applied! grossAmount={$grossAmount}\n";
-                        } else {
-                            $grossAmount = $originalVal;
-                        }
+                        // Villa 5th+ / suite 9th+: when API sends an accommodation value, use flat extra charge
+                        $grossAmount = $this->resolveExtraPersonGross($originalVal);
                     }
 
                     if (!$isFVN) {
@@ -318,6 +324,15 @@ class RateCalculatorService
         ];
     }
 
+    /**
+     * Extra occupant gross rate: any API accommodation value → flat 3700 (not FVN).
+     * Villa 5th+ / suite 9th+ must never use 0.01 / 0.02 FVN markers from the API.
+     */
+    private function resolveExtraPersonGross(float $apiVal): float
+    {
+        return $apiVal != 0 ? self::EXTRA_PERSON_CHARGE : 0;
+    }
+
     private function getAccommodationUnitRate($date, $isVilla, $isMember)
     {
         $dayOfWeek = date('w', strtotime($date));
@@ -359,8 +374,9 @@ class RateCalculatorService
         } catch (\Exception $e) {
         }
 
-        return 3700;
+        return self::EXTRA_PERSON_CHARGE;
     }
+
     private function calculateAof($date)
     {
         $baseAmount = (float) ($this->settings['fees']['aof']['amount'] ?? 0);

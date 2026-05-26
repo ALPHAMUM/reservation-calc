@@ -10,9 +10,9 @@ use App\Services\SettingsService;
 $settingsService = app(SettingsService::class);
 $calculator = new RateCalculatorService($settingsService);
 
-function test($label, $res, $paxIndex, $roomType) {
+function test($label, $res, $paxIndex, $roomType, $occupantIndex = null) {
     global $calculator;
-    $result = $calculator->calculatePassengerRates($res, $paxIndex, $roomType);
+    $result = $calculator->calculatePassengerRates($res, $paxIndex, $roomType, 1, $occupantIndex);
     echo "Test: $label\n";
     echo "  Acc: " . $result['acc'] . "\n";
     echo "--------------------------\n";
@@ -49,6 +49,25 @@ test("Guest Suite WD - Pax 0", [
 test("Guest Suite WD - Pax 8 (Extra)", [
     'gstType' => 'Guest',
     'rate' => [['date' => $date_wd, 'val' => 100]]
+], 8, 'RGNCY'); // Expected: 3700
+
+// 5b. Member Villa WD - Pax 4 (5th occupant, API extra rate)
+test("Member Villa WD - Pax 4 (5th)", [
+    'gstType' => 'Member',
+    'rate' => [['date' => $date_wd, 'val' => 13700]]
+], 4, 'BALI'); // Expected: 3700
+
+// 5d. Member Villa FVN code on 5th — must be 3700, not 1 FVN
+test("Member Villa WD - Pax 4 (5th, API 0.01)", [
+    'gstType' => 'Member',
+    'rate_metadata' => 'KEY-VILLA',
+    'rate' => [['date' => $date_wd, 'val' => 0.01]]
+], 3, 'BALI', 4); // billable index 3, occupant row 4 → extra → 3700
+
+// 5c. Guest Suite WE - Pax 8 (9th, API weekend extra)
+test("Guest Suite WE - Pax 8 (9th)", [
+    'gstType' => 'Guest',
+    'rate' => [['date' => $date_we, 'val' => 49200]]
 ], 8, 'RGNCY'); // Expected: 3700
 
 // 6. Senior Citizen Guest Villa WD - Pax 0
