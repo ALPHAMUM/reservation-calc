@@ -58,6 +58,16 @@ class SettingsService
                 'max_age_months' => 23,
                 'airfare_free' => true,
             ],
+            'extra_occupants' => [
+                'villa' => [
+                    'override' => false,
+                    'amount' => 3700,
+                ],
+                'suite' => [
+                    'override' => false,
+                    'amount' => 3700,
+                ]
+            ],
         ];
     }
 

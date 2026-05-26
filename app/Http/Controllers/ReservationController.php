@@ -62,6 +62,198 @@ class ReservationController extends Controller
         return $code;
     }
 
+    private function appendFvnMetadataFlags(array &$res): void
+    {
+        $isComp = false;
+        $isPkg = false;
+        foreach ($res['rate'] ?? [] as $rt) {
+            $v = (float) ($rt['val'] ?? 0);
+            if (abs($v - 0.01) < 0.0001) {
+                $isComp = true;
+            }
+            if (abs($v - 0.02) < 0.0001) {
+                $isPkg = true;
+            }
+        }
+        if ($isComp) {
+            $res['rate_metadata'] = trim(($res['rate_metadata'] ?? '') . ' COMP');
+        }
+        if ($isPkg) {
+            $res['rate_metadata'] = trim(($res['rate_metadata'] ?? '') . ' PKG');
+        }
+    }
+
+    private function ingestListReservation(array $lr, array &$rateMap, array &$listRateMap, array &$memberMap): void
+    {
+        $c = trim($lr['conf'] ?? $lr['resNo'] ?? $lr['resno'] ?? '');
+        if ($c === '') {
+            return;
+        }
+
+        $listRate = strtoupper(trim((string) ($lr['rate'] ?? '')));
+        $listRateMap[$c] = $listRate;
+
+        $rateVal = $listRate;
+        $rateCode = strtoupper(trim((string) ($lr['rateCode'] ?? $lr['rate_code'] ?? '')));
+        if ($rateCode !== '') {
+            $rateVal .= ($rateVal ? '|' : '') . $rateCode;
+        }
+
+        $cust = strtoupper($lr['customer'] ?? $lr['custName'] ?? '');
+        if (str_contains($cust, 'ALPHALAND EMPLOYEE')) {
+            $rateVal = 'EMPLOYEE';
+        }
+
+        $rateMap[$c] = $rateVal;
+        $memberMap[$c] = $cust;
+    }
+
+    /**
+     * When detail reservations are outside the dashboard list date range, fetch List API
+     * using each reservation's arrival/departure so KEY-SUITE / KEY-VILLA are available.
+     */
+    private function hydrateListMetadataFromDetail(
+        array $msgs,
+        array &$rateMap,
+        array &$listRateMap,
+        array &$memberMap
+    ): void {
+        $arrDates = [];
+        foreach ($msgs as $m) {
+            $rn = trim($m['resNo'] ?? $m['conf'] ?? '');
+            if ($rn === '' || $this->lookupReservationMap($listRateMap, $rn) !== '') {
+                continue;
+            }
+            $arr = $m['arrdt'] ?? $m['arrDt'] ?? $m['arr_dt'] ?? null;
+            $dep = $m['depdt'] ?? $m['depDt'] ?? $m['dep_dt'] ?? null;
+            if ($arr) {
+                $arrDates[$arr] = $dep ?? $arr;
+            }
+        }
+        if ($arrDates === []) {
+            return;
+        }
+        foreach ($arrDates as $arrDate => $depDate) {
+            try {
+                $lr = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
+                    ->get($this->listApiUrl, ['fromdate' => $arrDate, 'todate' => $depDate]);
+                if ($lr->successful()) {
+                    foreach ($lr->json()['msg'] ?? [] as $item) {
+                        $this->ingestListReservation($item, $rateMap, $listRateMap, $memberMap);
+                    }
+                }
+            } catch (\Exception $e) {
+                // continue with next date range
+            }
+        }
+    }
+
+    private function lookupReservationMap(array $map, string $resNo): string
+    {
+        $key = trim($resNo);
+        if ($key === '') {
+            return '';
+        }
+        if (array_key_exists($key, $map)) {
+            return (string) $map[$key];
+        }
+        $alt = ltrim($key, '#');
+        if ($alt !== $key && array_key_exists($alt, $map)) {
+            return (string) $map[$alt];
+        }
+
+        return '';
+    }
+
+    private function buildReservationMetadata(string $resNo, array $rateMap, array $localMetaMap): string
+    {
+        $metadata = $this->lookupReservationMap($rateMap, $resNo);
+        if (isset($localMetaMap[$resNo]) && $localMetaMap[$resNo] !== '') {
+            $metadata .= ($metadata ? '|' : '') . $localMetaMap[$resNo];
+        }
+
+        return $metadata;
+    }
+
+    /**
+     * List API "rate" (e.g. KEY-SUITE) is authoritative; do not infer from per-passenger FVN (0.01/COMP).
+     */
+    private function resolveUnitTypeLabel(string $listRate, string $metadata, string $roomType): string
+    {
+        $listRate = strtoupper(trim($listRate));
+        $meta = strtoupper($metadata);
+
+        if ($listRate === '' && $meta !== '') {
+            if (str_contains($meta, 'KEY-SUITE')) {
+                $listRate = 'KEY-SUITE';
+            } elseif (str_contains($meta, 'KEY-VILLA')) {
+                $listRate = 'KEY-VILLA';
+            }
+        }
+
+        if ($listRate !== '') {
+            if (str_contains($listRate, 'KEY-SUITE') || preg_match('/(?:^|\|)(G|M)?SUITE(?:\||$|-)/', $listRate)) {
+                return 'SUITE';
+            }
+            if (str_contains($listRate, 'KEY-VILLA') || preg_match('/(?:^|\|)(G|M)?VILLA(?:\||$|-)/', $listRate)) {
+                return 'VILLA';
+            }
+        }
+
+        if (str_contains($meta, 'KEY-SUITE')) {
+            return 'SUITE';
+        }
+        if (str_contains($meta, 'KEY-VILLA')) {
+            return 'VILLA';
+        }
+
+        return app(\App\Services\RateCalculatorService::class)->unitTypeLabel($roomType, $meta, '', []);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function buildReservationUnitTypes(
+        array $rateMap,
+        array $listRateMap,
+        array $localMetaMap,
+        array $resRoomTypeMap,
+        array $msgs
+    ): array {
+        $unitTypes = [];
+        $resNos = [];
+        foreach ($msgs as $m) {
+            $rn = trim($m['resNo'] ?? $m['conf'] ?? '');
+            if ($rn !== '') {
+                $resNos[$rn] = true;
+            }
+        }
+        foreach (array_keys($resNos) as $rn) {
+            $roomType = $resRoomTypeMap[$rn] ?? '';
+            $metadata = $this->buildReservationMetadata($rn, $rateMap, $localMetaMap);
+            $listRate = $this->lookupReservationMap($listRateMap, $rn);
+            $unitTypes[$rn] = $this->resolveUnitTypeLabel($listRate, $metadata, $roomType);
+        }
+
+        return $unitTypes;
+    }
+
+    private function applyUnitTypeLabel(array &$res, string $unitTypeLabel): void
+    {
+        $res['unit_type_label'] = $unitTypeLabel;
+    }
+
+    private function formatVillageWithUnitType(array $res): string
+    {
+        $village = htmlspecialchars(strtoupper($res['village_name'] ?? $res['roomtyp'] ?? $res['roomType'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $unit = htmlspecialchars(strtoupper($res['unit_type_label'] ?? ''), ENT_QUOTES, 'UTF-8');
+        if ($unit === '') {
+            return $village;
+        }
+
+        return $village . '<br>' . $unit;
+    }
+
     public function index(Request $request)
     {
         $resNoList = $request->get('resnolist');
@@ -97,22 +289,14 @@ class ReservationController extends Controller
         try {
             // ALWAYS fetch List API first to get metadata like 'rate' (Employee Discount ref)
             $rateMap = [];
+            $listRateMap = [];
             $memberMap = [];
             if ($fromDate && $toDate) {
                 $listResp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                     ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
                 if ($listResp->successful()) {
-                    $listData = $listResp->json()['msg'] ?? [];
-                    foreach ($listData as $lr) {
-                        $c = trim($lr['conf'] ?? $lr['resNo'] ?? $lr['resno'] ?? '');
-                        $rateVal = strtoupper(trim($lr['rate'] ?? ''));
-                        $cust = strtoupper($lr['customer'] ?? $lr['custName'] ?? '');
-                        if (str_contains($cust, 'ALPHALAND EMPLOYEE'))
-                            $rateVal = 'EMPLOYEE';
-                        if ($c !== '') {
-                            $rateMap[$c] = $rateVal;
-                            $memberMap[$c] = $cust;
-                        }
+                    foreach ($listResp->json()['msg'] ?? [] as $lr) {
+                        $this->ingestListReservation($lr, $rateMap, $listRateMap, $memberMap);
                     }
                 }
             }
@@ -148,42 +332,7 @@ class ReservationController extends Controller
                             $reservationPaxCounts[$resNo]++;
                     }
 
-                    // If rateMap is empty (no fromDate, searching by resnolist only),
-                    // call the List API using arrival dates found in the detail chunk
-                    if (empty($rateMap)) {
-                        $arrDates = [];
-                        foreach ($msgs as $m) {
-                            $arr = $m['arrdt'] ?? $m['arrDt'] ?? $m['arr_dt'] ?? null;
-                            $dep = $m['depdt'] ?? $m['depDt'] ?? $m['dep_dt'] ?? null;
-                            if ($arr)
-                                $arrDates[$arr] = $dep ?? $arr;
-                        }
-                        foreach ($arrDates as $arrDate => $depDate) {
-                            try {
-                                $lr = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
-                                    ->get($this->listApiUrl, ['fromdate' => $arrDate, 'todate' => $depDate]);
-                                if ($lr->successful()) {
-                                    foreach ($lr->json()['msg'] ?? [] as $item) {
-                                        $cn = trim($item['conf'] ?? $item['resNo'] ?? $item['resno'] ?? '');
-                                        if ($cn === '')
-                                            continue;
-                                        $rv = strtoupper(trim($item['rate'] ?? ''));
-                                        $rc = trim($item['rateCode'] ?? $item['rate_code'] ?? '');
-                                        if ($rc !== '')
-                                            $rv .= ($rv ? '|' : '') . strtoupper($rc);
-                                        $cust = strtoupper($item['customer'] ?? $item['custName'] ?? '');
-                                        if (str_contains($cust, 'ALPHALAND EMPLOYEE'))
-                                            $rv = 'EMPLOYEE';
-                                        if ($cn !== '') {
-                                            $rateMap[$cn] = $rv;
-                                            $memberMap[$cn] = $cust;
-                                        }
-                                    }
-                                }
-                            } catch (\Exception $e) { /* silently continue */
-                            }
-                        }
-                    }
+                    $this->hydrateListMetadataFromDetail($msgs, $rateMap, $listRateMap, $memberMap);
 
                     // Build localMetaMap from rateCode in Detail records (rateCode is a string field)
                     $localMetaMap = [];
@@ -194,6 +343,13 @@ class ReservationController extends Controller
                         if (!isset($localMetaMap[$rn]))
                             $localMetaMap[$rn] = '';
                         $mCode = $m['rateCode'] ?? $m['rate_code'] ?? '';
+                        $mType = $m['rate'] ?? '';
+                        if (is_string($mType) && trim($mType) !== '') {
+                            $upper = strtoupper(trim($mType));
+                            if (!str_contains($localMetaMap[$rn], $upper)) {
+                                $localMetaMap[$rn] .= ($localMetaMap[$rn] ? '|' : '') . $upper;
+                            }
+                        }
                         if (is_string($mCode) && trim($mCode) !== '') {
                             $upper = strtoupper(trim($mCode));
                             if (!str_contains($localMetaMap[$rn], $upper)) {
@@ -213,18 +369,21 @@ class ReservationController extends Controller
                         }
                     }
 
+                    $resUnitTypes = $this->buildReservationUnitTypes(
+                        $rateMap,
+                        $listRateMap,
+                        $localMetaMap,
+                        $resRoomTypeMap,
+                        $msgs
+                    );
+
                     foreach ($msgs as &$res) {
                         $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
-                        
+
                         $res['customer_name'] = $memberMap[$resNo] ?? '';
 
-                        // Combine List API metadata with any found in Detail API chunk
-                        $metadata = $rateMap[$resNo] ?? '';
-                        if (isset($localMetaMap[$resNo])) {
-                            $metadata .= ($metadata ? '|' : '') . $localMetaMap[$resNo];
-                        }
-
-                        $res['rate_metadata'] = $metadata;
+                        $res['rate_metadata'] = $this->buildReservationMetadata($resNo, $rateMap, $localMetaMap);
+                        $this->appendFvnMetadataFlags($res);
 
                         $age = (int) ($res['age'] ?? 99);
                         $gstType = strtolower($res['gstType'] ?? '');
@@ -266,6 +425,7 @@ class ReservationController extends Controller
 
                         $res['is_employee'] = $res['calculated_rates']['is_employee'] ?? false;
                         $res['village_name'] = $this->getVillageName($roomType);
+                        $this->applyUnitTypeLabel($res, $resUnitTypes[$resNo] ?? 'VILLA');
                         $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
                     }
                     unset($res); // Fix reference leak
@@ -300,7 +460,15 @@ class ReservationController extends Controller
                 $pagedReservations = $all;
 
                 foreach ($pagedReservations as &$res) {
-                    $res['village_name'] = $this->getVillageName($res['roomtyp'] ?? $res['roomType'] ?? '');
+                    $roomType = $res['roomtyp'] ?? $res['roomType'] ?? '';
+                    $res['village_name'] = $this->getVillageName($roomType);
+                    $listRate = is_string($res['rate'] ?? null)
+                        ? strtoupper(trim($res['rate']))
+                        : $this->lookupReservationMap($listRateMap, trim($res['resNo'] ?? $res['conf'] ?? ''));
+                    $this->applyUnitTypeLabel(
+                        $res,
+                        $this->resolveUnitTypeLabel($listRate, '', $roomType)
+                    );
                 }
                 unset($res); // Fix reference leak
             }
@@ -419,26 +587,14 @@ class ReservationController extends Controller
 
             // ALWAYS fetch List API to get metadata like 'rate' (Employee Discount ref)
             $rateMap = [];
+            $listRateMap = [];
             $memberMap = [];
             if ($fromDate && $toDate) {
                 $listResp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                     ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
                 if ($listResp->successful()) {
-                    $listData = $listResp->json()['msg'] ?? [];
-                    foreach ($listData as $lr) {
-                        $c = trim($lr['conf'] ?? $lr['resNo'] ?? $lr['resno'] ?? '');
-                        $rateVal = strtoupper(trim($lr['rate'] ?? ''));
-                        $rateCode = trim($lr['rateCode'] ?? $lr['rate_code'] ?? '');
-                        if ($rateCode !== '')
-                            $rateVal .= '|' . $rateCode;
-
-                        $cust = strtoupper($lr['customer'] ?? $lr['custName'] ?? '');
-                        if (str_contains($cust, 'ALPHALAND EMPLOYEE'))
-                            $rateVal = 'EMPLOYEE';
-                        if ($c !== '') {
-                            $rateMap[$c] = $rateVal;
-                            $memberMap[$c] = $cust;
-                        }
+                    foreach ($listResp->json()['msg'] ?? [] as $lr) {
+                        $this->ingestListReservation($lr, $rateMap, $listRateMap, $memberMap);
                     }
                 }
             }
@@ -452,6 +608,7 @@ class ReservationController extends Controller
         if (ob_get_level())
             ob_end_clean();
         $filename = 'reservations_' . date('Ymd_His') . '.xls';
+        $logoImageFormula = $this->balesinLogoImageFormula();
 
         // PASS 1: Load all data, collect unique dates and calculated rates
         $allRows = [];
@@ -462,6 +619,7 @@ class ReservationController extends Controller
         $occupantIndices = [];
         $reservationPaxCounts = [];
         $memberMap = $memberMap ?? [];
+        $listRateMap = $listRateMap ?? [];
         foreach (array_chunk($ids, 40) as $chunk) {
             $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                 ->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
@@ -475,7 +633,7 @@ class ReservationController extends Controller
                         $reservationPaxCounts[$resNo] = 0;
                     $age = (int) ($res['age'] ?? 99);
                     $gstType = strtolower($res['gstType'] ?? '');
-                    $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
+                    $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $res['age'] !== '' && $age >= 0 && $age <= 1);
                     if (!$isInfant)
                         $reservationPaxCounts[$resNo]++;
                 }
@@ -511,35 +669,28 @@ class ReservationController extends Controller
                     }
                 }
 
+                $this->hydrateListMetadataFromDetail($msgs, $rateMap, $listRateMap, $memberMap);
+
+                $resUnitTypes = $this->buildReservationUnitTypes(
+                    $rateMap,
+                    $listRateMap,
+                    $localMetaMap,
+                    $resRoomTypeMap,
+                    $msgs
+                );
+
                 foreach ($msgs as &$res) {
                     $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
                     $res['customer_name'] = $memberMap[$resNo] ?? '';
-                    $metadata = $rateMap[$resNo] ?? '';
-                    if (isset($localMetaMap[$resNo])) {
-                        $metadata .= ($metadata ? '|' : '') . $localMetaMap[$resNo];
-                    }
-                    $res['rate_metadata'] = $metadata;
-
-                    // Detect COMP/PKG based on raw values
-                    $isComp = false;
-                    $isPkg = false;
-                    foreach ($res['rate'] ?? [] as $rt) {
-                        $v = (float) ($rt['val'] ?? 0);
-                        if (abs($v - 0.01) < 0.0001)
-                            $isComp = true;
-                        if (abs($v - 0.02) < 0.0001)
-                            $isPkg = true;
-                    }
-                    if ($isComp)
-                        $res['rate_metadata'] = trim(($res['rate_metadata'] ?? '') . ' COMP');
-                    if ($isPkg)
-                        $res['rate_metadata'] = trim(($res['rate_metadata'] ?? '') . ' PKG');
+                    $res['rate_metadata'] = $this->buildReservationMetadata($resNo, $rateMap, $localMetaMap);
+                    $this->appendFvnMetadataFlags($res);
 
                     $roomType = $resRoomTypeMap[$resNo] ?? $res['roomtyp'] ?? $res['roomType'] ?? '';
                     $res['roomtyp'] = $roomType; // Ensure it's synchronized
                     $res['roomType'] = $roomType;
                     $res['village_name'] = $this->getVillageName($roomType);
                     $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
+                    $this->applyUnitTypeLabel($res, $resUnitTypes[$resNo] ?? 'VILLA');
 
                     if (!isset($paxIndices[$resNo]))
                         $paxIndices[$resNo] = 0;
@@ -569,7 +720,7 @@ class ReservationController extends Controller
 
                     $age = (int) ($res['age'] ?? 99);
                     $gstType = strtolower($res['gstType'] ?? '');
-                    $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
+                    $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $res['age'] !== '' && $age >= 0 && $age <= 1);
 
                     // Sync rates back to the rate array for display
                     foreach ($res['rate'] as &$r) {
@@ -605,7 +756,7 @@ class ReservationController extends Controller
         $dateCount = count($dateCols);
 
         // Pass 2: Stream HTML Excel output
-        return response()->stream(function () use ($allRows, $dateCols, $dateCount) {
+        return response()->stream(function () use ($allRows, $dateCols, $dateCount, $logoImageFormula) {
             
             $firstMemberName = '';
             if (count($allRows) > 0) {
@@ -628,11 +779,8 @@ class ReservationController extends Controller
             $emptyColsSpan = $dateCount + 5; // Accommodation dates + 5 fee columns
 
             echo '<tr>';
-            echo '<td rowspan="4" colspan="2" style="text-align: center; vertical-align: middle; padding: 10px; border: none; border-bottom: 20px solid transparent;">';
-            // Use a temporary public URL for Excel when testing locally to bypass Excel's 'Mark of the Web' local file blocking
-            $isLocal = app()->environment('local');
-            $logoSrc = $isLocal ? 'https://tmpfiles.org/dl/wkwxKRKNiDcT/balesin-logo.png' : asset('images/balesin-logo.png');
-            echo '<img src="' . $logoSrc . '" alt="Balesin Island" style="max-height: 70px;" />';
+            echo '<td rowspan="4" colspan="2" style="text-align: center; vertical-align: middle; padding: 10px; border: none; border-bottom: 20px solid transparent;"';
+            echo ' x:fmla="' . htmlspecialchars($logoImageFormula, ENT_QUOTES, 'UTF-8') . '">';
             echo '</td>';
             echo '<td style="font-weight: bold; background-color: #dbeafe; padding: 8px; text-align: center; color: #000;">MEMBER\'S NAME:</td>';
             echo '<td colspan="6" style="padding: 8px; text-align: center; color: #000; font-weight: bold;">' . htmlspecialchars($firstMemberName) . '</td>';
@@ -653,7 +801,7 @@ class ReservationController extends Controller
 
             echo '<tr>';
             echo '<td style="font-weight: bold; background-color: #dbeafe; padding: 8px; text-align: center; color: #000;">BOOKING DATE:</td>';
-            echo '<td colspan="6" style="padding: 8px; text-align: center; color: #000; font-weight: bold;">' . date('l, d F Y') . '</td>';
+            echo '<td colspan="6" style="padding: 8px; text-align: center; color: #000; font-weight: bold;"></td>';
             echo '<td colspan="' . $emptyColsSpan . '" style="border: none;"></td>';
             echo '</tr>';
             
@@ -786,7 +934,7 @@ class ReservationController extends Controller
                 if ($isFirst) {
                     $resSpan = $resGroupCounts[$resNo] ?? 1;
                     echo '<td rowspan="' . $resSpan . '" style="vertical-align:middle; text-align:center; font-weight:600">' . htmlspecialchars($resNo) . '</td>';
-                    echo '<td rowspan="' . $resSpan . '" style="vertical-align:middle; text-align:center;">' . htmlspecialchars($res['village_name'] ?? $res['roomtyp'] ?? $res['roomType'] ?? '') . '</td>';
+                    echo '<td rowspan="' . $resSpan . '" style="vertical-align:middle; text-align:center;">' . $this->formatVillageWithUnitType($res) . '</td>';
                 }
                 echo '<td style="text-align:center">' . htmlspecialchars($res['gstName'] ?? $res['guestName'] ?? '') . '</td>';
                 $privCard = trim((string) ($res['privCard'] ?? $res['privcard'] ?? ''));
@@ -976,8 +1124,12 @@ class ReservationController extends Controller
             if ((!$fromDate || !$toDate) && !empty($ids)) {
                 $firstChunkResp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                     ->get($this->detailApiUrl, ['resnolist' => implode(',', array_slice($ids, 0, 40))]);
-                if ($firstChunkResp->successful()) {
-                    $msgs = $firstChunkResp->json()['msg'] ?? [];
+                if (!$firstChunkResp->successful()) {
+                    $status = $firstChunkResp->status();
+                    $err = $status == 503 ? 'Balesin API Service is temporarily unavailable (503 Service Unavailable).' : "Balesin API Error (Status {$status}).";
+                    return back()->with('error', $err);
+                }
+                $msgs = $firstChunkResp->json()['msg'] ?? [];
                     $minDate = null;
                     $maxDate = null;
                     foreach ($msgs as $m) {
@@ -995,29 +1147,17 @@ class ReservationController extends Controller
                         $toDate = $maxDate;
                     }
                 }
-            }
 
             // ALWAYS fetch List API to get metadata like 'rate' (Employee Discount ref)
             $rateMap = [];
+            $listRateMap = [];
             $memberMap = [];
             if ($fromDate && $toDate) {
                 $listResp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                     ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
                 if ($listResp->successful()) {
-                    $listData = $listResp->json()['msg'] ?? [];
-                    foreach ($listData as $lr) {
-                        $c = trim($lr['conf'] ?? $lr['resNo'] ?? $lr['resno'] ?? '');
-                        $rateVal = strtoupper(trim($lr['rate'] ?? ''));
-                        $rateCode = trim($lr['rateCode'] ?? $lr['rate_code'] ?? '');
-                        if ($rateCode !== '')
-                            $rateVal .= '|' . $rateCode;
-                        $cust = strtoupper($lr['customer'] ?? $lr['custName'] ?? '');
-                        if (str_contains($cust, 'ALPHALAND EMPLOYEE'))
-                            $rateVal = 'EMPLOYEE';
-                        if ($c !== '') {
-                            $rateMap[$c] = $rateVal;
-                            $memberMap[$c] = $cust;
-                        }
+                    foreach ($listResp->json()['msg'] ?? [] as $lr) {
+                        $this->ingestListReservation($lr, $rateMap, $listRateMap, $memberMap);
                     }
                 }
             }
@@ -1031,10 +1171,15 @@ class ReservationController extends Controller
         $occupantIndices = [];
         $reservationPaxCounts = [];
         $memberMap = $memberMap ?? [];
+        $listRateMap = $listRateMap ?? [];
         foreach (array_chunk(array_slice($ids, 0, 1000), 50) as $chunk) {
             $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
-            if ($resp->successful()) {
-                $msgs = $resp->json()['msg'] ?? [];
+            if (!$resp->successful()) {
+                $status = $resp->status();
+                $err = $status == 503 ? 'Balesin API Service is temporarily unavailable (503 Service Unavailable).' : "Balesin API Error (Status {$status}).";
+                return back()->with('error', $err);
+            }
+            $msgs = $resp->json()['msg'] ?? [];
                 $this->consolidateRates($msgs);
 
                 foreach ($msgs as $res) {
@@ -1043,7 +1188,7 @@ class ReservationController extends Controller
                         $reservationPaxCounts[$resNo] = 0;
                     $age = (int) ($res['age'] ?? 99);
                     $gstType = strtolower($res['gstType'] ?? '');
-                    $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
+                    $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $res['age'] !== '' && $age >= 0 && $age <= 1);
                     if (!$isInfant)
                         $reservationPaxCounts[$resNo]++;
                 }
@@ -1079,33 +1224,25 @@ class ReservationController extends Controller
                     }
                 }
 
+                $this->hydrateListMetadataFromDetail($msgs, $rateMap, $listRateMap, $memberMap);
+
+                $resUnitTypes = $this->buildReservationUnitTypes(
+                    $rateMap,
+                    $listRateMap,
+                    $localMetaMap,
+                    $resRoomTypeMap,
+                    $msgs
+                );
+
                 foreach ($msgs as &$res) {
                     $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
                     $res['customer_name'] = $memberMap[$resNo] ?? '';
-                    $metadata = $rateMap[$resNo] ?? '';
-                    if (isset($localMetaMap[$resNo])) {
-                        $metadata .= ($metadata ? '|' : '') . $localMetaMap[$resNo];
-                    }
-                    $res['rate_metadata'] = $metadata;
-
-                    // Detect COMP/PKG based on raw values
-                    $isComp = false;
-                    $isPkg = false;
-                    foreach ($res['rate'] ?? [] as $rt) {
-                        $v = (float) ($rt['val'] ?? 0);
-                        if (abs($v - 0.01) < 0.0001)
-                            $isComp = true;
-                        if (abs($v - 0.02) < 0.0001)
-                            $isPkg = true;
-                    }
-                    if ($isComp)
-                        $res['rate_metadata'] = trim(($res['rate_metadata'] ?? '') . ' COMP');
-                    if ($isPkg)
-                        $res['rate_metadata'] = trim(($res['rate_metadata'] ?? '') . ' PKG');
+                    $res['rate_metadata'] = $this->buildReservationMetadata($resNo, $rateMap, $localMetaMap);
+                    $this->appendFvnMetadataFlags($res);
 
                     $age = (int) ($res['age'] ?? 99);
                     $gstType = strtolower($res['gstType'] ?? '');
-                    $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $age >= 0 && $age <= 1);
+                    $isInfant = str_contains($gstType, 'infant') || (isset($res['age']) && $res['age'] !== '' && $age >= 0 && $age <= 1);
 
                     if (!isset($paxIndices[$resNo]))
                         $paxIndices[$resNo] = 0;
@@ -1143,11 +1280,11 @@ class ReservationController extends Controller
 
                     $res['is_employee'] = $res['calculated_rates']['is_employee'] ?? false;
                     $res['village_name'] = $this->getVillageName($roomType);
+                    $this->applyUnitTypeLabel($res, $resUnitTypes[$resNo] ?? 'VILLA');
                     $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
                 }
                 unset($res); // Fix reference leak
                 $reservations = array_merge($reservations, $msgs);
-            }
         }
 
         // Collect all unique dates across all reservations to define columns
@@ -1223,7 +1360,9 @@ class ReservationController extends Controller
         }
         $reservations = $processedReservations;
 
-        return view('print', compact('reservations', 'accSpans', 'dateCols'));
+        $balesinLogoUrl = $this->balesinLogoUrl();
+
+        return view('print', compact('reservations', 'accSpans', 'dateCols', 'fromDate', 'toDate', 'balesinLogoUrl'));
     }
 
     private function consolidateRates(array &$msgs)
@@ -1269,5 +1408,15 @@ class ReservationController extends Controller
             $final[] = $res;
         }
         $msgs = $final;
+    }
+
+    private function balesinLogoUrl(): string
+    {
+        return 'https://balesin.com/wp-content/uploads/2025/09/balesin-island-logo-dark-blue-min.png';
+    }
+
+    private function balesinLogoImageFormula(): string
+    {
+        return '=IMAGE("' . $this->balesinLogoUrl() . '")';
     }
 }

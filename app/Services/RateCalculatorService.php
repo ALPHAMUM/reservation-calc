@@ -25,6 +25,7 @@ class RateCalculatorService
             $occupantIndex = $paxIndex;
         }
         $gstType = strtolower($passenger['gstType'] ?? $passenger['gsttype'] ?? '');
+        $passengerName = (string) ($passenger['gstName'] ?? $passenger['guestName'] ?? $passenger['gstname'] ?? $passenger['guestname'] ?? $passenger['custName'] ?? $passenger['custname'] ?? $passenger['customer'] ?? '');
         $rateMetadata = strtoupper($passenger['rate_metadata'] ?? '');
         $age = null;
         if (isset($passenger['age']) && $passenger['age'] !== '' && $passenger['age'] !== null) {
@@ -81,33 +82,11 @@ class RateCalculatorService
 
         $acc = 0;
         $accDates = [];
-        $isVilla = true;
-        $roomTypeUpper = strtoupper($roomType);
-        $metaUpper = strtoupper($rateMetadata);
-        if (
-            str_contains($roomTypeUpper, 'RGNCY') ||
-            str_contains($roomTypeUpper, 'RGNY') ||
-            str_contains($roomTypeUpper, 'REGENCY') ||
-            str_contains($roomTypeUpper, 'ROYL') ||
-            str_contains($roomTypeUpper, 'ROYAL') ||
-            str_contains($roomTypeUpper, 'PV8') ||
-            str_contains($roomTypeUpper, 'PRIVATE 8') ||
-            str_contains($roomTypeUpper, 'PRIVATE8') ||
-            str_contains($roomTypeUpper, 'SUITE') ||
-            str_contains($metaUpper, 'SUITE') ||
-            str_contains($metaUpper, 'ROYAL') ||
-            str_contains($metaUpper, 'ROYL') ||
-            str_contains($metaUpper, 'REGENCY') ||
-            str_contains($metaUpper, 'RGNCY') ||
-            str_contains($metaUpper, 'RGNY')
-        ) {
-            $isVilla = false;
-        }
+        $isVilla = $this->isVillaUnit($roomType, $rateMetadata);
 
         // Villa: 5th+ row (index 4+); suite: 9th+ row (index 8+). Uses occupant row order (matches export blocks).
         $basePax = $isVilla ? 4 : 8;
         $isExtra = $occupantIndex >= $basePax;
-        // echo "DEBUG_START: passenger=" . ($passenger['gstName'] ?? 'unknown') . ", paxIndex={$paxIndex}, isVilla=" . ($isVilla?'true':'false') . ", basePax={$basePax}, isExtra=" . ($isExtra?'true':'false') . "\n";
 
         // Divisor is the total billable pax, but capped at the unit capacity for the "base" share
         $divisor = min($totalBillable, $basePax);
@@ -182,7 +161,7 @@ class RateCalculatorService
                         }
                     } else {
                         // Villa 5th+ / suite 9th+: when API sends an accommodation value, use flat extra charge
-                        $grossAmount = $this->resolveExtraPersonGross($originalVal);
+                        $grossAmount = $this->resolveExtraPersonGross($originalVal, $isVilla);
                     }
 
                     if (!$isFVN) {
@@ -312,6 +291,11 @@ class RateCalculatorService
             $env = (float) ($envSettings['amount'] ?? 200);
         }
 
+        // When occupant is infant and name contains 'dependent' (case-insensitive) via Regex, remove the environmental fee
+        if ($isInfant && preg_match('/dependent/i', $passengerName)) {
+            $env = 0;
+        }
+
         return [
             'acc' => $acc,
             'acc_dates' => $accDates,
@@ -324,13 +308,117 @@ class RateCalculatorService
         ];
     }
 
+    public function isVillaUnit(string $roomType, string $rateMetadata = '', string $rateCode = '', array $rateValues = []): bool
+    {
+        $roomTypeUpper = strtoupper($roomType);
+        $metaUpper = strtoupper($rateMetadata);
+        $codeUpper = strtoupper(trim($rateCode));
+        $combined = $metaUpper . '|' . $codeUpper . '|' . $roomTypeUpper;
+
+        // List API product rate (KEY-SUITE / KEY-VILLA) overrides per-passenger FVN markers.
+        if (str_contains($combined, 'KEY-SUITE')) {
+            return false;
+        }
+        if (str_contains($combined, 'KEY-VILLA')) {
+            return true;
+        }
+
+        if ($this->matchesSuiteProduct($combined, $metaUpper, $codeUpper, $rateValues)) {
+            return false;
+        }
+
+        if ($this->matchesVillaProduct($combined, $metaUpper, $codeUpper, $rateValues)) {
+            return true;
+        }
+
+        if (
+            str_contains($roomTypeUpper, 'RGNCY') ||
+            str_contains($roomTypeUpper, 'RGNY') ||
+            str_contains($roomTypeUpper, 'REGENCY') ||
+            str_contains($roomTypeUpper, 'ROYL') ||
+            str_contains($roomTypeUpper, 'ROYAL') ||
+            str_contains($roomTypeUpper, 'PV8') ||
+            str_contains($roomTypeUpper, 'PRIVATE 8') ||
+            str_contains($roomTypeUpper, 'PRIVATE8') ||
+            str_contains($roomTypeUpper, 'SUITE') ||
+            str_contains($metaUpper, 'SUITE') ||
+            str_contains($metaUpper, 'ROYAL') ||
+            str_contains($metaUpper, 'ROYL') ||
+            str_contains($metaUpper, 'REGENCY') ||
+            str_contains($metaUpper, 'RGNCY') ||
+            str_contains($metaUpper, 'RGNY')
+        ) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function matchesSuiteProduct(string $combined, string $metaUpper, string $codeUpper, array $rateValues): bool
+    {
+        foreach (['KEY-SUITE', 'MSUITE-', 'GSUITE-'] as $needle) {
+            if (str_contains($combined, $needle)) {
+                return true;
+            }
+        }
+
+        if ($codeUpper === '.02' || preg_match('/(?:^|\|)\.02(?:\||$)/', $metaUpper)) {
+            return true;
+        }
+
+        if (str_contains($metaUpper, ' PKG')) {
+            return true;
+        }
+
+        foreach ($rateValues as $v) {
+            if (abs((float) $v - 0.02) < 0.0001) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function matchesVillaProduct(string $combined, string $metaUpper, string $codeUpper, array $rateValues): bool
+    {
+        foreach (['KEY-VILLA', 'MVILLA-', 'GVILLA-'] as $needle) {
+            if (str_contains($combined, $needle)) {
+                return true;
+            }
+        }
+
+        if ($codeUpper === '.01' || preg_match('/(?:^|\|)\.01(?:\||$)/', $metaUpper)) {
+            return true;
+        }
+
+        foreach ($rateValues as $v) {
+            if (abs((float) $v - 0.01) < 0.0001) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function unitTypeLabel(string $roomType, string $rateMetadata = '', string $rateCode = '', array $rateValues = []): string
+    {
+        return $this->isVillaUnit($roomType, $rateMetadata, $rateCode, $rateValues) ? 'VILLA' : 'SUITE';
+    }
+
     /**
-     * Extra occupant gross rate: any API accommodation value → flat 3700 (not FVN).
+     * Extra occupant gross rate: any API accommodation value → flat 3700 or custom settings (not FVN).
      * Villa 5th+ / suite 9th+ must never use 0.01 / 0.02 FVN markers from the API.
      */
-    private function resolveExtraPersonGross(float $apiVal): float
+    private function resolveExtraPersonGross(float $apiVal, bool $isVilla): float
     {
-        return $apiVal != 0 ? self::EXTRA_PERSON_CHARGE : 0;
+        $extraSet = $this->settings['extra_occupants'][$isVilla ? 'villa' : 'suite'] ?? [];
+        $shouldOverride = $extraSet['override'] ?? true;
+        $overrideAmt = (float)($extraSet['amount'] ?? self::EXTRA_PERSON_CHARGE);
+
+        if ($apiVal != 0) {
+            return $shouldOverride ? $overrideAmt : $apiVal;
+        }
+        return 0;
     }
 
     private function getAccommodationUnitRate($date, $isVilla, $isMember)

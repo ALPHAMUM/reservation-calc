@@ -855,15 +855,10 @@
                                         $blockSize = min($count - $curr, $basePax);
                                         
                                         $groupTotals = [];
-                                        $blockLeader = $rows[$blockStart];
                                         foreach($dateCols as $d) {
                                             $uv = 0;
-                                            if (isset($blockLeader['calculated_rates']['acc_dates'][$d]['val'])) {
-                                                $uv = (float) $blockLeader['calculated_rates']['acc_dates'][$d]['val'];
-                                            } else {
-                                                foreach($blockLeader['rate'] ?? [] as $rt) {
-                                                    if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
-                                                }
+                                            foreach($rows[$blockStart]['rate'] ?? [] as $rt) {
+                                                if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
                                             }
                                             $groupTotals[$d] = $uv;
                                         }
@@ -887,10 +882,8 @@
                                     $resNo = trim($res['resNo'] ?? $res['conf'] ?? 'N/A');
                                     $isFirstInGroup = !isset($renderedRes[$resNo]);
                                     if($isFirstInGroup) $renderedRes[$resNo] = true;
-                                    $spanInfo = $accSpans[$idx] ?? ['span' => 1, 'totals' => [], 'group_size' => 1];
-                                    $resForJs = $res;
-                                    $resForJs['acc_block_size'] = (int) ($spanInfo['group_size'] ?? 1);
-                                    $resDataForJs[$idx] = $resForJs;
+                                    $spanInfo = $accSpans[$idx] ?? ['span' => 1, 'totals' => []];
+                                    $resDataForJs[$idx] = $res;
                                 @endphp
                                 <tr class="{{ $isFirstInGroup ? 'res-group-header' : '' }}" data-res-no="{{ $resNo }}">
                                     @if($isFirstInGroup)
@@ -898,7 +891,10 @@
                                             <span class="res-no">#{{ $resNo }}</span>
                                         </td>
                                         <td rowspan="{{ count($resGroups[$resNo]) }}" class="sticky-col-2" style="vertical-align: top; padding-top: 1.5rem; font-weight: 600;">
-                                            {{ $res['village_name'] ?? 'N/A' }}
+                                            <div>{{ strtoupper($res['village_name'] ?? 'N/A') }}</div>
+                                            @if(!empty($res['unit_type_label']))
+                                                <div>{{ strtoupper($res['unit_type_label']) }}</div>
+                                            @endif
                                         </td>
                                     @endif
                                     <td class="sticky-col-3" title="{{ $res['gstName'] ?? $res['guestName'] ?? '' }}">
@@ -1555,8 +1551,11 @@
             const res = window.__resData[idx];
             if (!res) return;
 
-            const groupSize = Math.max(1, parseInt(res.acc_block_size, 10) || 1);
-            const ratesToUse = res.rate || [];
+            // Find all occupants of this reservation group to compute distributed share
+            const groupRows = window.__resData.filter(item => (item.resNo || item.conf) === (res.resNo || res.conf));
+            const groupSize = Math.max(1, groupRows.length);
+            const primaryRes = groupRows[0] || res;
+            const ratesToUse = primaryRes.rate || res.rate || [];
 
             const privCard = (res.privCard || res.privcard || '').trim();
             const privCardLower = privCard.toLowerCase();

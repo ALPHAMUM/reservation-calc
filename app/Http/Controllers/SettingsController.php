@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
+use App\Exports\RatesExport;
 use App\Services\SettingsService;
+use Illuminate\Http\Request;
+use Maatwebsite\Excel\Facades\Excel;
 
 class SettingsController extends Controller
 {
@@ -90,9 +92,21 @@ class SettingsController extends Controller
         // Infants
         $settings['infants']['airfare_free'] = isset($input['infants']['airfare_free']);
         
+        // Extra Occupants Override
+        $settings['extra_occupants']['villa']['override'] = isset($input['extra_occupants']['villa']['override']);
+        $settings['extra_occupants']['villa']['amount'] = (float)($input['extra_occupants']['villa']['amount'] ?? $settings['extra_occupants']['villa']['amount'] ?? 3700);
+        $settings['extra_occupants']['suite']['override'] = isset($input['extra_occupants']['suite']['override']);
+        $settings['extra_occupants']['suite']['amount'] = (float)($input['extra_occupants']['suite']['amount'] ?? $settings['extra_occupants']['suite']['amount'] ?? 3700);
 
         $this->settingsService->saveSettings($settings);
 
         return back()->with('success', 'Settings successfully updated.');
+    }
+
+    public function exportRates()
+    {
+        $filename = 'tbl_rates_' . date('Ymd') . '.xlsx';
+
+        return Excel::download(new RatesExport(), $filename);
     }
 }

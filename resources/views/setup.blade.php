@@ -159,6 +159,7 @@
 <div class="animate-in" style="animation-delay: 0.1s">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
         <h2 style="font-size: 1.5rem; font-weight: 600;">Calculator Setup & Configuration</h2>
+        <a href="{{ route('rates.export') }}" class="btn" style="background: var(--success); color: white; text-decoration: none;">Export tbl_rates (Excel)</a>
     </div>
 
     @if(session('success'))
@@ -277,6 +278,42 @@
                     @endforelse
                 </div>
                 <button type="button" class="btn btn-primary btn-sm" onclick="addPeakPeriod()" style="margin-top:0.5rem; background: rgba(255,255,255,0.1)">+ Add Peak Period</button>
+            </div>
+        </div>
+
+        <!-- Extra Occupant Rates -->
+        <div class="setup-section">
+            <div class="info-btn" onclick="toggleHelp('help-extra-occupants')">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+            </div>
+            <h3 class="setup-title">Extra Occupant Accommodation Rates</h3>
+            <div id="help-extra-occupants" class="help-box">
+                <span class="help-close" onclick="toggleHelp('help-extra-occupants')">&times;</span>
+                <strong>Extra Occupants</strong>
+                <div>Configure the accommodation rate for extra occupants:
+                <br>• Villa: 5th+ guest.
+                <br>• Suite: 9th+ guest.
+                <br>You can choose to use the standard defaults returned from the API, or override them with a flat custom rate.</div>
+            </div>
+            <div class="grid-2">
+                <div class="form-group" style="padding: 1rem; background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 0.75rem;">
+                    <label class="form-label" style="font-size: 1rem; color: white; font-weight: 500; margin-bottom: 1rem;">Villa (5th+ Person)</label>
+                    <div class="checkbox-wrap" style="margin-bottom: 1rem;">
+                        <input type="checkbox" id="override_villa" name="extra_occupants[villa][override]" {{ !empty($settings['extra_occupants']['villa']['override']) ? 'checked' : '' }}>
+                        <label for="override_villa" class="form-label" style="margin:0; color: white;">Override API default rate</label>
+                    </div>
+                    <label class="form-label">Override Rate (₱)</label>
+                    <input type="number" step="0.01" name="extra_occupants[villa][amount]" class="form-control" value="{{ $settings['extra_occupants']['villa']['amount'] ?? 3700 }}">
+                </div>
+                <div class="form-group" style="padding: 1rem; background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 0.75rem;">
+                    <label class="form-label" style="font-size: 1rem; color: white; font-weight: 500; margin-bottom: 1rem;">Suite (9th+ Person)</label>
+                    <div class="checkbox-wrap" style="margin-bottom: 1rem;">
+                        <input type="checkbox" id="override_suite" name="extra_occupants[suite][override]" {{ !empty($settings['extra_occupants']['suite']['override']) ? 'checked' : '' }}>
+                        <label for="override_suite" class="form-label" style="margin:0; color: white;">Override API default rate</label>
+                    </div>
+                    <label class="form-label">Override Rate (₱)</label>
+                    <input type="number" step="0.01" name="extra_occupants[suite][amount]" class="form-control" value="{{ $settings['extra_occupants']['suite']['amount'] ?? 3700 }}">
+                </div>
             </div>
         </div>
 

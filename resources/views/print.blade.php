@@ -60,6 +60,7 @@
             font-size: 10px;
             color: #475569;
             border: 1px solid #b4c6e7;
+            text-align: center;
         }
 
         .dh {
@@ -119,7 +120,7 @@
 
     <h1>Reservation Detailed Report</h1>
     <div style="display: flex; gap: 20px; font-size: 14px; color: #64748b; margin-bottom: 20px;">
-        <div><strong>Period:</strong> {{ request('fromdate', 'N/A') }} to {{ request('todate', 'N/A') }}</div>
+        <div><strong>Period:</strong> {{ !empty($fromDate) ? \Carbon\Carbon::parse($fromDate)->format('M d, Y') : request('fromdate', 'N/A') }} to {{ !empty($toDate) ? \Carbon\Carbon::parse($toDate)->format('M d, Y') : request('todate', 'N/A') }}</div>
         @if(request('resnolist'))
             <div><strong>IDs:</strong> {{ request('resnolist') }}</div>
         @endif
@@ -135,20 +136,26 @@
         // Pre-calculate rowspan counts per reservation number
         $resGroupCounts = [];
         $firstMemberName = '';
+        $firstCheckIn = '';
         foreach ($reservations as $r) {
             $rn = trim((string)($r['resNo'] ?? $r['conf'] ?? ''));
             $resGroupCounts[$rn] = ($resGroupCounts[$rn] ?? 0) + 1;
             if (!$firstMemberName && !empty($r['customer_name'])) {
                 $firstMemberName = $r['customer_name'];
             }
+            if (!$firstCheckIn && ($cIn = $r['arrdt'] ?? $r['arrDt'] ?? '')) {
+                $firstCheckIn = date('Y-m-d', strtotime($cIn));
+            }
         }
+        $today = date('Y-m-d');
+        $bookingDateDisplay = ($firstCheckIn === $today) ? date('l, d F Y') : '';
     @endphp
 
     <table>
         <thead>
             <tr>
                 <td rowspan="4" colspan="2" style="text-align: center; vertical-align: middle; border: none; padding-right: 20px;">
-                    <img src="{{ asset('images/balesin-logo.png') }}" alt="Balesin Island" style="max-height: 70px; object-fit: contain;" />
+                    <img src="{{ $balesinLogoUrl }}" alt="Balesin Island" style="max-height: 70px; object-fit: contain;" />
                 </td>
                 <td style="font-weight: bold; background-color: #dbeafe; border: 1px solid #cbd5e1; padding: 5px; text-align: center;">MEMBER'S NAME:</td>
                 <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;">{{ $firstMemberName }}</td>
@@ -166,7 +173,7 @@
             </tr>
             <tr>
                 <td style="font-weight: bold; background-color: #dbeafe; border: 1px solid #cbd5e1; padding: 5px; text-align: center;">BOOKING DATE:</td>
-                <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;">{{ date('l, d F Y') }}</td>
+                <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;">{{ $bookingDateDisplay }}</td>
                 <td colspan="{{ count($dateCols) + 5 }}" style="border: none;"></td>
             </tr>
             <tr>
@@ -236,15 +243,20 @@
                 <tr>
                     @if($isFirst)
                         <td rowspan="{{ $resGroupCounts[$resNo] ?? 1 }}" style="vertical-align: middle; text-align: center; font-weight: 600;">{{ $resNo }}</td>
-                        <td rowspan="{{ $resGroupCounts[$resNo] ?? 1 }}" style="vertical-align: middle; text-align: center;">{{ $res['village_name'] ?? $res['roomtyp'] ?? $res['roomType'] ?? '' }}</td>
+                        <td rowspan="{{ $resGroupCounts[$resNo] ?? 1 }}" style="vertical-align: middle; text-align: center;">
+                            <div>{{ strtoupper($res['village_name'] ?? $res['roomtyp'] ?? $res['roomType'] ?? '') }}</div>
+                            @if(!empty($res['unit_type_label']))
+                                <div>{{ strtoupper($res['unit_type_label']) }}</div>
+                            @endif
+                        </td>
                     @endif
-                    <td>{{ $res['gstName'] ?? $res['guestName'] ?? '' }}</td>
+                    <td style="text-align: center;">{{ $res['gstName'] ?? $res['guestName'] ?? '' }}</td>
                     <td style="text-align: center; text-transform: uppercase;">
                         {{ $res['gstType'] ?? '' }}
                         @if(!empty($res['is_employee'])) (EMPLOYEE) @endif
                         {{ $isValidCard ? ' (' . $privCard . ')' : '' }}
                     </td>
-                    <td>{{ $res['age'] ?? '' }}</td>
+                    <td style="text-align: center;">{{ $res['age'] ?? '' }}</td>
                     <td>{{ $res['dateOfBirth'] ?? '' }}</td>
                     <td style="text-align: center; text-transform: uppercase;">{{ $res['nationality_name'] ?? $res['nationality'] ?? '' }}</td>
                     <td>{{ ($d = $res['arrdt'] ?? $res['arrDt'] ?? '') ? date('m/d/Y', strtotime($d)) : '' }}</td>
@@ -344,10 +356,10 @@ $labelColspan = 9 + count($dateCols) + 4;
 
 
                                                     <tr>
-                <td colspan="9" style="text-align: right; border: none; font-weight: bold;">TOTAL AMOUNT DUE:</td>
+                <td colspan="9" style="text-align: right; border: none; font-weight: bold; font-size: 16px;">TOTAL AMOUNT DUE:</td>
                 <td colspan="{{ count($dateCols) }}" style="border: none;"></td>
 
-                                    <td colspan="4" class="num" style="border: none; font-weight: bold;">&#8369;{{ number_format($overallGrandTotal, 2) }}</td>
+                                    <td colspan="4" class="num" style="border: none; font-weight: bold; font-size: 16px;">&#8369;{{ number_format($overallGrandTotal, 2) }}</td>
             </tr>
             <tr>
                 <td colspan="9" style="text-align: right; border: none; font-style: italic; color: #64748b; padding-bottom: 15px;">Room Rates include service charge (10%) and VAT (12%)</td>
@@ -370,9 +382,9 @@ $labelColspan = 9 + count($dateCols) + 4;
                 <!-- <td colspan="4" class="num" style="border: none; padding-bottom: 20px;">&#8369;0.00</td> -->
             </tr>
             <tr>
-                <td colspan="9" style="text-align: right; border: none; font-weight: bold;">BALANCE TO SETTLE</td>
+                <td colspan="9" style="text-align: right; border: none; font-weight: bold; font-size: 16px; color: red;">BALANCE TO SETTLE</td>
                 <td colspan="{{ count($dateCols) }}" style="border: none;"></td>
-                <td colspan="4" class="num" style="border: none; font-weight: bold; border-top: 1px solid #000;">&#8369;{{ number_format($overallGrandTotal, 2) }}</td>
+                <td colspan="4" class="num" style="border: none; font-weight: bold; border-top: 1px solid #000; font-size: 16px; color: red;">&#8369;{{ number_format($overallGrandTotal, 2) }}</td>
             </tr>
         </tfoot>
     </table>

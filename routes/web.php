@@ -24,3 +24,4 @@ Route::get('/api/reservations/rates', [ReservationController::class, 'getRates']
 use App\Http\Controllers\SettingsController;
 Route::get('/setup', [SettingsController::class, 'index'])->name('setup');
 Route::post('/setup', [SettingsController::class, 'update']);
+Route::get('/setup/rates/export', [SettingsController::class, 'exportRates'])->name('rates.export');
