@@ -143,12 +143,7 @@
             if (!$firstMemberName && !empty($r['customer_name'])) {
                 $firstMemberName = $r['customer_name'];
             }
-            if (!$firstCheckIn && ($cIn = $r['arrdt'] ?? $r['arrDt'] ?? '')) {
-                $firstCheckIn = date('Y-m-d', strtotime($cIn));
-            }
         }
-        $today = date('Y-m-d');
-        $bookingDateDisplay = ($firstCheckIn === $today) ? date('l, d F Y') : '';
     @endphp
 
     <table>
@@ -173,7 +168,7 @@
             </tr>
             <tr>
                 <td style="font-weight: bold; background-color: #dbeafe; border: 1px solid #cbd5e1; padding: 5px; text-align: center;">BOOKING DATE:</td>
-                <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;">{{ $bookingDateDisplay }}</td>
+                <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;"></td>
                 <td colspan="{{ count($dateCols) + 5 }}" style="border: none;"></td>
             </tr>
             <tr>
