@@ -286,6 +286,11 @@ class ReservationController extends Controller
             $statusFilter = [$statusFilter];
         }
 
+        // When explicitly requesting reservation IDs, don't filter by status.
+        if (is_string($resNoList) && trim($resNoList) !== '') {
+            $statusFilter = [];
+        }
+
         try {
             // ALWAYS fetch List API first to get metadata like 'rate' (Employee Discount ref)
             $rateMap = [];
