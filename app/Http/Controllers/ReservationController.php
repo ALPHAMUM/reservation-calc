@@ -251,7 +251,7 @@ class ReservationController extends Controller
             return $village;
         }
 
-        return $village . '<br>' . $unit;
+        return $village . '&#10;' . $unit;
     }
 
     public function index(Request $request)
@@ -796,11 +796,24 @@ class ReservationController extends Controller
             echo '</style></head><body>';
             
             // Main Table start with header integrated
-            echo '<table border="1">';
+            echo '<table style="border-collapse: collapse; border: none;">';
             $emptyColsSpan = $dateCount + 5; // Accommodation dates + 5 fee columns
 
+            // Narrow margin column (col A) + narrow margin row (row 1)
+            echo '<colgroup>';
+            echo '<col style="mso-width-source:userset; width:15pt;">';
+            echo '</colgroup>';
+
+            // Row 1: narrow top margin row
+            echo '<tr style="height:10pt;">';
+            echo '<td style="border:none; width:15pt;"></td>';
+            echo '<td colspan="' . (9 + $emptyColsSpan) . '" style="border:none;"></td>';
+            echo '</tr>';
+
+            // Logo + MEMBER'S NAME row
             echo '<tr>';
-            echo '<td rowspan="4" colspan="2" style="text-align: center; vertical-align: middle; padding: 10px; border: none; border-bottom: 20px solid transparent;"';
+            echo '<td style="border:none; width:15pt;"></td>';
+            echo '<td rowspan="4" colspan="2" style="text-align: center; vertical-align: middle; padding: 10px; border: none; border-left: 0.5pt solid #b4c6e7; border-top: 0.5pt solid #b4c6e7; border-bottom: 20px solid transparent;"';
             echo ' x:fmla="' . htmlspecialchars($logoImageFormula, ENT_QUOTES, 'UTF-8') . '">';
             echo '</td>';
             echo '<td style="font-weight: bold; background-color: #dbeafe; padding: 8px; text-align: center; color: #000;">MEMBER\'S NAME:</td>';
@@ -809,28 +822,32 @@ class ReservationController extends Controller
             echo '</tr>';
 
             echo '<tr>';
+            echo '<td style="border:none; width:15pt;"></td>';
             echo '<td style="font-weight: bold; background-color: #dbeafe; padding: 8px; text-align: center; color: #000;">MEMBERSHIP NUMBER:</td>';
             echo '<td colspan="6" style="padding: 8px; text-align: center; color: #000; font-weight: bold;"></td>';
             echo '<td colspan="' . $emptyColsSpan . '" style="border: none;"></td>';
             echo '</tr>';
 
             echo '<tr>';
+            echo '<td style="border:none; width:15pt;"></td>';
             echo '<td style="font-weight: bold; background-color: #dbeafe; padding: 8px; text-align: center; color: #000;">CONTACT NUMBER:</td>';
             echo '<td colspan="6" style="padding: 8px; text-align: center; color: #000; font-weight: bold;"></td>';
             echo '<td colspan="' . $emptyColsSpan . '" style="border: none;"></td>';
             echo '</tr>';
 
             echo '<tr>';
+            echo '<td style="border:none; width:15pt;"></td>';
             echo '<td style="font-weight: bold; background-color: #dbeafe; padding: 8px; text-align: center; color: #000;">BOOKING DATE:</td>';
             echo '<td colspan="6" style="padding: 8px; text-align: center; color: #000; font-weight: bold;"></td>';
             echo '<td colspan="' . $emptyColsSpan . '" style="border: none;"></td>';
             echo '</tr>';
             
             // Empty spacer row before main headers
-            echo '<tr><td colspan="' . (9 + $emptyColsSpan) . '" style="border: none; height: 10px;"></td></tr>';
+            echo '<tr><td style="border:none; width:15pt;"></td><td colspan="' . (9 + $emptyColsSpan) . '" style="border: none; height: 10px;"></td></tr>';
 
             // Header Row 1: fixed cols (rowspan=2) + ACCOMMODATION (colspan = dateCount+1) + fee cols (rowspan=2)
             echo '<tr>';
+            echo '<td rowspan="2" style="border:none; width:15pt;"></td>';
             echo '<td rowspan="2" class="hdr">RSVN#</td>';
             echo '<td rowspan="2" class="hdr">VILLAGE</td>';
             echo '<td rowspan="2" class="hdr" style="width: 150px;">OCCUPANTS</td>';
@@ -952,10 +969,11 @@ class ReservationController extends Controller
                 $totals['env'] += (float) ($rates['env'] ?? 0);
 
                 echo '<tr>';
+                echo '<td style="border:none; width:15pt;"></td>';
                 if ($isFirst) {
                     $resSpan = $resGroupCounts[$resNo] ?? 1;
                     echo '<td rowspan="' . $resSpan . '" style="vertical-align:middle; text-align:center; font-weight:600">' . htmlspecialchars($resNo) . '</td>';
-                    echo '<td rowspan="' . $resSpan . '" style="vertical-align:middle; text-align:center;">' . $this->formatVillageWithUnitType($res) . '</td>';
+                    echo '<td rowspan="' . $resSpan . '" style="vertical-align:middle; text-align:center; white-space:normal; mso-data-placement:same-cell;">' . $this->formatVillageWithUnitType($res) . '</td>';
                 }
                 echo '<td style="text-align:center">' . htmlspecialchars($res['gstName'] ?? $res['guestName'] ?? '') . '</td>';
                 $privCard = trim((string) ($res['privCard'] ?? $res['privcard'] ?? ''));
@@ -1038,6 +1056,7 @@ class ReservationController extends Controller
 
             // Grand totals row
             echo '<tr style="font-weight:bold;background:#f1f5f9">';
+            echo '<td style="border:none; width:15pt;"></td>';
             echo '<td colspan="2" style="text-align:right">TOTAL PAX:</td>';
             echo '<td style="text-align:center">' . $totalPax . '</td>';
             echo '<td colspan="6" style="text-align:right">GRAND TOTALS:</td>';
@@ -1058,35 +1077,41 @@ class ReservationController extends Controller
             $fullColspan = 9 + $dateCount + 5;
             $labelColspan = 9 + $dateCount + 4;
 
-            echo '<tr><td colspan="' . $fullColspan . '" style="border:none;">&nbsp;</td></tr>';
+            echo '<tr><td style="border:none; width:15pt;"></td><td colspan="' . $fullColspan . '" style="border:none;">&nbsp;</td></tr>';
             echo '<tr>
+            <td style="border:none; width:15pt;"></td>
             <td colspan="8" style="text-align:right;border:none;font-weight:bold">TOTAL AMOUNT DUE:</td>
             <td colspan="' . count($dateCols) . '" style="border:none"></td>
             <td colspan="4" class="num" style="border:none;font-weight:bold">&#8369;' . number_format($overallGrandTotal, 2) . '</td>
             </tr>';
 
             echo '<tr>
+            <td style="border:none; width:15pt;"></td>
             <td colspan="8" style="text-align:right;border:none;font-style:italic;color:#64748b">Room Rates include service charge (10%) and VAT (12%)</td>
             <td colspan="' . (count($dateCols) + 5) . '" style="border:none"></td>
             </tr>';
 
             echo '<tr>
+            <td style="border:none; width:15pt;"></td>
             <td colspan="8" style="text-align:right;border:none;font-weight:bold">LESS PAYMENT/S:</td>
             <td colspan="' . count($dateCols) . '" style="border:none"></td>
             <td colspan="4" style="border:none"></td>
             </tr>';
 
             echo '<tr>
+            <td style="border:none; width:15pt;"></td>
             <td colspan="8" style="text-align:right;border:none">OVERPAYMENT/CREDIT FROM FOLIO</td>
             <td colspan="' . count($dateCols) . '" style="border:none"></td>
             </tr>';
 
             echo '<tr>
+            <td style="border:none; width:15pt;"></td>
             <td colspan="8" style="text-align:right;border:none;padding-bottom:20px">COLLECTION RECEIPT</td>
             <td colspan="' . count($dateCols) . '" style="border:none"></td>
             </tr>';
 
             echo '<tr>
+            <td style="border:none; width:15pt;"></td>
             <td colspan="8" style="text-align:right;border:none;font-weight:bold">BALANCE TO SETTLE</td>
             <td colspan="' . count($dateCols) . '" style="border:none"></td>
             <td colspan="4" class="num" style="border:none;font-weight:bold;border-top:1px solid #000">&#8369;' . number_format($overallGrandTotal, 2) . '</td>
