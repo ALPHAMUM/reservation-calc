@@ -883,6 +883,7 @@
                                     $isFirstInGroup = !isset($renderedRes[$resNo]);
                                     if($isFirstInGroup) $renderedRes[$resNo] = true;
                                     $spanInfo = $accSpans[$idx] ?? ['span' => 1, 'totals' => []];
+                                    $res['group_size'] = $spanInfo['group_size'] ?? 1;
                                     $resDataForJs[$idx] = $res;
                                 @endphp
                                 <tr class="{{ $isFirstInGroup ? 'res-group-header' : '' }}" data-res-no="{{ $resNo }}">
@@ -1553,9 +1554,8 @@
 
             // Find all occupants of this reservation group to compute distributed share
             const groupRows = window.__resData.filter(item => (item.resNo || item.conf) === (res.resNo || res.conf));
-            const groupSize = Math.max(1, groupRows.length);
-            const primaryRes = groupRows[0] || res;
-            const ratesToUse = primaryRes.rate || res.rate || [];
+            const groupSize = res.group_size || Math.max(1, groupRows.length);
+            const ratesToUse = res.rate || [];
 
             const privCard = (res.privCard || res.privcard || '').trim();
             const privCardLower = privCard.toLowerCase();
