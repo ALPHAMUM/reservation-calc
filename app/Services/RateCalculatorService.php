@@ -45,8 +45,9 @@ class RateCalculatorService
             if (!empty($searchTerms)) {
                 $dbRate = \App\Models\Rate::whereIn('rate_code', $searchTerms)->first();
             }
-        } catch (\Exception $e) {
-            // Silently fail if DB table is not ready
+        } catch (\Throwable $e) {
+            // Silently fail if DB table is not ready or any other DB error
+            $dbRate = null;
         }
         $age = null;
         if (isset($passenger['age']) && $passenger['age'] !== '' && $passenger['age'] !== null) {
