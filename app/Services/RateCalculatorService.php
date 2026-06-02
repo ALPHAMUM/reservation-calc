@@ -27,6 +27,27 @@ class RateCalculatorService
         $gstType = strtolower($passenger['gstType'] ?? $passenger['gsttype'] ?? '');
         $passengerName = (string) ($passenger['gstName'] ?? $passenger['guestName'] ?? $passenger['gstname'] ?? $passenger['guestname'] ?? $passenger['custName'] ?? $passenger['custname'] ?? $passenger['customer'] ?? '');
         $rateMetadata = strtoupper($passenger['rate_metadata'] ?? '');
+        $dbRate = null;
+        try {
+            $rCodeRaw = $passenger['rateCode'] ?? $passenger['rate_code'] ?? '';
+            $rCode = is_string($rCodeRaw) ? strtoupper(trim($rCodeRaw)) : (is_numeric($rCodeRaw) ? strval($rCodeRaw) : '');
+
+            $searchTerms = [];
+            if ($rCode !== '') {
+                $searchTerms[] = $rCode;
+            }
+            if ($rateMetadata !== '') {
+                foreach (explode('|', $rateMetadata) as $term) {
+                    $searchTerms[] = trim($term);
+                }
+            }
+            $searchTerms = array_unique(array_filter($searchTerms));
+            if (!empty($searchTerms)) {
+                $dbRate = \App\Models\Rate::whereIn('rate_code', $searchTerms)->first();
+            }
+        } catch (\Exception $e) {
+            // Silently fail if DB table is not ready
+        }
         $age = null;
         if (isset($passenger['age']) && $passenger['age'] !== '' && $passenger['age'] !== null) {
             $age = (int) $passenger['age'];
@@ -126,42 +147,67 @@ class RateCalculatorService
 
                 if (!$isInfant) {
                     $grossAmount = 0;
-                    if (!$isExtra) {
 
-                        // 1. Magic numbers: always honor if sent by API
-                        if ($originalVal == 0.01 || $originalVal == 0.02) {
-                            $unitRate = 0.01; // Force to .01 as requested
-                            $isFVN = true;
-                            $fvnApplied = true;
+                    // Check if original daily rate value matches the DB rate's extra occupant rate
+                    $matchesExtra = false;
+                    if ($dbRate) {
+                        $extraVal = (float) $dbRate->rate_extra;
+                        if (abs($originalVal - $extraVal) < 0.05) {
+                            $matchesExtra = true;
                         }
-                        // 2. Automatic detection from metadata only on Day 1 IF the rate is a magic number (not 0)
-                        elseif ($idx === 0 && !$fvnApplied && ($originalVal == 0.01 || $originalVal == 0.02)) {
-                            $rCodeRaw = $passenger['rateCode'] ?? $passenger['rate_code'] ?? '';
-                            $rCode = is_string($rCodeRaw) ? strtoupper($rCodeRaw) : '';
+                    }
 
-                            $rNameRaw = $passenger['rate'] ?? '';
-                            $rName = is_string($rNameRaw) ? strtoupper($rNameRaw) : '';
-
-                            if (
-                                str_contains($rateMetadata, 'KEY-VILLA') || str_contains($rName, 'KEY-VILLA') ||
-                                str_contains($rateMetadata, '.01') || $rCode === '.01' ||
-                                str_contains($rateMetadata, 'KEY-SUITE') || str_contains($rName, 'KEY-SUITE') ||
-                                str_contains($rateMetadata, '.02') || $rCode === '.02'
-                            ) {
-                                $unitRate = 0.01; // Force to .01
+                    if ($dbRate && $matchesExtra) {
+                        if (!$isExtra) {
+                            $baseVal = (float)$dbRate->rate_value;
+                            if (round($baseVal, 2) == 0.01 || round($baseVal, 2) == 0.02) {
+                                $unitRate = 0.01;
+                                $isFVN = true;
+                                $fvnApplied = true;
+                                $grossAmount = 0.01;
+                            } else {
+                                $grossAmount = $baseVal;
+                            }
+                        } else {
+                            $grossAmount = (float)($dbRate->rate_extra - $dbRate->rate_value);
+                        }
+                    } else {
+                        if (!$isExtra) {
+                            // 1. Magic numbers: always honor if sent by API
+                            if ($originalVal == 0.01 || $originalVal == 0.02) {
+                                $unitRate = 0.01; // Force to .01 as requested
                                 $isFVN = true;
                                 $fvnApplied = true;
                             }
-                        }
-                        if (!$isFVN) {
-                            // Always trust the API value, even if it's 0.00
-                            $grossAmount = $originalVal;
+                            // 2. Automatic detection from metadata only on Day 1 IF the rate is a magic number (not 0)
+                            elseif ($idx === 0 && !$fvnApplied && ($originalVal == 0.01 || $originalVal == 0.02)) {
+                                $rCodeRaw = $passenger['rateCode'] ?? $passenger['rate_code'] ?? '';
+                                $rCode = is_string($rCodeRaw) ? strtoupper($rCodeRaw) : '';
+
+                                $rNameRaw = $passenger['rate'] ?? '';
+                                $rName = is_string($rNameRaw) ? strtoupper($rNameRaw) : '';
+
+                                if (
+                                    str_contains($rateMetadata, 'KEY-VILLA') || str_contains($rName, 'KEY-VILLA') ||
+                                    str_contains($rateMetadata, '.01') || $rCode === '.01' ||
+                                    str_contains($rateMetadata, 'KEY-SUITE') || str_contains($rName, 'KEY-SUITE') ||
+                                    str_contains($rateMetadata, '.02') || $rCode === '.02'
+                                ) {
+                                    $unitRate = 0.01; // Force to .01
+                                    $isFVN = true;
+                                    $fvnApplied = true;
+                                }
+                            }
+                            if (!$isFVN) {
+                                // Always trust the API value, even if it's 0.00
+                                $grossAmount = $originalVal;
+                            } else {
+                                $grossAmount = $unitRate;
+                            }
                         } else {
-                            $grossAmount = $unitRate;
+                            // Villa 5th+ / suite 9th+: when API sends an accommodation value, use flat extra charge
+                            $grossAmount = $this->resolveExtraPersonGross($originalVal, $isVilla);
                         }
-                    } else {
-                        // Villa 5th+ / suite 9th+: when API sends an accommodation value, use flat extra charge
-                        $grossAmount = $this->resolveExtraPersonGross($originalVal, $isVilla);
                     }
 
                     if (!$isFVN) {
