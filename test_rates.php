@@ -57,6 +57,20 @@ test("Member Villa WD - Pax 4 (5th)", [
     'rate' => [['date' => $date_wd, 'val' => 13700]]
 ], 4, 'BALI'); // Expected: 3700
 
+// 5e. Member Villa WD - Pax 4 (5th, with rateCode)
+test("Member Villa WD - Pax 4 (5th, with rateCode)", [
+    'gstType' => 'Member',
+    'rateCode' => 'MVILLA-WKDAYS',
+    'rate' => [['date' => $date_wd, 'val' => 13700]]
+], 4, 'BALI'); // Expected: 3700
+
+// 5f. Member Villa WE - Pax 4 (5th, with rateCode)
+test("Member Villa WE - Pax 4 (5th, with rateCode)", [
+    'gstType' => 'Member',
+    'rateCode' => 'MVILLA-WKDAYS',
+    'rate' => [['date' => $date_we, 'val' => 17700]]
+], 4, 'BALI'); // Expected: 3700
+
 // 5d. Member Villa FVN code on 5th — must be 3700, not 1 FVN
 test("Member Villa WD - Pax 4 (5th, API 0.01)", [
     'gstType' => 'Member',

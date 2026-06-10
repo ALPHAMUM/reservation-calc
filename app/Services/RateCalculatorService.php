@@ -151,16 +151,39 @@ class RateCalculatorService
 
                     // Check if original daily rate value matches the DB rate's extra occupant rate
                     $matchesExtra = false;
-                    if ($dbRate) {
-                        $extraVal = (float) $dbRate->rate_extra;
+                    $matchedDbRate = $dbRate;
+                    if ($matchedDbRate) {
+                        $extraVal = (float) $matchedDbRate->rate_extra;
                         if (abs($originalVal - $extraVal) < 0.05) {
                             $matchesExtra = true;
                         }
                     }
 
-                    if ($dbRate && $matchesExtra) {
+                    if (!$matchesExtra) {
+                        try {
+                            $isResMember = $isMember;
+                            if ($dbRate) {
+                                $isResMember = str_starts_with($dbRate->rate_code, 'M') || 
+                                               str_contains($dbRate->rate_code, '-M-') || 
+                                               str_contains($dbRate->rate_code, 'KEY-');
+                            }
+                            $altRate = \App\Models\Rate::where('type', $isVilla ? 'villa' : 'suite')
+                                ->where('rate_code', 'like', ($isResMember ? 'M' : 'G') . '%')
+                                ->where('rate_extra', '>=', $originalVal - 0.05)
+                                ->where('rate_extra', '<=', $originalVal + 0.05)
+                                ->first();
+                            if ($altRate) {
+                                $matchedDbRate = $altRate;
+                                $matchesExtra = true;
+                            }
+                        } catch (\Throwable $e) {
+                            // Silently ignore database errors
+                        }
+                    }
+
+                    if ($matchedDbRate && $matchesExtra) {
                         if (!$isExtra) {
-                            $baseVal = (float)$dbRate->rate_value;
+                            $baseVal = (float)$matchedDbRate->rate_value;
                             if (round($baseVal, 2) == 0.01 || round($baseVal, 2) == 0.02) {
                                 $unitRate = 0.01;
                                 $isFVN = true;
@@ -170,7 +193,7 @@ class RateCalculatorService
                                 $grossAmount = $baseVal;
                             }
                         } else {
-                            $grossAmount = (float)($dbRate->rate_extra - $dbRate->rate_value);
+                            $grossAmount = (float)($matchedDbRate->rate_extra - $matchedDbRate->rate_value);
                         }
                     } else {
                         if (!$isExtra) {
