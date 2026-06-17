@@ -1080,42 +1080,112 @@ class ReservationController extends Controller
             echo '<tr><td style="border:none; width:15pt;"></td><td colspan="' . $fullColspan . '" style="border:none;">&nbsp;</td></tr>';
             echo '<tr>
             <td style="border:none; width:15pt;"></td>
-            <td colspan="8" style="text-align:right;border:none;font-weight:bold">TOTAL AMOUNT DUE:</td>
-            <td colspan="' . count($dateCols) . '" style="border:none"></td>
-            <td colspan="4" class="num" style="border:none;font-weight:bold">&#8369;' . number_format($overallGrandTotal, 2) . '</td>
+            <td colspan="8" style="border:none;"></td>
+            <td colspan="' . (count($dateCols) + 1) . '" style="background-color:#2b5a97; color:white; font-weight:bold; font-size:11pt; padding:8px 12px; border:none; text-align:left; vertical-align:middle;">TOTAL AMOUNT DUE:</td>
+            <td colspan="4" class="num" style="background-color:#2b5a97; color:white; font-weight:bold; font-size:11pt; padding:8px 12px; border:none; text-align:right; vertical-align:middle;">&#8369;' . number_format($overallGrandTotal, 2) . '</td>
+            <td style="background-color:#2b5a97; border:none;"></td>
             </tr>';
 
-            echo '<tr>
-            <td style="border:none; width:15pt;"></td>
-            <td colspan="8" style="text-align:right;border:none;font-style:italic;color:#64748b">Room Rates include service charge (10%) and VAT (12%)</td>
-            <td colspan="' . (count($dateCols) + 5) . '" style="border:none"></td>
-            </tr>';
+            echo '<tr>';
+            echo '<td style="border:none; width:15pt;"></td>';
+            echo '<td colspan="8" style="border:none;"></td>';
+            echo '<td colspan="' . (count($dateCols) + 5) . '" style="text-align:right; border:none; font-style:italic; color:#64748b; font-size:9pt; padding-top:4px; padding-bottom:12px;">Room Rates include service charge (10%) and VAT (12%)</td>';
+            echo '<td style="border:none;"></td>';
+            echo '</tr>';
 
-            echo '<tr>
-            <td style="border:none; width:15pt;"></td>
-            <td colspan="8" style="text-align:right;border:none;font-weight:bold">LESS PAYMENT/S:</td>
-            <td colspan="' . count($dateCols) . '" style="border:none"></td>
-            <td colspan="4" style="border:none"></td>
-            </tr>';
+            $leftColspan = $fullColspan - 6;
 
-            echo '<tr>
-            <td style="border:none; width:15pt;"></td>
-            <td colspan="8" style="text-align:right;border:none">OVERPAYMENT/CREDIT FROM FOLIO</td>
-            <td colspan="' . count($dateCols) . '" style="border:none"></td>
-            </tr>';
+            // Row 1
+            echo '<tr>';
+            echo '<td style="border:none; width:15pt;"></td>';
+            echo '<td colspan="' . $leftColspan . '" style="border-top: 1px solid #cbd5e1; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; border-bottom: none; font-weight:bold; font-size:11pt; color:#dc2626; padding: 10px 15px 2px 15px; text-align: left; background-color:#ffffff;">Booking Guidelines:</td>';
+            echo '<td style="border:none;"></td>';
+            echo '<td colspan="5" style="border:none; font-weight:bold; font-size:10pt; color:#0f172a; text-align: left; padding-bottom:5px;">PAYMENT/S:</td>';
+            echo '</tr>';
 
-            echo '<tr>
-            <td style="border:none; width:15pt;"></td>
-            <td colspan="8" style="text-align:right;border:none;padding-bottom:20px">COLLECTION RECEIPT</td>
-            <td colspan="' . count($dateCols) . '" style="border:none"></td>
-            </tr>';
+            // Row 2
+            echo '<tr>';
+            echo '<td style="border:none; width:15pt;"></td>';
+            echo '<td colspan="' . $leftColspan . '" style="border-top: none; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; border-bottom: none; font-weight:bold; font-size:9.5pt; color:#1e293b; padding: 5px 15px 2px 15px; text-align: left; background-color:#ffffff;"><u>Booking Confirmation</u></td>';
+            echo '<td style="border:none;"></td>';
+            echo '<td colspan="3" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
+            echo '<td colspan="2" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
+            echo '</tr>';
 
-            echo '<tr>
-            <td style="border:none; width:15pt;"></td>
-            <td colspan="8" style="text-align:right;border:none;font-weight:bold">BALANCE TO SETTLE</td>
-            <td colspan="' . count($dateCols) . '" style="border:none"></td>
-            <td colspan="4" class="num" style="border:none;font-weight:bold;border-top:1px solid #000">&#8369;' . number_format($overallGrandTotal, 2) . '</td>
-            </tr>';
+            // Row 3
+            echo '<tr>';
+            echo '<td style="border:none; width:15pt;"></td>';
+            echo '<td colspan="' . $leftColspan . '" style="border-top: none; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; border-bottom: none; font-size:8.5pt; color:#334155; white-space:normal; vertical-align:top; text-align:left; padding: 0px 15px 8px 15px; background-color:#ffffff;">Full payment is required within seven (7) days of receiving the computation of charges; Unpaid reservations after this period will be released to other Members to ensure maximum availability.</td>';
+            echo '<td style="border:none;"></td>';
+            echo '<td colspan="3" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
+            echo '<td colspan="2" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
+            echo '</tr>';
+
+            // Row 4
+            echo '<tr>';
+            echo '<td style="border:none; width:15pt;"></td>';
+            echo '<td colspan="' . $leftColspan . '" style="border-top: none; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; border-bottom: none; font-weight:bold; font-size:9.5pt; color:#1e293b; padding: 5px 15px 2px 15px; text-align: left; background-color:#ffffff;"><u>Flight Schedule</u></td>';
+            echo '<td style="border:none;"></td>';
+            echo '<td colspan="3" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
+            echo '<td colspan="2" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
+            echo '</tr>';
+
+            // Row 5
+            echo '<tr>';
+            echo '<td style="border:none; width:15pt;"></td>';
+            echo '<td colspan="' . $leftColspan . '" style="border-top: none; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; border-bottom: none; font-size:8.5pt; color:#334155; white-space:normal; vertical-align:top; text-align:left; padding: 0px 15px 8px 15px; background-color:#ffffff;">With the increasing number of international and domestic flights at NAIA, the Civil Aviation Authority of the Philippines (CAAP) has issued a Memorandum that limits General Aviation, which we are part of, from flying via the NAIA runway from 9 AM to 7 PM daily. Given this restriction, kindly expect that our flights to/from the island may depart from/arrive at Clark Airport (Pampanga).</td>';
+            echo '<td style="border:none;"></td>';
+            echo '<td colspan="5" style="border:none; height:8pt;"></td>';
+            echo '</tr>';
+
+            // Row 6
+            echo '<tr>';
+            echo '<td style="border:none; width:15pt;"></td>';
+            echo '<td colspan="' . $leftColspan . '" style="border-top: none; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; border-bottom: none; font-weight:bold; font-size:9.5pt; color:#1e293b; padding: 5px 15px 2px 15px; text-align: left; background-color:#ffffff;"><u>Expectant Mother</u></td>';
+            echo '<td style="border:none;"></td>';
+            echo '<td colspan="3" style="border-top: 2px solid #dc2626; border-bottom: 2px solid #dc2626; border-left: 2px solid #dc2626; border-right: none; background-color:#fff5f5; color:#dc2626; font-weight:bold; font-size:10pt; padding: 6px 10px; text-align: left; vertical-align: middle;">BALANCE TO SETTLE</td>';
+            echo '<td colspan="2" style="border-top: 2px solid #dc2626; border-bottom: 2px solid #dc2626; border-left: none; border-right: 2px solid #dc2626; background-color:#fff5f5; color:#dc2626; font-weight:bold; font-size:11pt; padding: 6px 10px; text-align: right; vertical-align: middle;">&#8369;' . number_format($overallGrandTotal, 2) . '</td>';
+            echo '</tr>';
+
+            // Row 7
+            echo '<tr>';
+            echo '<td style="border:none; width:15pt;"></td>';
+            echo '<td colspan="' . $leftColspan . '" style="border-top: none; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; border-bottom: none; font-size:8.5pt; color:#334155; white-space:normal; vertical-align:top; text-align:left; padding: 0px 15px 8px 15px; background-color:#ffffff;">Guests 20 weeks pregnant or less must present a medical certificate confirming fitness for air travel (issued within 7 days before the flight).</td>';
+            echo '<td style="border:none;"></td>';
+            echo '<td colspan="5" style="border:none;"></td>';
+            echo '</tr>';
+
+            // Row 8
+            echo '<tr>';
+            echo '<td style="border:none; width:15pt;"></td>';
+            echo '<td colspan="' . $leftColspan . '" style="border-top: none; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; border-bottom: none; font-weight:bold; font-size:9.5pt; color:#1e293b; padding: 5px 15px 2px 15px; text-align: left; background-color:#ffffff;"><u>Cancellation Policy</u></td>';
+            echo '<td style="border:none;"></td>';
+            echo '<td colspan="5" style="border:none;"></td>';
+            echo '</tr>';
+
+            // Row 9
+            echo '<tr>';
+            echo '<td style="border:none; width:15pt;"></td>';
+            echo '<td colspan="' . $leftColspan . '" style="border-top: none; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; border-bottom: none; font-size:8.5pt; color:#334155; white-space:normal; vertical-align:top; text-align:left; padding: 0px 15px 8px 15px; background-color:#ffffff;">The deadline for cancellation is one week (7 days) prior to the scheduled check-in date. <font color="red"><span style="color: red;">If a cancellation is made within this 7-day period, a fee equivalent to the one-way airfare per passenger and cost of one night per villa will be applied.</span></font> However, for cancellations made with more than 7 days\' notice, any member overpayments may be applied to travel expenses across three key locations and will expire on the member\'s anniversary date.</td>';
+            echo '<td style="border:none;"></td>';
+            echo '<td colspan="5" style="border:none;"></td>';
+            echo '</tr>';
+
+            // Row 10
+            echo '<tr>';
+            echo '<td style="border:none; width:15pt;"></td>';
+            echo '<td colspan="' . $leftColspan . '" style="border-top: none; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; border-bottom: none; font-weight:bold; font-size:9.5pt; color:#1e293b; padding: 5px 15px 2px 15px; text-align: left; background-color:#ffffff;"><u>Rebooking/ Name Change/ Pax replacement</u></td>';
+            echo '<td style="border:none;"></td>';
+            echo '<td colspan="5" style="border:none;"></td>';
+            echo '</tr>';
+
+            // Row 11
+            echo '<tr>';
+            echo '<td style="border:none; width:15pt;"></td>';
+            echo '<td colspan="' . $leftColspan . '" style="border-top: none; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; font-size:8.5pt; color:#334155; white-space:normal; vertical-align:top; text-align:left; padding: 0px 15px 15px 15px; background-color:#ffffff;">A fee equivalent to one-way airfare will apply to any changes made within 7 days of the scheduled departure date and time.</td>';
+            echo '<td style="border:none;"></td>';
+            echo '<td colspan="5" style="border:none;"></td>';
+            echo '</tr>';
 
             echo '</table></body></html>';
         }, 200, ['Content-Type' => 'application/vnd.ms-excel', 'Content-Disposition' => 'attachment; filename="' . $filename . '"']);

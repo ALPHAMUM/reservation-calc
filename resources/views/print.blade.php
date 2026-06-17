@@ -101,6 +101,108 @@
                 border: 1px solid #cbd5e1 !important;
             }
         }
+
+        .guidelines-section {
+            margin-top: 25px;
+            border: 1px solid #cbd5e1;
+            padding: 15px;
+            width: 58%;
+            float: left;
+            box-sizing: border-box;
+            page-break-inside: avoid;
+        }
+
+        .guidelines-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: #dc2626;
+            margin-bottom: 10px;
+        }
+
+        .guidelines-content {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .guideline-item {
+            font-size: 10.5px;
+            color: #1e293b;
+            line-height: 1.4;
+        }
+
+        .guideline-subtitle {
+            font-weight: bold;
+            text-decoration: underline;
+            margin-bottom: 2px;
+        }
+
+        .guideline-item p {
+            margin: 0;
+            text-align: justify;
+        }
+
+        .highlight-red {
+            color: #dc2626;
+        }
+
+        .payments-section {
+            width: 38%;
+            float: right;
+            box-sizing: border-box;
+            margin-top: 25px;
+            page-break-inside: avoid;
+        }
+
+        .payments-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: #0f172a;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .payments-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+
+        .payments-table td {
+            border: 1px solid #cbd5e1 !important;
+            padding: 6px 10px;
+            font-size: 10.5px;
+        }
+
+        .balance-container {
+            border: 1.5px solid #dc2626;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: #fff5f5;
+        }
+
+        .balance-label {
+            font-weight: bold;
+            color: #dc2626;
+            font-size: 11.5px;
+        }
+
+        .balance-value {
+            font-weight: bold;
+            color: #dc2626;
+            font-size: 13.5px;
+        }
+
+        .total-due-label,
+        .total-due-value {
+            background-color: #2b5a97 !important;
+            color: white !important;
+            border: none !important;
+            font-size: 13px !important;
+            padding: 8px 15px !important;
+        }
     </style>
 </head>
 
@@ -350,39 +452,73 @@ $labelColspan = 9 + count($dateCols) + 4;
             <tr><td colspan="{{ $fullColspan }}" style="border: none; padding: 10px;"></td></tr>
 
 
-                                                    <tr>
-                <td colspan="9" style="text-align: right; border: none; font-weight: bold; font-size: 16px;">TOTAL AMOUNT DUE:</td>
-                <td colspan="{{ count($dateCols) }}" style="border: none;"></td>
-
-                                    <td colspan="4" class="num" style="border: none; font-weight: bold; font-size: 16px;">&#8369;{{ number_format($overallGrandTotal, 2) }}</td>
+            <tr>
+                <td colspan="9" style="border: none;"></td>
+                <td colspan="{{ count($dateCols) + 1 }}" class="total-due-label">TOTAL AMOUNT DUE:</td>
+                <td colspan="4" class="num total-due-value">&#8369;{{ number_format($overallGrandTotal, 2) }}</td>
             </tr>
             <tr>
-                <td colspan="9" style="text-align: right; border: none; font-style: italic; color: #64748b; padding-bottom: 15px;">Room Rates include service charge (10%) and VAT (12%)</td>
-                <td colspan="{{ count($dateCols) + 5 }}" style="border: none;"></td>
+                <td colspan="9" style="border: none;"></td>
+                <td colspan="{{ count($dateCols) + 5 }}" style="text-align: right; border: none; font-style: italic; color: #64748b; font-size: 11px; padding: 5px 0 15px 0;">Room Rates include service charge (10%) and VAT (12%)</td>
             </tr>
             
-            <tr>
-                <td colspan="9" style="text-align: right; border: none; font-weight: bold;">LESS PAYMENT/S:</td>
-                <td colspan="{{ count($dateCols) }}" style="border: none;"></td>
-                <td colspan="4" style="border: none;"></td>
-            </tr>
-            <tr>
-                <td colspan="9" style="text-align: right; border: none;">OVERPAYMENT/CREDIT FROM FOLIO</td>
-                <td colspan="{{ count($dateCols) }}" style="border: none;"></td>
-                <!-- <td colspan="4" class="num" style="border: none;">&#8369;0.00</td> -->
-            </tr>
-            <tr>
-                <td colspan="9" style="text-align: right; border: none; padding-bottom: 20px;">COLLECTION RECEIPT</td>
-                <td colspan="{{ count($dateCols) }}" style="border: none;"></td>
-                <!-- <td colspan="4" class="num" style="border: none; padding-bottom: 20px;">&#8369;0.00</td> -->
-            </tr>
-            <tr>
-                <td colspan="9" style="text-align: right; border: none; font-weight: bold; font-size: 16px; color: red;">BALANCE TO SETTLE</td>
-                <td colspan="{{ count($dateCols) }}" style="border: none;"></td>
-                <td colspan="4" class="num" style="border: none; font-weight: bold; border-top: 1px solid #000; font-size: 16px; color: red;">&#8369;{{ number_format($overallGrandTotal, 2) }}</td>
-            </tr>
         </tfoot>
     </table>
+
+    <div style="margin-top: 25px; width: 100%; display: flow-root; page-break-inside: avoid;">
+        <!-- Left: Booking Guidelines -->
+        <div class="guidelines-section">
+            <div class="guidelines-title">Booking Guidelines:</div>
+            <div class="guidelines-content">
+                <div class="guideline-item">
+                    <div class="guideline-subtitle">Booking Confirmation</div>
+                    <p>Full payment is required within seven (7) days of receiving the computation of charges; Unpaid reservations after this period will be released to other Members to ensure maximum availability.</p>
+                </div>
+                <div class="guideline-item">
+                    <div class="guideline-subtitle">Flight Schedule</div>
+                    <p>With the increasing number of international and domestic flights at NAIA, the Civil Aviation Authority of the Philippines (CAAP) has issued a Memorandum that limits General Aviation, which we are part of, from flying via the NAIA runway from 9 AM to 7 PM daily. Given this restriction, kindly expect that our flights to/from the island may depart from/arrive at Clark Airport (Pampanga).</p>
+                </div>
+                <div class="guideline-item">
+                    <div class="guideline-subtitle">Expectant Mother</div>
+                    <p>Guests 20 weeks pregnant or less must present a medical certificate confirming fitness for air travel (issued within 7 days before the flight).</p>
+                </div>
+                <div class="guideline-item">
+                    <div class="guideline-subtitle">Cancellation Policy</div>
+                    <p>The deadline for cancellation is one week (7 days) prior to the scheduled check-in date. <span class="highlight-red">If a cancellation is made within this 7-day period, a fee equivalent to the one-way airfare per passenger and cost of one night per villa will be applied.</span> However, for cancellations made with more than 7 days' notice, any member overpayments may be applied to travel expenses across three key locations and will expire on the member's anniversary date.</p>
+                </div>
+                <div class="guideline-item">
+                    <div class="guideline-subtitle">Rebooking/ Name Change/ Pax replacement</div>
+                    <p>A fee equivalent to one-way airfare will apply to any changes made within 7 days of the scheduled departure date and time.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Payments and Balance -->
+        <div class="payments-section">
+            <div class="payments-title">PAYMENT/S:</div>
+            <table class="payments-table">
+                <tbody>
+                    <tr>
+                        <td style="width: 70%; height: 25px; border: 1px solid #cbd5e1 !important;"></td>
+                        <td style="width: 30%; text-align: right; font-weight: bold; border: 1px solid #cbd5e1 !important;"></td>
+                    </tr>
+                    <tr>
+                        <td style="height: 25px; border: 1px solid #cbd5e1 !important;"></td>
+                        <td style="border: 1px solid #cbd5e1 !important;"></td>
+                    </tr>
+                    <tr>
+                        <td style="height: 25px; border: 1px solid #cbd5e1 !important;"></td>
+                        <td style="border: 1px solid #cbd5e1 !important;"></td>
+                    </tr>
+                </tbody>
+            </table>
+            <div class="balance-container">
+                <div class="balance-label">BALANCE TO SETTLE</div>
+                <div class="balance-value">&#8369;{{ number_format($overallGrandTotal, 2) }}</div>
+            </div>
+        </div>
+    </div>
+    <div style="clear: both;"></div>
 </body>
 
 </html>
