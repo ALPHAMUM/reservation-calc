@@ -184,11 +184,13 @@ class RateCalculatorService
                     if ($matchedDbRate && $matchesExtra) {
                         if (!$isExtra) {
                             $baseVal = (float)$matchedDbRate->rate_value;
-                            if (round($baseVal, 2) == 0.01 || round($baseVal, 2) == 0.02) {
-                                $unitRate = 0.01;
+                            $roundedBase = round($baseVal, 2);
+                            if ($roundedBase == 0.01 || $roundedBase == 0.02) {
+                                // Preserve 0.01 (1 FVN) vs 0.02 (1.5 FVN)
+                                $unitRate = $roundedBase;
                                 $isFVN = true;
                                 $fvnApplied = true;
-                                $grossAmount = 0.01;
+                                $grossAmount = $roundedBase;
                             } else {
                                 $grossAmount = $baseVal;
                             }
@@ -198,12 +200,13 @@ class RateCalculatorService
                     } else {
                         if (!$isExtra) {
                             // 1. Magic numbers: always honor if sent by API
+                            //    Preserve the original value: 0.01 = 1 FVN, 0.02 = 1.5 FVN
                             if ($originalVal == 0.01 || $originalVal == 0.02) {
-                                $unitRate = 0.01; // Force to .01 as requested
+                                $unitRate = $originalVal; // Keep the original marker (0.01 or 0.02)
                                 $isFVN = true;
                                 $fvnApplied = true;
                             }
-                            // 2. Automatic detection from metadata only on Day 1 IF the rate is a magic number (not 0)
+                            // 2. Automatic detection from metadata only on Day 1 (unreachable via branch above, kept for safety)
                             elseif ($idx === 0 && !$fvnApplied && ($originalVal == 0.01 || $originalVal == 0.02)) {
                                 $rCodeRaw = $passenger['rateCode'] ?? $passenger['rate_code'] ?? '';
                                 $rCode = is_string($rCodeRaw) ? strtoupper($rCodeRaw) : '';
@@ -217,7 +220,7 @@ class RateCalculatorService
                                     str_contains($rateMetadata, 'KEY-SUITE') || str_contains($rName, 'KEY-SUITE') ||
                                     str_contains($rateMetadata, '.02') || $rCode === '.02'
                                 ) {
-                                    $unitRate = 0.01; // Force to .01
+                                    $unitRate = $originalVal; // Keep the original marker (0.01 or 0.02)
                                     $isFVN = true;
                                     $fvnApplied = true;
                                 }
