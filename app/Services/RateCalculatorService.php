@@ -574,18 +574,23 @@ class RateCalculatorService
 
     private function calculateAof($date)
     {
-        $baseAmount = (float) ($this->settings['fees']['aof']['amount'] ?? 0);
-        $activePeriods = $this->settings['fees']['aof']['active_periods'] ?? [];
+        $aofSettings = $this->settings['fees']['aof'] ?? [];
+        $activePeriods = $aofSettings['active_periods'] ?? [];
+
+        if (!$date || empty($activePeriods)) {
+            return 0;
+        }
 
         $currentDate = strtotime($date);
         foreach ($activePeriods as $period) {
-            $start = strtotime($period['start'] ?? '');
-            $end = strtotime($period['end'] ?? '');
+            $start = !empty($period['start']) ? strtotime($period['start']) : null;
+            $end = !empty($period['end']) ? strtotime($period['end']) : null;
+            $amount = (float) ($period['amount'] ?? 0);
             if ($start && $end && $currentDate >= $start && $currentDate <= $end) {
-                return (float) ($period['amount'] ?? $baseAmount);
+                return $amount;
             }
         }
 
-        return $baseAmount;
+        return 0;
     }
 }

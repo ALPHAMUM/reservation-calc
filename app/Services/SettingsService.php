@@ -36,7 +36,6 @@ class SettingsService
                     'apply_to' => ['member', 'guest'],
                 ],
                 'aof' => [
-                    'amount' => 2000,
                     'apply_to' => ['member', 'guest'],
                     'active_periods' => [
                         ['start' => '2026-04-01', 'end' => '2026-05-31', 'amount' => 2000],

@@ -379,42 +379,91 @@
             </div>
 
             <div class="form-group" style="padding-bottom: 1.5rem; border-bottom: 1px solid var(--border);">
-                <label class="form-label" style="font-size: 1rem; color: white;">Aviation Operational Fee (AOF)</label>
-                <div class="grid-2">
-                    <div>
-                        <label class="form-label">Amount (₱)</label>
-                        <input type="number" step="0.01" name="fees[aof][amount]" class="form-control" value="{{ $settings['fees']['aof']['amount'] ?? 2000 }}">
-                        <div id="aof-periods-container" style="margin-top: 0.75rem;">
-                            @php $periods = $settings['fees']['aof']['active_periods'] ?? []; @endphp
-                            @foreach($periods as $period)
-                                <div class="peak-period-row">
-                                    <div style="flex:1">
-                                        <label class="form-label" style="font-size: 0.7rem; margin-bottom: 0.25rem;">Start Date</label>
-                                        <input type="date" name="fees[aof][active_periods][start][]" class="form-control" value="{{ $period['start'] ?? '' }}">
-                                    </div>
-                                    <div style="color:var(--text-muted); margin-bottom: 10px;">to</div>
-                                    <div style="flex:1">
-                                        <label class="form-label" style="font-size: 0.7rem; margin-bottom: 0.25rem;">End Date</label>
-                                        <input type="date" name="fees[aof][active_periods][end][]" class="form-control" value="{{ $period['end'] ?? '' }}">
-                                    </div>
-                                    <div style="flex:0.8">
-                                        <label class="form-label" style="font-size: 0.7rem; margin-bottom: 0.25rem;">Amount (₱)</label>
-                                        <input type="number" step="0.01" name="fees[aof][active_periods][amount][]" class="form-control" value="{{ $period['amount'] ?? ($settings['fees']['aof']['amount'] ?? 2000) }}">
-                                    </div>
-                                    <button type="button" class="btn btn-primary btn-sm" onclick="this.parentElement.remove()" style="background: #ef4444; margin-bottom: 2px;">Remove</button>
-                                </div>
-                            @endforeach
-                        </div>
-                        <button type="button" class="btn btn-primary btn-sm" onclick="addAofPeriod()" style="margin-top: 0.5rem; background: rgba(255,255,255,0.1)">+ Add Period</button>
-                    </div>
-                    <div>
-                        <label class="form-label">Apply To</label>
-                        @php $aofApplies = $settings['fees']['aof']['apply_to'] ?? ['member', 'guest']; @endphp
-                        <div class="checkbox-wrap"><input type="checkbox" name="fees[aof][apply_to][]" value="member" {{ in_array('member', $aofApplies) ? 'checked' : '' }}> Members <span style="font-size: 0.65rem; color: var(--text-muted); margin-left: 4px;">(incl. Spouse/Dependent)</span></div>
+                <label class="form-label" style="font-size: 1rem; color: white; margin-bottom: 1.25rem;">Aviation Operational Fee (AOF)</label>
+                <div style="margin-bottom: 1.5rem;">
+                    <label class="form-label">Apply To</label>
+                    @php $aofApplies = $settings['fees']['aof']['apply_to'] ?? ['member', 'guest']; @endphp
+                    <div style="display: flex; gap: 1.5rem; flex-wrap: wrap;">
+                        <div class="checkbox-wrap"><input type="checkbox" name="fees[aof][apply_to][]" value="member" {{ in_array('member', $aofApplies) ? 'checked' : '' }}> Members <span style="font-size: 0.75rem; color: var(--text-muted); margin-left: 2px;">(incl. Spouse/Dependent)</span></div>
                         <div class="checkbox-wrap"><input type="checkbox" name="fees[aof][apply_to][]" value="guest" {{ in_array('guest', $aofApplies) ? 'checked' : '' }}> Guests</div>
                         <div class="checkbox-wrap"><input type="checkbox" name="fees[aof][apply_to][]" value="employee" {{ in_array('employee', $aofApplies) ? 'checked' : '' }}> Employees</div>
                         <div class="checkbox-wrap"><input type="checkbox" name="fees[aof][apply_to][]" value="infant" {{ in_array('infant', $aofApplies) ? 'checked' : '' }}> Infants</div>
                     </div>
+                </div>
+
+                <div style="padding: 1.25rem; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); border-radius: 0.75rem;">
+                    <label class="form-label" style="font-size: 0.95rem; color: white; font-weight: 500; margin-bottom: 1rem;">Active AOF Periods (Start Date, End Date, and Amount in one row)</label>
+                    <div id="aof-periods-container">
+                        @php 
+                            $periods = $settings['fees']['aof']['active_periods'] ?? [];
+                            $todayStr = date('Y-m-d');
+                        @endphp
+                        @forelse($periods as $period)
+                            @php
+                                $start = $period['start'] ?? '';
+                                $end = $period['end'] ?? '';
+                                $isActive = ($start && $end && $todayStr >= $start && $todayStr <= $end);
+                                $isPast = ($end && $todayStr > $end);
+                            @endphp
+                            <div class="peak-period-row" style="align-items: flex-end; margin-bottom: 1rem; padding: 0.75rem; border-radius: 0.5rem; transition: all 0.2s;
+                                @if($isActive)
+                                    background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.3); border-left: 4px solid #10b981;
+                                @elseif($isPast)
+                                    opacity: 0.65; pointer-events: none; background: rgba(255, 255, 255, 0.01); border: 1px solid rgba(255, 255, 255, 0.05);
+                                @else
+                                    background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border);
+                                @endif">
+                                
+                                <div style="flex:1">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                                        <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0;">Start Date</label>
+                                        @if($isActive)
+                                            <span style="font-size: 0.65rem; background: #10b981; color: white; padding: 1px 6px; border-radius: 9999px; font-weight: bold; text-transform: uppercase;">Active</span>
+                                        @elseif($isPast)
+                                            <span style="font-size: 0.65rem; background: #64748b; color: white; padding: 1px 6px; border-radius: 9999px; font-weight: bold; text-transform: uppercase;">Completed</span>
+                                        @endif
+                                    </div>
+                                    <input type="date" name="fees[aof][active_periods][start][]" class="form-control" value="{{ $start }}" @if($isPast) readonly @endif>
+                                </div>
+                                <div style="color:var(--text-muted); margin-bottom: 12px; align-self: flex-end; padding: 0 0.5rem;">to</div>
+                                <div style="flex:1">
+                                    <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem;">End Date</label>
+                                    <input type="date" name="fees[aof][active_periods][end][]" class="form-control" value="{{ $end }}" @if($isPast) readonly @endif>
+                                </div>
+                                <div style="flex:0.8">
+                                    <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem;">AOF Amount (₱)</label>
+                                    <input type="number" step="0.01" name="fees[aof][active_periods][amount][]" class="form-control" value="{{ $period['amount'] ?? 2000 }}" @if($isPast) readonly @endif>
+                                </div>
+                                
+                                @if($isPast)
+                                    <div style="width: 82px; height: 42px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.8rem; font-weight: 500;">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                        Locked
+                                    </div>
+                                @else
+                                    <button type="button" class="btn btn-primary btn-sm" onclick="this.parentElement.remove()" style="background: #ef4444; height: 42px;">Remove</button>
+                                @endif
+                            </div>
+                        @empty
+                            <div class="peak-period-row" style="align-items: flex-end;">
+                                <div style="flex:1">
+                                    <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem;">Start Date</label>
+                                    <input type="date" name="fees[aof][active_periods][start][]" class="form-control">
+                                </div>
+                                <div style="color:var(--text-muted); margin-bottom: 12px; align-self: flex-end; padding: 0 0.5rem;">to</div>
+                                <div style="flex:1">
+                                    <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem;">End Date</label>
+                                    <input type="date" name="fees[aof][active_periods][end][]" class="form-control">
+                                </div>
+                                <div style="flex:0.8">
+                                    <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem;">AOF Amount (₱)</label>
+                                    <input type="number" step="0.01" name="fees[aof][active_periods][amount][]" class="form-control" value="2000">
+                                </div>
+                                <button type="button" class="btn btn-primary btn-sm" onclick="this.parentElement.remove()" style="background: #ef4444; height: 42px;">Remove</button>
+                            </div>
+                        @endforelse
+                    </div>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="addAofPeriod()" style="margin-top: 0.75rem; background: rgba(255,255,255,0.1)">+ Add AOF Period</button>
                 </div>
             </div>
 
@@ -461,31 +510,29 @@
         `;
         container.appendChild(row);
     }
-
     function addAofPeriod() {
         const container = document.getElementById('aof-periods-container');
         const row = document.createElement('div');
         row.className = 'peak-period-row';
-        const defaultAmount = document.querySelector('input[name="fees[aof][amount]"]').value || 2000;
+        row.style.alignItems = 'flex-end';
         row.innerHTML = `
             <div style="flex:1">
-                <label class="form-label" style="font-size: 0.7rem; margin-bottom: 0.25rem;">Start Date</label>
+                <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem;">Start Date</label>
                 <input type="date" name="fees[aof][active_periods][start][]" class="form-control">
             </div>
-            <div style="color:var(--text-muted); margin-bottom: 10px;">to</div>
+            <div style="color:var(--text-muted); margin-bottom: 12px; align-self: flex-end; padding: 0 0.5rem;">to</div>
             <div style="flex:1">
-                <label class="form-label" style="font-size: 0.7rem; margin-bottom: 0.25rem;">End Date</label>
+                <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem;">End Date</label>
                 <input type="date" name="fees[aof][active_periods][end][]" class="form-control">
             </div>
             <div style="flex:0.8">
-                <label class="form-label" style="font-size: 0.7rem; margin-bottom: 0.25rem;">Amount (₱)</label>
-                <input type="number" step="0.01" name="fees[aof][active_periods][amount][]" class="form-control" value="${defaultAmount}">
+                <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem;">AOF Amount (₱)</label>
+                <input type="number" step="0.01" name="fees[aof][active_periods][amount][]" class="form-control" value="2000">
             </div>
-            <button type="button" class="btn btn-primary btn-sm" onclick="this.parentElement.remove()" style="background: #ef4444; margin-bottom: 2px;">Remove</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="this.parentElement.remove()" style="background: #ef4444; height: 42px;">Remove</button>
         `;
         container.appendChild(row);
     }
-
     function toggleHelp(id) {
         const el = document.getElementById(id);
         const isOpen = el.style.display === 'block';

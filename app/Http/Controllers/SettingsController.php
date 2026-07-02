@@ -61,7 +61,6 @@ class SettingsController extends Controller
         $settings['fees']['hangar']['apply_to'] = $input['fees']['hangar']['apply_to'] ?? [];
 
         // Fees - AOF
-        $settings['fees']['aof']['amount'] = (float)($input['fees']['aof']['amount'] ?? $settings['fees']['aof']['amount']);
         $settings['fees']['aof']['apply_to'] = $input['fees']['aof']['apply_to'] ?? [];
         
         $aofPeriods = [];
@@ -71,13 +70,15 @@ class SettingsController extends Controller
                     $aofPeriods[] = [
                         'start' => $start,
                         'end' => $input['fees']['aof']['active_periods']['end'][$idx],
-                        'amount' => (float)($input['fees']['aof']['active_periods']['amount'][$idx] ?? $settings['fees']['aof']['amount'])
+                        'amount' => (float)($input['fees']['aof']['active_periods']['amount'][$idx] ?? 2000)
                     ];
                 }
             }
         }
         $settings['fees']['aof']['active_periods'] = $aofPeriods;
-        // Clean up old active_months if it exists
+        unset($settings['fees']['aof']['amount']);
+        unset($settings['fees']['aof']['start_date']);
+        unset($settings['fees']['aof']['end_date']);
         unset($settings['fees']['aof']['active_months']);
 
         // Fees - Environmental
