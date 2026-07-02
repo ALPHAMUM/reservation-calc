@@ -15,6 +15,7 @@ function test($label, $res, $paxIndex, $roomType, $occupantIndex = null) {
     $result = $calculator->calculatePassengerRates($res, $paxIndex, $roomType, 1, $occupantIndex);
     echo "Test: $label\n";
     echo "  Acc: " . $result['acc'] . "\n";
+    echo "  Airfare: " . $result['air'] . "\n";
     echo "--------------------------\n";
 }
 
@@ -89,3 +90,25 @@ test("Senior Citizen Guest Villa WD - Pax 0", [
     'gstType' => 'Senior Citizen Guest',
     'rate' => [['date' => $date_wd, 'val' => 100]]
 ], 0, 'BALI'); // Expected: 22500 / 1.12 = 20089.28
+
+// 7. Promo Airfare Test - Within Promo Dates (e.g. 2026-05-11, promo range is 2026-02-23 to 2026-11-30)
+test("Member Airfare WD - Within Promo Range (2026-05-11)", [
+    'gstType' => 'Member',
+    'arrdt' => '2026-05-11',
+    'rate' => [['date' => $date_wd, 'val' => 100]]
+], 0, 'BALI'); // Expected: Promo Member Rate = 4200
+
+// 8. Promo Airfare Test - Outside Promo Dates / Promo Over (e.g. 2027-01-02, check-in Jan 1-3 2027)
+test("Member Airfare WD - Outside Promo Range / Promo Over (2027-01-02)", [
+    'gstType' => 'Member',
+    'arrdt' => '2027-01-02',
+    'rate' => [['date' => '2027-01-02', 'val' => 100]]
+], 0, 'BALI'); // Expected: Base Member Rate = 5600
+
+// 9. Promo Airfare Test - Peak Period Reversion (e.g. 2026-12-25, within Christmas/New Year peak period 2026-12-20 to 2027-01-05)
+test("Member Airfare WD - Peak Period Reversion (2026-12-25)", [
+    'gstType' => 'Member',
+    'arrdt' => '2026-12-25',
+    'rate' => [['date' => '2026-12-25', 'val' => 100]]
+], 0, 'BALI'); // Expected: Base Member Rate = 5600
+

@@ -296,12 +296,46 @@ class RateCalculatorService
             if ($isOthers)
                 $passengerClass = 'others';
 
-            $isPeak = false; // Add peak logic if needed
+            $isPeak = false;
+            $checkInDate = $passenger['arrdt'] ?? $passenger['arrDt'] ?? null;
+            if ($checkInDate) {
+                $checkInTime = strtotime($checkInDate);
+                $peakPeriods = $this->settings['promo_rates']['peak_periods'] ?? [];
+                foreach ($peakPeriods as $period) {
+                    $peakStart = !empty($period['start']) ? strtotime($period['start']) : null;
+                    $peakEnd = !empty($period['end']) ? strtotime($period['end']) : null;
+                    if ($peakStart && $peakEnd && $checkInTime >= $peakStart && $checkInTime <= $peakEnd) {
+                        $isPeak = true;
+                        break;
+                    }
+                }
+            }
 
-            if ($isPeak) {
-                $airfare = (float) ($this->settings['peak_rates'][$passengerClass] ?? 0);
-            } else {
+            // Determine if promo rate is active and applicable for the reservation date
+            $usePromo = false;
+            $promoSettings = $this->settings['promo_rates'] ?? [];
+            if (!empty($promoSettings['active']) && $checkInDate && !$isPeak) {
+                $checkInTime = strtotime($checkInDate);
+                $promoStart = !empty($promoSettings['start_date']) ? strtotime($promoSettings['start_date']) : null;
+                $promoEnd = !empty($promoSettings['end_date']) ? strtotime($promoSettings['end_date']) : null;
+                
+                $inPromoRange = true;
+                if ($promoStart && $checkInTime < $promoStart) {
+                    $inPromoRange = false;
+                }
+                if ($promoEnd && $checkInTime > $promoEnd) {
+                    $inPromoRange = false;
+                }
+                
+                if ($inPromoRange) {
+                    $usePromo = true;
+                }
+            }
+
+            if ($usePromo) {
                 $airfare = (float) ($this->settings['promo_rates'][$passengerClass] ?? 0);
+            } else {
+                $airfare = (float) ($this->settings['base_rates'][$passengerClass] ?? 0);
             }
 
             if ($hasPrivCard && !$isEmployee) {
