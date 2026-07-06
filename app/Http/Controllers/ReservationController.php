@@ -1078,6 +1078,16 @@ class ReservationController extends Controller
             $labelColspan = 9 + $dateCount + 4;
 
             echo '<tr><td style="border:none; width:15pt;"></td><td colspan="' . $fullColspan . '" style="border:none;">&nbsp;</td></tr>';
+            
+            $paymentRow1 = 8 + $totalPax + 6;
+            $paymentRow2 = 8 + $totalPax + 7;
+            $paymentRow3 = 8 + $totalPax + 8;
+            $paymentRow4 = 8 + $totalPax + 9;
+            $paymentRow5 = 8 + $totalPax + 10;
+            
+            $colPay = 'A';
+            for($i=1; $i < 14 + count($dateCols); $i++) $colPay++;
+
             echo '<tr>
             <td style="border:none; width:15pt;"></td>
             <td colspan="8" style="border:none;"></td>
@@ -1109,7 +1119,7 @@ class ReservationController extends Controller
             echo '<td colspan="' . $leftColspan . '" style="border-top: none; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; border-bottom: none; font-weight:bold; font-size:9.5pt; color:#1e293b; padding: 5px 15px 2px 15px; text-align: left; background-color:#ffffff;"><u>Booking Confirmation</u></td>';
             echo '<td style="border:none;"></td>';
             echo '<td colspan="3" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
-            echo '<td colspan="2" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
+            echo '<td colspan="2" class="num" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
             echo '</tr>';
 
             // Row 3
@@ -1118,7 +1128,7 @@ class ReservationController extends Controller
             echo '<td colspan="' . $leftColspan . '" style="border-top: none; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; border-bottom: none; font-size:8.5pt; color:#334155; white-space:normal; vertical-align:top; text-align:left; padding: 0px 15px 8px 15px; background-color:#ffffff;">Full payment is required within seven (7) days of receiving the computation of charges; Unpaid reservations after this period will be released to other Members to ensure maximum availability.</td>';
             echo '<td style="border:none;"></td>';
             echo '<td colspan="3" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
-            echo '<td colspan="2" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
+            echo '<td colspan="2" class="num" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
             echo '</tr>';
 
             // Row 4
@@ -1127,7 +1137,7 @@ class ReservationController extends Controller
             echo '<td colspan="' . $leftColspan . '" style="border-top: none; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; border-bottom: none; font-weight:bold; font-size:9.5pt; color:#1e293b; padding: 5px 15px 2px 15px; text-align: left; background-color:#ffffff;"><u>Flight Schedule</u></td>';
             echo '<td style="border:none;"></td>';
             echo '<td colspan="3" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
-            echo '<td colspan="2" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
+            echo '<td colspan="2" class="num" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
             echo '</tr>';
 
             // Row 5
@@ -1135,16 +1145,28 @@ class ReservationController extends Controller
             echo '<td style="border:none; width:15pt;"></td>';
             echo '<td colspan="' . $leftColspan . '" style="border-top: none; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; border-bottom: none; font-size:8.5pt; color:#334155; white-space:normal; vertical-align:top; text-align:left; padding: 0px 15px 8px 15px; background-color:#ffffff;">With the increasing number of international and domestic flights at NAIA, the Civil Aviation Authority of the Philippines (CAAP) has issued a Memorandum that limits General Aviation, which we are part of, from flying via the NAIA runway from 9 AM to 7 PM daily. Given this restriction, kindly expect that our flights to/from the island may depart from/arrive at Clark Airport (Pampanga).</td>';
             echo '<td style="border:none;"></td>';
-            echo '<td colspan="5" style="border:none; height:8pt;"></td>';
+            echo '<td colspan="3" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
+            echo '<td colspan="2" class="num" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
+            echo '</tr>';
+
+            // Row 5B (Extra Payment Row)
+            echo '<tr>';
+            echo '<td style="border:none; width:15pt;"></td>';
+            echo '<td colspan="' . $leftColspan . '" style="border-top: none; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; border-bottom: none; background-color:#ffffff;"></td>';
+            echo '<td style="border:none;"></td>';
+            echo '<td colspan="3" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
+            echo '<td colspan="2" class="num" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
             echo '</tr>';
 
             // Row 6
+            $formula = '=' . number_format($overallGrandTotal, 2, '.', '') . '-SUM(' . $colPay . $paymentRow1 . ':' . $colPay . $paymentRow5 . ')';
             echo '<tr>';
             echo '<td style="border:none; width:15pt;"></td>';
             echo '<td colspan="' . $leftColspan . '" style="border-top: none; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; border-bottom: none; font-weight:bold; font-size:9.5pt; color:#1e293b; padding: 5px 15px 2px 15px; text-align: left; background-color:#ffffff;"><u>Expectant Mother</u></td>';
             echo '<td style="border:none;"></td>';
             echo '<td colspan="3" style="border-top: 2px solid #dc2626; border-bottom: 2px solid #dc2626; border-left: 2px solid #dc2626; border-right: none; background-color:#fff5f5; color:#dc2626; font-weight:bold; font-size:10pt; padding: 6px 10px; text-align: left; vertical-align: middle;">BALANCE TO SETTLE</td>';
-            echo '<td colspan="2" style="border-top: 2px solid #dc2626; border-bottom: 2px solid #dc2626; border-left: none; border-right: 2px solid #dc2626; background-color:#fff5f5; color:#dc2626; font-weight:bold; font-size:11pt; padding: 6px 10px; text-align: right; vertical-align: middle;">&#8369;' . number_format($overallGrandTotal, 2) . '</td>';
+            echo '<td style="border-top: 2px solid #dc2626; border-bottom: 2px solid #dc2626; border-left: none; border-right: none; background-color:#fff5f5; color:#dc2626; font-weight:bold; font-size:11pt; padding: 6px 0px 6px 10px; text-align: right; vertical-align: middle;">&#8369;</td>';
+            echo '<td class="num" style="border-top: 2px solid #dc2626; border-bottom: 2px solid #dc2626; border-left: none; border-right: 2px solid #dc2626; background-color:#fff5f5; color:#dc2626; font-weight:bold; font-size:11pt; padding: 6px 10px 6px 0px; text-align: right; vertical-align: middle;">' . $formula . '</td>';
             echo '</tr>';
 
             // Row 7

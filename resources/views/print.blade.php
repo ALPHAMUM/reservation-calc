@@ -496,29 +496,78 @@ $labelColspan = 9 + count($dateCols) + 4;
         <!-- Right: Payments and Balance -->
         <div class="payments-section">
             <div class="payments-title">PAYMENT/S:</div>
-            <table class="payments-table">
+            <table class="payments-table" id="paymentsTable">
                 <tbody>
                     <tr>
-                        <td style="width: 70%; height: 25px; border: 1px solid #cbd5e1 !important;"></td>
-                        <td style="width: 30%; text-align: right; font-weight: bold; border: 1px solid #cbd5e1 !important;"></td>
+                        <td contenteditable="true" class="payment-desc" style="width: 70%; height: 25px; border: 1px solid #cbd5e1 !important; outline: none;"></td>
+                        <td contenteditable="true" class="payment-amount" style="width: 30%; text-align: right; font-weight: bold; border: 1px solid #cbd5e1 !important; outline: none;"></td>
                     </tr>
                     <tr>
-                        <td style="height: 25px; border: 1px solid #cbd5e1 !important;"></td>
-                        <td style="border: 1px solid #cbd5e1 !important;"></td>
+                        <td contenteditable="true" class="payment-desc" style="height: 25px; border: 1px solid #cbd5e1 !important; outline: none;"></td>
+                        <td contenteditable="true" class="payment-amount" style="text-align: right; font-weight: bold; border: 1px solid #cbd5e1 !important; outline: none;"></td>
                     </tr>
                     <tr>
-                        <td style="height: 25px; border: 1px solid #cbd5e1 !important;"></td>
-                        <td style="border: 1px solid #cbd5e1 !important;"></td>
+                        <td contenteditable="true" class="payment-desc" style="height: 25px; border: 1px solid #cbd5e1 !important; outline: none;"></td>
+                        <td contenteditable="true" class="payment-amount" style="text-align: right; font-weight: bold; border: 1px solid #cbd5e1 !important; outline: none;"></td>
                     </tr>
                 </tbody>
             </table>
+            <button class="no-print btn btn-secondary" style="font-size: 10px; padding: 4px 8px; margin-bottom: 10px; border-radius: 4px;" onclick="addPaymentRow()">+ Add Row</button>
             <div class="balance-container">
                 <div class="balance-label">BALANCE TO SETTLE</div>
-                <div class="balance-value">&#8369;{{ number_format($overallGrandTotal, 2) }}</div>
+                <div class="balance-value" id="balanceValue">&#8369;{{ number_format($overallGrandTotal, 2) }}</div>
             </div>
         </div>
     </div>
     <div style="clear: both;"></div>
+
+    <script>
+        const totalAmountDue = {{ $overallGrandTotal }};
+        
+        function formatNumber(num) {
+            return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function calculateBalance() {
+            let totalPayments = 0;
+            const amountCells = document.querySelectorAll('.payment-amount');
+            
+            amountCells.forEach(cell => {
+                const valStr = cell.innerText.replace(/[^0-9.-]+/g, '');
+                const val = parseFloat(valStr);
+                if (!isNaN(val)) {
+                    totalPayments += val;
+                }
+            });
+
+            const balance = totalAmountDue - totalPayments;
+            document.getElementById('balanceValue').innerHTML = '&#8369;' + formatNumber(balance);
+        }
+
+        function addPaymentRow() {
+            const tbody = document.querySelector('#paymentsTable tbody');
+            const tr = document.createElement('tr');
+            
+            const tdDesc = document.createElement('td');
+            tdDesc.contentEditable = "true";
+            tdDesc.className = "payment-desc";
+            tdDesc.style.cssText = "height: 25px; border: 1px solid #cbd5e1 !important; outline: none;";
+            
+            const tdAmount = document.createElement('td');
+            tdAmount.contentEditable = "true";
+            tdAmount.className = "payment-amount";
+            tdAmount.style.cssText = "text-align: right; font-weight: bold; border: 1px solid #cbd5e1 !important; outline: none;";
+            tdAmount.addEventListener('input', calculateBalance);
+            
+            tr.appendChild(tdDesc);
+            tr.appendChild(tdAmount);
+            tbody.appendChild(tr);
+        }
+
+        document.querySelectorAll('.payment-amount').forEach(cell => {
+            cell.addEventListener('input', calculateBalance);
+        });
+    </script>
 </body>
 
 </html>
