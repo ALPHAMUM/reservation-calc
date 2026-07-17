@@ -848,21 +848,21 @@ class ReservationController extends Controller
             // Header Row 1: fixed cols (rowspan=2) + ACCOMMODATION (colspan = dateCount+1) + fee cols (rowspan=2)
             echo '<tr>';
             echo '<td rowspan="2" style="border:none; width:15pt;"></td>';
-            echo '<td rowspan="2" class="hdr">RSVN#</td>';
-            echo '<td rowspan="2" class="hdr">VILLAGE</td>';
-            echo '<td rowspan="2" class="hdr" style="width: 150px;">OCCUPANTS</td>';
-            echo '<td rowspan="2" class="hdr">RELATION</td>';
-            echo '<td rowspan="2" class="hdr">AGE</td>';
-            echo '<td rowspan="2" class="hdr">BIRTHDAY</td>';
-            echo '<td rowspan="2" class="hdr">NATIONALITY</td>';
-            echo '<td rowspan="2" class="hdr">CHECK-IN</td>';
-            echo '<td rowspan="2" class="hdr">CHECK-OUT</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 70pt;">RSVN#</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 100pt;">VILLAGE</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 120pt;">OCCUPANTS</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 80pt;">RELATION</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 35pt;">AGE</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 70pt;">BIRTHDAY</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 90pt;">NATIONALITY</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 75pt;">CHECK-IN</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 75pt;">CHECK-OUT</td>';
             echo '<td colspan="' . $dateCount . '" class="dh">ACCOMMODATION</td>';
-            echo '<td rowspan="2" class="hdr" style="width: 100px; word-wrap:normal;">AIRFARE</td>';
-            echo '<td rowspan="2" class="hdr" style="width: 100px; word-wrap:normal;">HANGAR FEE</td>';
-            echo '<td rowspan="2" class="hdr" style="width: 100px; word-wrap:normal;">AVIATION OPERATIONAL FEE</td>';
-            echo '<td rowspan="2" class="hdr" style="width: 100px; word-wrap:normal;">ENVIRONMENTAL FEE</td>';
-            echo '<td rowspan="2" class="hdr" style="width: 100px; word-wrap:normal;">TOTAL RATE (Per Occupant)</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 80pt; word-wrap:normal;">AIRFARE</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 80pt; word-wrap:normal;">HANGAR FEE</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 80pt; word-wrap:normal;">AVIATION OPERATIONAL FEE</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 80pt; word-wrap:normal;">ENVIRONMENTAL FEE</td>';
+            echo '<td rowspan="2" class="hdr" style="width: 90pt; word-wrap:normal;">TOTAL RATE (Per Occupant)</td>';
             echo '</tr>';
 
             // Header Row 2: date sub-columns + TOTAL
@@ -876,7 +876,7 @@ class ReservationController extends Controller
                     }
                 } catch (\Exception $e) {
                 }
-                echo '<td class="dh">' . htmlspecialchars($label) . '</td>';
+                echo '<td class="dh" style="width: 75pt;">' . htmlspecialchars($label) . '</td>';
             }
             echo '</tr>';
 
@@ -1072,35 +1072,56 @@ class ReservationController extends Controller
             echo '<td class="num" style="font-weight:bold;text-align:center;">' . number_format($overallGrandTotal, 2) . '</td>';
             echo '</tr>';
 
-            $overallGrandTotal = $accGrandTotal + $totals['air'] + $totals['han'] + $totals['avi'] + $totals['env'];
-
             $fullColspan = 9 + $dateCount + 5;
             $labelColspan = 9 + $dateCount + 4;
 
-            echo '<tr><td style="border:none; width:15pt;"></td><td colspan="' . $fullColspan . '" style="border:none;">&nbsp;</td></tr>';
+            $totalPax = count($allRows);
+            $grandTotalsRowIndex = 9 + $totalPax;
+            $targetDueRowIndex = 20;
+            $neededSpacers = $targetDueRowIndex - 1 - $grandTotalsRowIndex;
+            $spacerCount = max(1, $neededSpacers);
+
+            for ($s = 0; $s < $spacerCount; $s++) {
+                echo '<tr><td style="border:none; width:15pt;"></td><td colspan="' . $fullColspan . '" style="border:none;">&nbsp;</td></tr>';
+            }
             
-            $paymentRow1 = 8 + $totalPax + 6;
-            $paymentRow2 = 8 + $totalPax + 7;
-            $paymentRow3 = 8 + $totalPax + 8;
-            $paymentRow4 = 8 + $totalPax + 9;
-            $paymentRow5 = 8 + $totalPax + 10;
+            $dueRowIndex = $grandTotalsRowIndex + $spacerCount + 1;
+
+            $paymentRow1 = $dueRowIndex + 3;
+            $paymentRow2 = $dueRowIndex + 4;
+            $paymentRow3 = $dueRowIndex + 5;
+            $paymentRow4 = $dueRowIndex + 6;
+            $paymentRow5 = $dueRowIndex + 7;
             
             $colPay = 'A';
             for($i=1; $i < 14 + count($dateCols); $i++) $colPay++;
 
+            $trailingColspan = count($dateCols) - 3;
+            $trailingHtml = '';
+            if ($trailingColspan > 0) {
+                $trailingHtml = '<td colspan="' . $trailingColspan . '" style="background-color:#2b5a97; border:none;"></td>';
+            }
+
             echo '<tr>
             <td style="border:none; width:15pt;"></td>
-            <td colspan="8" style="border:none;"></td>
-            <td colspan="' . (count($dateCols) + 1) . '" style="background-color:#2b5a97; color:white; font-weight:bold; font-size:11pt; padding:8px 12px; border:none; text-align:left; vertical-align:middle;">TOTAL AMOUNT DUE:</td>
-            <td colspan="4" class="num" style="background-color:#2b5a97; color:white; font-weight:bold; font-size:11pt; padding:8px 12px; border:none; text-align:right; vertical-align:middle;">&#8369;' . number_format($overallGrandTotal, 2) . '</td>
-            <td style="background-color:#2b5a97; border:none;"></td>
+            <td colspan="12" style="border:none;"></td>
+            <td colspan="3" style="background-color:#2b5a97; color:white; font-weight:bold; font-size:11pt; padding:8px 12px; border:none; text-align:left; vertical-align:middle;">TOTAL AMOUNT DUE:</td>
+            <td colspan="2" class="num" style="background-color:#2b5a97; color:white; font-weight:bold; font-size:11pt; padding:8px 12px; border:none; text-align:right; vertical-align:middle;">&#8369;' . number_format($overallGrandTotal, 2) . '</td>
+            ' . $trailingHtml . '
             </tr>';
+
+            $trailingHtml2 = '';
+            if ($trailingColspan > 0) {
+                $trailingHtml2 = '<td colspan="' . $trailingColspan . '" style="border:none;"></td>';
+            } else {
+                $trailingHtml2 = '<td style="border:none;"></td>';
+            }
 
             echo '<tr>';
             echo '<td style="border:none; width:15pt;"></td>';
-            echo '<td colspan="8" style="border:none;"></td>';
-            echo '<td colspan="' . (count($dateCols) + 5) . '" style="text-align:right; border:none; font-style:italic; color:#64748b; font-size:9pt; padding-top:4px; padding-bottom:12px;">Room Rates include service charge (10%) and VAT (12%)</td>';
-            echo '<td style="border:none;"></td>';
+            echo '<td colspan="12" style="border:none;"></td>';
+            echo '<td colspan="5" style="text-align:right; border:none; font-style:italic; color:#64748b; font-size:9pt; padding-top:4px; padding-bottom:12px;">Room Rates include service charge (10%) and VAT (12%)</td>';
+            echo $trailingHtml2;
             echo '</tr>';
 
             $leftColspan = $fullColspan - 6;
@@ -1143,7 +1164,7 @@ class ReservationController extends Controller
             // Row 5
             echo '<tr>';
             echo '<td style="border:none; width:15pt;"></td>';
-            echo '<td colspan="' . $leftColspan . '" style="border-top: none; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; border-bottom: none; font-size:8.5pt; color:#334155; white-space:normal; vertical-align:top; text-align:left; padding: 0px 15px 8px 15px; background-color:#ffffff;">With the increasing number of international and domestic flights at NAIA, the Civil Aviation Authority of the Philippines (CAAP) has issued a Memorandum that limits General Aviation, which we are part of, from flying via the NAIA runway from 9 AM to 7 PM daily. Given this restriction, kindly expect that our flights to/from the island may depart from/arrive at Clark Airport (Pampanga).</td>';
+            echo '<td rowspan="2" colspan="' . $leftColspan . '" style="border-top: none; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; border-bottom: none; font-size:8.5pt; color:#334155; white-space:normal; vertical-align:top; text-align:left; padding: 0px 15px 8px 15px; background-color:#ffffff;">With the increasing number of international and domestic flights at NAIA, the Civil Aviation Authority of the Philippines (CAAP) has issued a Memorandum that limits General Aviation, which we are part of, from flying via the NAIA runway from 9 AM to 7 PM daily. Given this restriction, kindly expect that our flights to/from the island may depart from/arrive at Clark Airport (Pampanga).</td>';
             echo '<td style="border:none;"></td>';
             echo '<td colspan="3" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
             echo '<td colspan="2" class="num" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
@@ -1152,7 +1173,6 @@ class ReservationController extends Controller
             // Row 5B (Extra Payment Row)
             echo '<tr>';
             echo '<td style="border:none; width:15pt;"></td>';
-            echo '<td colspan="' . $leftColspan . '" style="border-top: none; border-left: 1px solid #cbd5e1; border-right: 1px solid #cbd5e1; border-bottom: none; background-color:#ffffff;"></td>';
             echo '<td style="border:none;"></td>';
             echo '<td colspan="3" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
             echo '<td colspan="2" class="num" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
