@@ -1104,7 +1104,7 @@ class ReservationController extends Controller
 
             echo '<tr>
             <td style="border:none; width:15pt;"></td>
-            <td colspan="12" style="border:none;"></td>
+            <td colspan="11" style="border:none;"></td>
             <td colspan="3" style="background-color:#2b5a97; color:white; font-weight:bold; font-size:11pt; padding:8px 12px; border:none; text-align:left; vertical-align:middle;">TOTAL AMOUNT DUE:</td>
             <td colspan="2" class="num" style="background-color:#2b5a97; color:white; font-weight:bold; font-size:11pt; padding:8px 12px; border:none; text-align:right; vertical-align:middle;">&#8369;' . number_format($overallGrandTotal, 2) . '</td>
             ' . $trailingHtml . '
