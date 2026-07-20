@@ -12,12 +12,36 @@ class ReservationController extends Controller
     private $listApiUrl;
     private $detailApiUrl;
     private $apiKey;
+    private $property = 'island';
+
+    // Valid property slugs and their service config keys
+    private const PROPERTY_CONFIG = [
+        'island' => 'balesin',
+        'city'   => 'balesin_city',
+        'pines'  => 'balesin_pines',
+    ];
 
     public function __construct()
     {
-        $this->listApiUrl = config('services.balesin.list_url');
+        // Default to Island; individual actions override via resolvePropertyConfig()
+        $this->listApiUrl   = config('services.balesin.list_url');
         $this->detailApiUrl = config('services.balesin.detail_url');
-        $this->apiKey = config('services.balesin.api_key');
+        $this->apiKey       = config('services.balesin.api_key');
+    }
+
+    /**
+     * Switch the active API config based on the ?property= request param.
+     * Returns the normalised property slug ('island' | 'city' | 'pines').
+     */
+    private function resolvePropertyConfig(string $property): string
+    {
+        $slug       = in_array($property, array_keys(self::PROPERTY_CONFIG), true) ? $property : 'island';
+        $configKey  = self::PROPERTY_CONFIG[$slug];
+        $this->listApiUrl   = config("services.{$configKey}.list_url");
+        $this->detailApiUrl = config("services.{$configKey}.detail_url");
+        $this->apiKey       = config("services.{$configKey}.api_key");
+        $this->property     = $slug;
+        return $slug;
     }
 
     private $villageMap = [
@@ -51,6 +75,9 @@ class ReservationController extends Controller
     {
         if (!$code)
             return 'N/A';
+        if ($this->property !== 'island') {
+            return $code;
+        }
         $searchCode = strtoupper(trim($code));
 
         // If it exists in our map, return the "actual name"
@@ -254,17 +281,90 @@ class ReservationController extends Controller
         return $village . '&#10;' . $unit;
     }
 
+    /**
+     * Check the sanity/health of all three property APIs.
+     * Returns JSON consumed by the dashboard via AJAX.
+     * GET /api/status
+     */
+    public function apiStatus()
+    {
+        $properties = [
+            'island' => [
+                'label'      => 'Balesin Island',
+                'sanity_url' => config('services.balesin.sanity_url'),
+                'api_key'    => config('services.balesin.api_key'),
+            ],
+            'city' => [
+                'label'      => 'Balesin City',
+                'sanity_url' => config('services.balesin_city.sanity_url'),
+                'api_key'    => config('services.balesin_city.api_key'),
+            ],
+            'pines' => [
+                'label'      => 'Balesin Pines',
+                'sanity_url' => config('services.balesin_pines.sanity_url'),
+                'api_key'    => config('services.balesin_pines.api_key'),
+            ],
+        ];
+
+        $results = [];
+
+        foreach ($properties as $slug => $cfg) {
+            $start = microtime(true);
+            $up    = false;
+            $msg   = '';
+
+            try {
+                $resp = Http::withHeaders(['Authorization' => $cfg['api_key']])
+                    ->withoutVerifying()
+                    ->timeout(8)
+                    ->get($cfg['sanity_url']);
+
+                $up  = $resp->successful();
+                if ($up) {
+                    $json = $resp->json();
+                    if (is_array($json)) {
+                        $msg = $json['msg'] ?? ($json['message'] ?? 'OK');
+                    } else {
+                        $msg = trim($resp->body()) ?: 'OK';
+                    }
+                } else {
+                    $msg = 'HTTP ' . $resp->status();
+                }
+            } catch (\Illuminate\Http\Client\ConnectionException $e) {
+                $msg = 'Connection failed';
+            } catch (\Exception $e) {
+                $msg = 'Error: ' . $e->getMessage();
+            }
+
+            $ms = round((microtime(true) - $start) * 1000);
+
+            $results[$slug] = [
+                'label'   => $cfg['label'],
+                'up'      => $up,
+                'ms'      => $ms,
+                'message' => is_array($msg) ? json_encode($msg) : (string) $msg,
+                'checked' => now()->format('H:i:s'),
+            ];
+        }
+
+        return response()->json($results);
+    }
+
     public function index(Request $request)
     {
-        $resNoList = $request->get('resnolist');
-        $fromDate = $request->get('fromdate');
-        $toDate = $request->get('todate');
+        $property     = $this->resolvePropertyConfig($request->get('property', 'island'));
+        $isIsland     = $property === 'island';
+
+        $resNoList    = $request->get('resnolist');
+        $fromDate     = $request->get('fromdate');
+        $toDate       = $request->get('todate');
         $statusFilter = $request->get('status_filter');
-        $search = $request->get('search');
-        $page = $request->get('page', 1);
-        $perPage = $request->get('per_page', 10);
+        $search       = $request->get('search');
+        $page         = $request->get('page', 1);
+        $perPage      = $request->get('per_page', 10);
         if ($perPage > 100)
             $perPage = 100;
+
 
         $reservations = [];
         $pagedReservations = [];
@@ -525,20 +625,22 @@ class ReservationController extends Controller
 
         return view('dashboard', [
             'reservations' => $pagedReservations ?? [],
-            'resNoList' => $resNoList,
-            'fromDate' => $fromDate,
-            'toDate' => $toDate,
+            'resNoList'    => $resNoList,
+            'fromDate'     => $fromDate,
+            'toDate'       => $toDate,
             'statusFilter' => $statusFilter,
-            'dateCols' => $dateCols,
-            'viewType' => $viewType,
-            'error' => $error,
-            'settings' => $settings
+            'dateCols'     => $dateCols,
+            'viewType'     => $viewType,
+            'error'        => $error,
+            'settings'     => $settings,
+            'property'     => $property,
         ]);
     }
 
     public function export(Request $request)
     {
         set_time_limit(0);
+        $this->resolvePropertyConfig($request->get('property', 'island'));
         $resNoList = $request->get('resnolist');
         $fromDate = $request->get('fromdate');
         $toDate = $request->get('todate');
@@ -1236,6 +1338,7 @@ class ReservationController extends Controller
     public function print(Request $request)
     {
         set_time_limit(0);
+        $this->resolvePropertyConfig($request->get('property', 'island'));
         $resNoList = $request->get('resnolist');
         $fromDate = $request->get('fromdate');
         $toDate = $request->get('todate');

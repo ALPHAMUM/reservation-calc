@@ -31,9 +31,24 @@ return [
     ],
 
     'balesin' => [
-        'list_url' => env('BALESIN_API_LIST_URL'),
+        'list_url'   => env('BALESIN_API_LIST_URL'),
         'detail_url' => env('BALESIN_API_DETAIL_URL'),
-        'api_key' => env('BALESIN_API_KEY'),
+        'sanity_url' => env('BALESIN_API_SANITY_URL'),
+        'api_key'    => env('BALESIN_API_KEY'),
+    ],
+
+    'balesin_city' => [
+        'list_url'   => env('BALESIN_CITY_API_LIST_URL'),
+        'detail_url' => env('BALESIN_CITY_API_DETAIL_URL'),
+        'sanity_url' => env('BALESIN_CITY_API_SANITY_URL'),
+        'api_key'    => env('BALESIN_CITY_API_KEY'),
+    ],
+
+    'balesin_pines' => [
+        'list_url'   => env('BALESIN_PINES_API_LIST_URL'),
+        'detail_url' => env('BALESIN_PINES_API_DETAIL_URL'),
+        'sanity_url' => env('BALESIN_PINES_API_SANITY_URL'),
+        'api_key'    => env('BALESIN_PINES_API_KEY'),
     ],
 
 ];

@@ -685,6 +685,7 @@
         </div>
     @endif
 
+
     <div class="stats-grid">
         <div class="stat-card">
             <div class="stat-label">Total Reservations</div>
@@ -719,7 +720,11 @@
     <div class="card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
             <h2 style="font-size: 1.25rem; font-weight: 600; color: var(--text)">
+                @php
+                    $propertyLabel = ['island' => '🏝️ Balesin Island', 'city' => '🏙️ Balesin City', 'pines' => '🌲 Balesin Pines'][$property] ?? 'Balesin Island';
+                @endphp
                 {{ $viewType === 'list' ? 'Reservation Summary' : 'Detailed Records' }}
+                <span style="font-size: 0.85rem; font-weight: 400; color: var(--text-muted); margin-left: 0.5rem;">— {{ $propertyLabel }}</span>
             </h2>
             @if($viewType === 'detail')
                 <a href="javascript:void(0);" onclick="window.history.back();" class="btn btn-primary" style="background: rgba(255,255,255,0.1); font-size: 0.875rem;">
@@ -740,19 +745,41 @@
                         <option value="100" {{ request('per_page') == 100 ? 'selected' : '' }}>100</option>
                     </select>
                 </div>
-                <div style="display: flex; gap: 0.5rem;">
+                <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
                     <button type="submit" class="btn btn-primary">Refresh Data</button>
-                    <button type="submit" formaction="{{ route('export') }}" class="btn btn-primary btn-export-excel" style="background: var(--success)">
-                        Export Excel
-                    </button>
-                    <button type="submit" formaction="{{ route('print') }}" formtarget="_blank" class="btn btn-primary btn-export-pdf" style="background: #ef4444">
-                        Export PDF
-                    </button>
+                    @if($property === 'island')
+                        <button type="submit" formaction="{{ route('export') }}" class="btn btn-primary btn-export-excel" style="background: var(--success)">
+                            Export Excel
+                        </button>
+                        <button type="submit" formaction="{{ route('print') }}" formtarget="_blank" class="btn btn-primary btn-export-pdf" style="background: #ef4444">
+                            Export PDF
+                        </button>
+                    @else
+                        @php $propName = $property === 'city' ? 'Balesin City' : 'Balesin Pines'; @endphp
+                        <span title="Export not yet available for {{ $propName }}" style="display:inline-flex; gap:0.5rem;">
+                            <button type="button" class="btn btn-primary btn-export-excel" style="background: var(--success); opacity: 0.4; cursor: not-allowed;" disabled>
+                                Export Excel
+                            </button>
+                            <button type="button" class="btn btn-primary btn-export-pdf" style="background: #ef4444; opacity: 0.4; cursor: not-allowed;" disabled>
+                                Export PDF
+                            </button>
+                        </span>
+                    @endif
                 </div>
             </div>
 
             <!-- Second Row: Filters -->
             <div style="display: flex; width: 100%; gap: 1rem; flex-wrap: wrap;">
+                <!-- Property Selector -->
+                <div class="input-group" style="flex: 0 0 180px; min-width: 160px;">
+                    <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Property</label>
+                    <select name="property" id="propertySelect" onchange="this.form.submit()" style="font-weight: 600;">
+                        <option value="island" {{ $property === 'island' ? 'selected' : '' }}>🏝️ Balesin Island</option>
+                        <option value="city"   {{ $property === 'city'   ? 'selected' : '' }}>🏙️ Balesin City</option>
+                        <option value="pines"  {{ $property === 'pines'  ? 'selected' : '' }}>🌲 Balesin Pines</option>
+                    </select>
+                </div>
+
                 @if($viewType !== 'detail' || !$resNoList)
                     <div class="input-group">
                         <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">From Date</label>
@@ -794,12 +821,12 @@
                     <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Search (Name, Res No...)</label>
                     <input type="text" name="search" value="{{ request('search') }}" placeholder="Search all records..." autocomplete="off">
                 </div>
-                @if($viewType !== 'detail')
+                @if($viewType !== 'detail' && $property === 'island')
                 <div class="input-group" style="max-width: 320px;">
                     <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Res No List</label>
                     <input type="text" name="resnolist" value="{{ $resNoList }}" placeholder="IDs separated by comma...">
                 </div>
-                @else
+                @elseif($viewType === 'detail')
                     <input type="hidden" name="resnolist" value="{{ $resNoList }}">
                 @endif
             </div>
@@ -852,23 +879,41 @@
                                     $curr = 0;
                                     while ($curr < $count) {
                                         $blockStart = $curr;
-                                        $blockSize = min($count - $curr, $basePax);
+                                        // For island: limit block size to unit capacity (basePax). For City/Pines: no grouping, blockSize is 1
+                                        $blockSize = ($property === 'island') ? min($count - $curr, $basePax) : 1;
                                         
-                                        $groupTotals = [];
-                                        foreach($dateCols as $d) {
-                                            $uv = 0;
-                                            foreach($rows[$blockStart]['rate'] ?? [] as $rt) {
-                                                if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                                        if ($property === 'island') {
+                                            $groupTotals = [];
+                                            foreach($dateCols as $d) {
+                                                $uv = 0;
+                                                foreach($rows[$blockStart]['rate'] ?? [] as $rt) {
+                                                    if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                                                }
+                                                $groupTotals[$d] = $uv;
                                             }
-                                            $groupTotals[$d] = $uv;
-                                        }
-                                        for ($i = 0; $i < $blockSize; $i++) {
-                                            $span = ($i === 0) ? $blockSize : 0;
-                                            $totals = $groupTotals;
+                                            for ($i = 0; $i < $blockSize; $i++) {
+                                                $span = ($i === 0) ? $blockSize : 0;
+                                                $accSpans[] = [
+                                                    'span' => $span,
+                                                    'totals' => $groupTotals,
+                                                    'group_size' => $blockSize,
+                                                    'has_fvn' => false
+                                                ];
+                                            }
+                                        } else {
+                                            // Non-island: each passenger has their own rates, no span merging
+                                            $passTotals = [];
+                                            foreach ($dateCols as $d) {
+                                                $uv = 0;
+                                                foreach ($rows[$blockStart]['rate'] ?? [] as $rt) {
+                                                    if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                                                }
+                                                $passTotals[$d] = $uv;
+                                            }
                                             $accSpans[] = [
-                                                'span' => $span,
-                                                'totals' => $totals,
-                                                'group_size' => $blockSize,
+                                                'span' => 1,
+                                                'totals' => $passTotals,
+                                                'group_size' => 1,
                                                 'has_fvn' => false
                                             ];
                                         }
@@ -947,8 +992,7 @@
                                             </td>
                                         @endforeach
                                     @endif
-                                    
-                                    @php
+                                          @php
                                             $spanInfo = $accSpans[$idx] ?? ['span' => 1, 'totals' => [], 'group_size' => 1, 'has_fvn' => false];
                                             $groupAccSum = 0;
                                             foreach(($spanInfo['totals'] ?? []) as $gv) {
@@ -958,9 +1002,10 @@
                                                 }
                                             }
                                             $groupSize = max(1, (int)($spanInfo['group_size'] ?? 1));
-                                            $perOccupantAcc = $groupAccSum / $groupSize;
-
+                                            
                                             $r = $res['calculated_rates'] ?? [];
+                                            $perOccupantAcc = ($property === 'island') ? ($groupAccSum / $groupSize) : ($r['acc'] ?? 0);
+                                            
                                             $total = $perOccupantAcc + ($r['air'] ?? 0) + ($r['han'] ?? 0) + ($r['avi'] ?? 0) + ($r['env'] ?? 0);
                                             $baseFees = ($r['air'] ?? 0) + ($r['han'] ?? 0) + ($r['avi'] ?? 0) + ($r['env'] ?? 0);
                                     @endphp
@@ -1006,8 +1051,8 @@
                                 </td>
                                 <td>
                                     @if($currentResNo)
-                                        <a href="{{ route('dashboard', ['resnolist' => $currentResNo]) }}" style="text-decoration: none;">
-                                            <span class="res-no">#{{ $currentResNo }}</span>
+                                        <a href="{{ route('dashboard', ['resnolist' => $currentResNo, 'property' => $property]) }}" style="text-decoration: none;">
+                                             <span class="res-no">#{{ $currentResNo }}</span>
                                         </a>
                                     @else
                                         <span class="res-no">N/A</span>
@@ -1515,8 +1560,10 @@
             $('.status-option-checkbox:checked').each(function() { statusFilter.push($(this).val()); });
             const search = $('input[name="search"]').val() || '';
             const perPage = $('select[name="per_page"]').val() || '10';
+            const property = $('#propertySelect').val() || 'island';
 
             const params = new URLSearchParams();
+            params.append('property', property);
             params.append('fromdate', fromDate);
             params.append('todate', toDate);
             params.append('resnolist', resNoList);
