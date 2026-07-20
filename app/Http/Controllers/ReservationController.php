@@ -1119,7 +1119,7 @@ class ReservationController extends Controller
 
             echo '<tr>';
             echo '<td style="border:none; width:15pt;"></td>';
-            echo '<td colspan="12" style="border:none;"></td>';
+            echo '<td colspan="11" style="border:none;"></td>';
             echo '<td colspan="5" style="text-align:right; border:none; font-style:italic; color:#64748b; font-size:9pt; padding-top:4px; padding-bottom:12px;">Room Rates include service charge (10%) and VAT (12%)</td>';
             echo $trailingHtml2;
             echo '</tr>';
