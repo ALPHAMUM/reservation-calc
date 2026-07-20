@@ -998,7 +998,7 @@
                     <tbody>
                         @foreach($reservations as $res)
                             @php $currentResNo = $res['resNo'] ?? $res['conf'] ?? null; @endphp
-                            <tr>
+                            <tr data-pax="{{ (int)($res['noPax'] ?? $res['noOfPax'] ?? 0) }}" data-status="{{ strtoupper(trim($res['status'] ?? '')) }}">
                                 <td style="text-align: center;">
                                     @if($currentResNo)
                                         <input type="checkbox" class="res-checkbox custom-checkbox" value="{{ $currentResNo }}" {{ in_array($currentResNo, array_filter(explode(',', request('resnolist', '')))) ? 'checked' : '' }}>
@@ -1118,6 +1118,36 @@
         } else {
             table = $('#resTable').DataTable();
         }
+
+        // Dynamic stats update on every DataTables draw (search, filter, page)
+        function updateStats() {
+            var api = table;
+            var totalRes = 0;
+            var totalPax = 0;
+            var arrivedPax = 0;
+            // Iterate all rows matching current search/filter (across all pages)
+            api.rows({ search: 'applied' }).nodes().each(function(row) {
+                var $row = $(row);
+                var pax = parseInt($row.data('pax')) || 0;
+                var status = ($row.data('status') || '').toUpperCase().trim();
+                totalRes++;
+                totalPax += pax;
+                if (status === 'ARRIVED') {
+                    arrivedPax += pax;
+                }
+            });
+            $('#stat-total-res').text(totalRes);
+            $('#stat-total-pax').text(totalPax);
+            $('#stat-total-arrived').text(arrivedPax);
+        }
+
+        // Hook into DataTables draw event
+        table.on('draw', function() {
+            updateStats();
+        });
+
+        // Initial stats update
+        updateStats();
 
         // Live Search logic
         $('input[name="search"]').on('keyup input', function() {
