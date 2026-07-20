@@ -1075,16 +1075,13 @@ class ReservationController extends Controller
             $fullColspan = 9 + $dateCount + 5;
             $labelColspan = 9 + $dateCount + 4;
 
-            $totalPax = count($allRows);
-            $grandTotalsRowIndex = 9 + $totalPax;
-            $targetDueRowIndex = 20;
-            $neededSpacers = $targetDueRowIndex - 1 - $grandTotalsRowIndex;
-            $spacerCount = max(1, $neededSpacers);
+            $spacerCount = 2; // Always 2 blank rows between main table and summary block
 
             for ($s = 0; $s < $spacerCount; $s++) {
                 echo '<tr><td style="border:none; width:15pt;"></td><td colspan="' . $fullColspan . '" style="border:none;">&nbsp;</td></tr>';
             }
             
+            $grandTotalsRowIndex = 9 + count($allRows);
             $dueRowIndex = $grandTotalsRowIndex + $spacerCount + 1;
 
             $paymentRow1 = $dueRowIndex + 3;
@@ -1096,32 +1093,17 @@ class ReservationController extends Controller
             $colPay = 'A';
             for($i=1; $i < 14 + count($dateCols); $i++) $colPay++;
 
-            $trailingColspan = count($dateCols) - 3;
-            $trailingHtml = '';
-            if ($trailingColspan > 0) {
-                $trailingHtml = '<td colspan="' . $trailingColspan . '" style="background-color:#2b5a97; border:none;"></td>';
-            }
-
             echo '<tr>
             <td style="border:none; width:15pt;"></td>
-            <td colspan="11" style="border:none;"></td>
+            <td colspan="' . (9 + $dateCount) . '" style="border:none;"></td>
             <td colspan="3" style="background-color:#2b5a97; color:white; font-weight:bold; font-size:11pt; padding:8px 12px; border:none; text-align:left; vertical-align:middle;">TOTAL AMOUNT DUE:</td>
             <td colspan="2" class="num" style="background-color:#2b5a97; color:white; font-weight:bold; font-size:11pt; padding:8px 12px; border:none; text-align:right; vertical-align:middle;">&#8369;' . number_format($overallGrandTotal, 2) . '</td>
-            ' . $trailingHtml . '
             </tr>';
-
-            $trailingHtml2 = '';
-            if ($trailingColspan > 0) {
-                $trailingHtml2 = '<td colspan="' . $trailingColspan . '" style="border:none;"></td>';
-            } else {
-                $trailingHtml2 = '<td style="border:none;"></td>';
-            }
 
             echo '<tr>';
             echo '<td style="border:none; width:15pt;"></td>';
-            echo '<td colspan="11" style="border:none;"></td>';
+            echo '<td colspan="' . (9 + $dateCount) . '" style="border:none;"></td>';
             echo '<td colspan="5" style="text-align:right; border:none; font-style:italic; color:#64748b; font-size:9pt; padding-top:4px; padding-bottom:12px;">Room Rates include service charge (10%) and VAT (12%)</td>';
-            echo $trailingHtml2;
             echo '</tr>';
 
             $leftColspan = $fullColspan - 6;
