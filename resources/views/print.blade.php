@@ -252,9 +252,9 @@
                 $firstMemberNo = $r['memberNo'];
             }
             if (!$firstContactNo && !empty($r['conactNo'])) {
-                $firstContactNo = $r['conactNo'];
+                $firstContactNo = (string)$r['conactNo'];
             } elseif (!$firstContactNo && !empty($r['contactNo'])) {
-                $firstContactNo = $r['contactNo'];
+                $firstContactNo = (string)$r['contactNo'];
             }
             if (!$firstBookDate && !empty($r['bookDate'])) {
                 $firstBookDate = $r['bookDate'];
@@ -289,7 +289,7 @@
             </tr>
             <tr>
                 <td style="font-weight: bold; background-color: #dbeafe; border: 1px solid #cbd5e1; padding: 5px; text-align: center;">CONTACT NUMBER:</td>
-                <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;">{{ $firstContactNo }}</td>
+                <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold; mso-number-format:'\@';">{{ $firstContactNo }}</td>
                 <td colspan="{{ count($dateCols) + 5 }}" style="border: none;"></td>
             </tr>
             <tr>

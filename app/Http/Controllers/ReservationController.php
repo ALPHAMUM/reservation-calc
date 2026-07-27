@@ -876,7 +876,7 @@ class ReservationController extends Controller
             echo '<tr>';
             echo '<td style="border:none; width:15pt;"></td>';
             echo '<td style="font-weight: bold; background-color: #dbeafe; padding: 8px; text-align: center; color: #000;">CONTACT NUMBER:</td>';
-            echo '<td colspan="6" style="padding: 8px; text-align: center; color: #000; font-weight: bold;">' . htmlspecialchars($firstContactNo) . '</td>';
+            echo '<td colspan="6" style="padding: 8px; text-align: center; color: #000; font-weight: bold; mso-number-format:\'\@\';">' . htmlspecialchars((string)$firstContactNo) . '</td>';
             echo '<td colspan="' . $emptyColsSpan . '" style="border: none;"></td>';
             echo '</tr>';
 
