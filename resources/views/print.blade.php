@@ -238,12 +238,36 @@
         // Pre-calculate rowspan counts per reservation number
         $resGroupCounts = [];
         $firstMemberName = '';
+        $firstMemberNo = '';
+        $firstContactNo = '';
+        $firstBookDate = '';
         $firstCheckIn = '';
         foreach ($reservations as $r) {
             $rn = trim((string)($r['resNo'] ?? $r['conf'] ?? ''));
             $resGroupCounts[$rn] = ($resGroupCounts[$rn] ?? 0) + 1;
             if (!$firstMemberName && !empty($r['customer_name'])) {
                 $firstMemberName = $r['customer_name'];
+            }
+            if (!$firstMemberNo && !empty($r['memberNo'])) {
+                $firstMemberNo = $r['memberNo'];
+            }
+            if (!$firstContactNo && !empty($r['conactNo'])) {
+                $firstContactNo = $r['conactNo'];
+            } elseif (!$firstContactNo && !empty($r['contactNo'])) {
+                $firstContactNo = $r['contactNo'];
+            }
+            if (!$firstBookDate && !empty($r['bookDate'])) {
+                $firstBookDate = $r['bookDate'];
+            }
+        }
+
+        $formattedBookDate = '';
+        if ($firstBookDate) {
+            try {
+                $dt = new \DateTime($firstBookDate);
+                $formattedBookDate = $dt->format('l, d F Y');
+            } catch (\Exception $e) {
+                $formattedBookDate = $firstBookDate;
             }
         }
     @endphp
@@ -260,17 +284,17 @@
             </tr>
             <tr>
                 <td style="font-weight: bold; background-color: #dbeafe; border: 1px solid #cbd5e1; padding: 5px; text-align: center;">MEMBERSHIP NUMBER:</td>
-                <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;"></td>
+                <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;">{{ $firstMemberNo }}</td>
                 <td colspan="{{ count($dateCols) + 5 }}" style="border: none;"></td>
             </tr>
             <tr>
                 <td style="font-weight: bold; background-color: #dbeafe; border: 1px solid #cbd5e1; padding: 5px; text-align: center;">CONTACT NUMBER:</td>
-                <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;"></td>
+                <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;">{{ $firstContactNo }}</td>
                 <td colspan="{{ count($dateCols) + 5 }}" style="border: none;"></td>
             </tr>
             <tr>
                 <td style="font-weight: bold; background-color: #dbeafe; border: 1px solid #cbd5e1; padding: 5px; text-align: center;">BOOKING DATE:</td>
-                <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;"></td>
+                <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;">{{ $formattedBookDate }}</td>
                 <td colspan="{{ count($dateCols) + 5 }}" style="border: none;"></td>
             </tr>
             <tr>
