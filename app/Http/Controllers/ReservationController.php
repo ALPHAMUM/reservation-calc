@@ -1662,4 +1662,83 @@ class ReservationController extends Controller
     {
         return '=IMAGE("' . $this->balesinLogoUrl() . '")';
     }
+
+    public function memberSearch(Request $request)
+    {
+        $memberNo = $request->get('member_no');
+        $fromDate = $request->get('fromdate') ?: date('Y-m-d');
+        $toDate = $request->get('todate') ?: date('Y-m-d');
+
+        $reservations = [];
+        $errors = [];
+
+        if ($memberNo) {
+            $memberNoSearch = strtolower(trim($memberNo));
+
+            $properties = [
+                'island' => [
+                    'label' => 'Balesin Island',
+                    'list_url' => config('services.balesin.list_url'),
+                    'api_key' => config('services.balesin.api_key'),
+                ],
+                'city' => [
+                    'label' => 'Balesin City',
+                    'list_url' => config('services.balesin_city.list_url'),
+                    'api_key' => config('services.balesin_city.api_key'),
+                ],
+                'pines' => [
+                    'label' => 'Balesin Pines',
+                    'list_url' => config('services.balesin_pines.list_url'),
+                    'api_key' => config('services.balesin_pines.api_key'),
+                ],
+            ];
+
+            foreach ($properties as $slug => $cfg) {
+                if (empty($cfg['list_url']) || empty($cfg['api_key'])) {
+                    continue;
+                }
+
+                try {
+                    $resp = Http::withHeaders(['Authorization' => $cfg['api_key']])
+                        ->withoutVerifying()
+                        ->timeout(15)
+                        ->get($cfg['list_url'], [
+                            'fromdate' => $fromDate,
+                            'todate' => $toDate,
+                        ]);
+
+                    if ($resp->successful()) {
+                        $data = $resp->json()['msg'] ?? [];
+                        foreach ($data as $res) {
+                            $resMemberNo = strtolower(trim($res['memberNo'] ?? ''));
+                            if (str_contains($resMemberNo, $memberNoSearch)) {
+                                $res['property'] = $slug;
+                                $res['property_label'] = $cfg['label'];
+                                $reservations[] = $res;
+                            }
+                        }
+                    } else {
+                        $errors[] = "{$cfg['label']}: HTTP {$resp->status()}";
+                    }
+                } catch (\Exception $e) {
+                    $errors[] = "{$cfg['label']}: " . $e->getMessage();
+                }
+            }
+
+            // Sort reservations by arrival date descending
+            usort($reservations, function ($a, $b) {
+                $dateA = $a['arrDt'] ?? $a['arrdt'] ?? '';
+                $dateB = $b['arrDt'] ?? $b['arrdt'] ?? '';
+                return strcmp($dateB, $dateA);
+            });
+        }
+
+        return view('member_search', [
+            'reservations' => $reservations,
+            'memberNo' => $memberNo,
+            'fromDate' => $fromDate,
+            'toDate' => $toDate,
+            'errors' => $errors,
+        ]);
+    }
 }

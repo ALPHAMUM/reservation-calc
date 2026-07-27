@@ -21,6 +21,7 @@ Route::get('/export', [ReservationController::class, 'export'])->name('export');
 Route::get('/print', [ReservationController::class, 'print'])->name('print');
 Route::get('/api/reservations/rates', [ReservationController::class, 'getRates']);
 Route::get('/api/status', [ReservationController::class, 'apiStatus'])->name('api.status');
+Route::get('/member-search', [ReservationController::class, 'memberSearch'])->name('member.search');
 
 use App\Http\Controllers\SettingsController;
 Route::get('/setup', [SettingsController::class, 'index'])->name('setup');

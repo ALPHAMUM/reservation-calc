@@ -139,6 +139,7 @@
             <div class="logo">Reservation</div>
             <nav style="display: flex; align-items: center; gap: 1rem;">
                 <a href="{{ route('dashboard') }}" class="btn" style="color: var(--text)">Dashboard</a>
+                <a href="{{ route('member.search') }}" class="btn" style="color: var(--text)">Member Search</a>
 
                 {{-- API Status Dropdown --}}
                 <div id="apiDropdownWrapper" style="position: relative;">
