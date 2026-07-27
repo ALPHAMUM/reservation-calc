@@ -110,8 +110,13 @@ class ReservationController extends Controller
         }
     }
 
-    private function ingestListReservation(array $lr, array &$rateMap, array &$listRateMap, array &$memberMap): void
-    {
+    private function ingestListReservation(
+        array $lr,
+        array &$rateMap,
+        array &$listRateMap,
+        array &$memberMap,
+        array &$memberMetaMap = null
+    ): void {
         $c = trim($lr['conf'] ?? $lr['resNo'] ?? $lr['resno'] ?? '');
         if ($c === '') {
             return;
@@ -133,6 +138,14 @@ class ReservationController extends Controller
 
         $rateMap[$c] = $rateVal;
         $memberMap[$c] = $cust;
+
+        if ($memberMetaMap !== null) {
+            $memberMetaMap[$c] = [
+                'memberNo' => trim($lr['memberNo'] ?? ''),
+                'bookDate' => trim($lr['bookDate'] ?? ''),
+                'conactNo' => trim($lr['conactNo'] ?? $lr['contactNo'] ?? ''),
+            ];
+        }
     }
 
     /**
@@ -143,7 +156,8 @@ class ReservationController extends Controller
         array $msgs,
         array &$rateMap,
         array &$listRateMap,
-        array &$memberMap
+        array &$memberMap,
+        array &$memberMetaMap = null
     ): void {
         $arrDates = [];
         foreach ($msgs as $m) {
@@ -166,7 +180,7 @@ class ReservationController extends Controller
                     ->get($this->listApiUrl, ['fromdate' => $arrDate, 'todate' => $depDate]);
                 if ($lr->successful()) {
                     foreach ($lr->json()['msg'] ?? [] as $item) {
-                        $this->ingestListReservation($item, $rateMap, $listRateMap, $memberMap);
+                        $this->ingestListReservation($item, $rateMap, $listRateMap, $memberMap, $memberMetaMap);
                     }
                 }
             } catch (\Exception $e) {
@@ -712,12 +726,13 @@ class ReservationController extends Controller
             $rateMap = [];
             $listRateMap = [];
             $memberMap = [];
+            $memberMetaMap = [];
             if ($fromDate && $toDate) {
                 $listResp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                     ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
                 if ($listResp->successful()) {
                     foreach ($listResp->json()['msg'] ?? [] as $lr) {
-                        $this->ingestListReservation($lr, $rateMap, $listRateMap, $memberMap);
+                        $this->ingestListReservation($lr, $rateMap, $listRateMap, $memberMap, $memberMetaMap);
                     }
                 }
             }
@@ -792,7 +807,7 @@ class ReservationController extends Controller
                     }
                 }
 
-                $this->hydrateListMetadataFromDetail($msgs, $rateMap, $listRateMap, $memberMap);
+                $this->hydrateListMetadataFromDetail($msgs, $rateMap, $listRateMap, $memberMap, $memberMetaMap);
 
                 $resUnitTypes = $this->buildReservationUnitTypes(
                     $rateMap,
@@ -805,6 +820,10 @@ class ReservationController extends Controller
                 foreach ($msgs as &$res) {
                     $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
                     $res['customer_name'] = $memberMap[$resNo] ?? '';
+                    $meta = $memberMetaMap[$resNo] ?? [];
+                    $res['memberNo'] = $meta['memberNo'] ?? $res['memberNo'] ?? '';
+                    $res['bookDate'] = $meta['bookDate'] ?? $res['bookDate'] ?? '';
+                    $res['conactNo'] = $meta['conactNo'] ?? $res['conactNo'] ?? $res['contactNo'] ?? '';
                     $res['rate_metadata'] = $this->buildReservationMetadata($resNo, $rateMap, $localMetaMap);
                     $this->appendFvnMetadataFlags($res);
 
@@ -882,8 +901,34 @@ class ReservationController extends Controller
         return response()->stream(function () use ($allRows, $dateCols, $dateCount, $logoImageFormula) {
             
             $firstMemberName = '';
-            if (count($allRows) > 0) {
-                $firstMemberName = $allRows[0]['res']['customer_name'] ?? '';
+            $firstMemberNo = '';
+            $firstContactNo = '';
+            $firstBookDate = '';
+            foreach ($allRows as $row) {
+                if (!$firstMemberName && !empty($row['res']['customer_name'])) {
+                    $firstMemberName = $row['res']['customer_name'];
+                }
+                if (!$firstMemberNo && !empty($row['res']['memberNo'])) {
+                    $firstMemberNo = $row['res']['memberNo'];
+                }
+                if (!$firstContactNo && !empty($row['res']['conactNo'])) {
+                    $firstContactNo = $row['res']['conactNo'];
+                } elseif (!$firstContactNo && !empty($row['res']['contactNo'])) {
+                    $firstContactNo = $row['res']['contactNo'];
+                }
+                if (!$firstBookDate && !empty($row['res']['bookDate'])) {
+                    $firstBookDate = $row['res']['bookDate'];
+                }
+            }
+
+            $formattedBookDate = '';
+            if ($firstBookDate) {
+                try {
+                    $dt = new \DateTime($firstBookDate);
+                    $formattedBookDate = $dt->format('l, d F Y');
+                } catch (\Exception $e) {
+                    $formattedBookDate = $firstBookDate;
+                }
             }
 
             echo '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
@@ -926,21 +971,21 @@ class ReservationController extends Controller
             echo '<tr>';
             echo '<td style="border:none; width:15pt;"></td>';
             echo '<td style="font-weight: bold; background-color: #dbeafe; padding: 8px; text-align: center; color: #000;">MEMBERSHIP NUMBER:</td>';
-            echo '<td colspan="6" style="padding: 8px; text-align: center; color: #000; font-weight: bold;"></td>';
+            echo '<td colspan="6" style="padding: 8px; text-align: center; color: #000; font-weight: bold;">' . htmlspecialchars($firstMemberNo) . '</td>';
             echo '<td colspan="' . $emptyColsSpan . '" style="border: none;"></td>';
             echo '</tr>';
 
             echo '<tr>';
             echo '<td style="border:none; width:15pt;"></td>';
             echo '<td style="font-weight: bold; background-color: #dbeafe; padding: 8px; text-align: center; color: #000;">CONTACT NUMBER:</td>';
-            echo '<td colspan="6" style="padding: 8px; text-align: center; color: #000; font-weight: bold;"></td>';
+            echo '<td colspan="6" style="padding: 8px; text-align: center; color: #000; font-weight: bold;">' . htmlspecialchars($firstContactNo) . '</td>';
             echo '<td colspan="' . $emptyColsSpan . '" style="border: none;"></td>';
             echo '</tr>';
 
             echo '<tr>';
             echo '<td style="border:none; width:15pt;"></td>';
             echo '<td style="font-weight: bold; background-color: #dbeafe; padding: 8px; text-align: center; color: #000;">BOOKING DATE:</td>';
-            echo '<td colspan="6" style="padding: 8px; text-align: center; color: #000; font-weight: bold;"></td>';
+            echo '<td colspan="6" style="padding: 8px; text-align: center; color: #000; font-weight: bold;">' . htmlspecialchars($formattedBookDate) . '</td>';
             echo '<td colspan="' . $emptyColsSpan . '" style="border: none;"></td>';
             echo '</tr>';
             
@@ -1395,12 +1440,13 @@ class ReservationController extends Controller
             $rateMap = [];
             $listRateMap = [];
             $memberMap = [];
+            $memberMetaMap = [];
             if ($fromDate && $toDate) {
                 $listResp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                     ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
                 if ($listResp->successful()) {
                     foreach ($listResp->json()['msg'] ?? [] as $lr) {
-                        $this->ingestListReservation($lr, $rateMap, $listRateMap, $memberMap);
+                        $this->ingestListReservation($lr, $rateMap, $listRateMap, $memberMap, $memberMetaMap);
                     }
                 }
             }
@@ -1467,7 +1513,7 @@ class ReservationController extends Controller
                     }
                 }
 
-                $this->hydrateListMetadataFromDetail($msgs, $rateMap, $listRateMap, $memberMap);
+                $this->hydrateListMetadataFromDetail($msgs, $rateMap, $listRateMap, $memberMap, $memberMetaMap);
 
                 $resUnitTypes = $this->buildReservationUnitTypes(
                     $rateMap,
@@ -1480,6 +1526,10 @@ class ReservationController extends Controller
                 foreach ($msgs as &$res) {
                     $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
                     $res['customer_name'] = $memberMap[$resNo] ?? '';
+                    $meta = $memberMetaMap[$resNo] ?? [];
+                    $res['memberNo'] = $meta['memberNo'] ?? $res['memberNo'] ?? '';
+                    $res['bookDate'] = $meta['bookDate'] ?? $res['bookDate'] ?? '';
+                    $res['conactNo'] = $meta['conactNo'] ?? $res['conactNo'] ?? $res['contactNo'] ?? '';
                     $res['rate_metadata'] = $this->buildReservationMetadata($resNo, $rateMap, $localMetaMap);
                     $this->appendFvnMetadataFlags($res);
 
