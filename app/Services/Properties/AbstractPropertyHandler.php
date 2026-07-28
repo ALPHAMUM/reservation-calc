@@ -145,6 +145,15 @@ abstract class AbstractPropertyHandler
         $chunks = array_chunk($ids, 25);
         $out    = [];
 
+        // Build a lookup map from resNo → list row so we can merge member meta
+        $listMap = [];
+        foreach ($listData as $lr) {
+            $key = trim($lr['resNo'] ?? $lr['conf'] ?? '');
+            if ($key !== '') {
+                $listMap[$key] = $lr;
+            }
+        }
+
         foreach ($chunks as $chunk) {
             $resp = Http::withHeaders(['Authorization' => $this->apiKey])
                 ->withoutVerifying()
@@ -156,7 +165,21 @@ abstract class AbstractPropertyHandler
             }
 
             $msgs = $resp->json()['msg'] ?? [];
-            $out  = array_merge($out, $this->processDetailData($msgs, $listData));
+
+            // Merge list-level member meta fields into each detail record
+            foreach ($msgs as &$msg) {
+                $rn = trim($msg['resNo'] ?? $msg['conf'] ?? '');
+                if ($rn !== '' && isset($listMap[$rn])) {
+                    $lr = $listMap[$rn];
+                    if (empty($msg['memberNo']))      $msg['memberNo']      = $lr['memberNo']  ?? '';
+                    if (empty($msg['bookDate']))       $msg['bookDate']      = $lr['bookDate']  ?? '';
+                    if (empty($msg['conactNo']))       $msg['conactNo']      = $lr['conactNo']  ?? '';
+                    if (empty($msg['customer_name']))  $msg['customer_name'] = trim(($lr['custName'] ?? $lr['guestName'] ?? $lr['gstName'] ?? ''));
+                }
+            }
+            unset($msg);
+
+            $out = array_merge($out, $this->processDetailData($msgs, $listData));
         }
 
         return $out;

@@ -773,7 +773,11 @@
                 <!-- Property Selector -->
                 <div class="input-group" style="flex: 0 0 180px; min-width: 160px;">
                     <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Property</label>
-                    <select name="property" id="propertySelect" onchange="this.form.submit()" style="font-weight: 600;">
+                    <select name="property" id="propertySelect" onchange="
+                        var rn = document.querySelector('[name=resnolist]');
+                        if (rn) rn.value = '';
+                        this.form.submit();
+                    " style="font-weight: 600;">
                         <option value="island" {{ $property === 'island' ? 'selected' : '' }}>🏝️ Balesin Island</option>
                         <option value="city"   {{ $property === 'city'   ? 'selected' : '' }}>🏙️ Balesin City</option>
                         <option value="pines"  {{ $property === 'pines'  ? 'selected' : '' }}>🌲 Balesin Pines</option>
@@ -833,6 +837,48 @@
         </form>
 
         @if($viewType === 'detail')
+            @php
+                // Collect first non-empty value for each member meta field across reservations
+                $detMemberName = '';
+                $detMemberNo  = '';
+                $detBookDate  = '';
+                $detContactNo = '';
+                foreach ($reservations as $_r) {
+                    if (!$detMemberName && !empty($_r['customer_name'])) $detMemberName = $_r['customer_name'];
+                    if (!$detMemberNo  && !empty($_r['memberNo']))       $detMemberNo  = $_r['memberNo'];
+                    if (!$detBookDate  && !empty($_r['bookDate']))        $detBookDate  = $_r['bookDate'];
+                    if (!$detContactNo && !empty($_r['conactNo']))        $detContactNo = $_r['conactNo'];
+                    elseif (!$detContactNo && !empty($_r['contactNo']))   $detContactNo = $_r['contactNo'];
+                    if ($detMemberName && $detMemberNo && $detBookDate && $detContactNo) break;
+                }
+                // Format booking date
+                $detBookDateFormatted = '';
+                if ($detBookDate) {
+                    try { $detBookDateFormatted = (new \DateTime($detBookDate))->format('l, d F Y'); } catch (\Exception $e) { $detBookDateFormatted = $detBookDate; }
+                }
+            @endphp
+            @if($detMemberName || $detMemberNo || $detBookDate || $detContactNo)
+            <div style="margin-bottom: 1rem;">
+                @if($detMemberName)
+                <div style="font-size: 1.1rem; font-weight: 700; color: var(--text); letter-spacing: -0.01em; margin-bottom: 0.35rem;">
+                    {{ $detMemberName }}
+                </div>
+                @endif
+                <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;">
+                    @if($detMemberNo)
+                    <span style="font-size: 0.8rem; font-family: monospace; font-weight: 700; color: #818cf8; letter-spacing: 0.04em;">{{ $detMemberNo }}</span>
+                    @endif
+                    @if($detBookDateFormatted)
+                    <span style="font-size: 0.75rem; color: var(--text-muted);">·</span>
+                    <span style="font-size: 0.8rem; color: var(--text-muted);">{{ $detBookDateFormatted }}</span>
+                    @endif
+                    @if($detContactNo)
+                    <span style="font-size: 0.75rem; color: var(--text-muted);">·</span>
+                    <span style="font-size: 0.8rem; font-family: monospace; color: var(--text-muted);">{{ $detContactNo }}</span>
+                    @endif
+                </div>
+            </div>
+            @endif
             <div class="timeline-container">
                 <div class="timeline-scroll">
                     <table class="timeline-table">
