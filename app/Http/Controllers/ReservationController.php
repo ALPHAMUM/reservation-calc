@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Cache;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Exports\ReservationExport;
 
@@ -12,12 +13,36 @@ class ReservationController extends Controller
     private $listApiUrl;
     private $detailApiUrl;
     private $apiKey;
+    private $property = 'island';
+
+    // Valid property slugs and their service config keys
+    private const PROPERTY_CONFIG = [
+        'island' => 'balesin',
+        'city'   => 'balesin_city',
+        'pines'  => 'balesin_pines',
+    ];
 
     public function __construct()
     {
-        $this->listApiUrl = config('services.balesin.list_url');
+        // Default to Island; individual actions override via resolvePropertyConfig()
+        $this->listApiUrl   = config('services.balesin.list_url');
         $this->detailApiUrl = config('services.balesin.detail_url');
-        $this->apiKey = config('services.balesin.api_key');
+        $this->apiKey       = config('services.balesin.api_key');
+    }
+
+    /**
+     * Switch the active API config based on the ?property= request param.
+     * Returns the normalised property slug ('island' | 'city' | 'pines').
+     */
+    private function resolvePropertyConfig(string $property): string
+    {
+        $slug       = in_array($property, array_keys(self::PROPERTY_CONFIG), true) ? $property : 'island';
+        $configKey  = self::PROPERTY_CONFIG[$slug];
+        $this->listApiUrl   = config("services.{$configKey}.list_url");
+        $this->detailApiUrl = config("services.{$configKey}.detail_url");
+        $this->apiKey       = config("services.{$configKey}.api_key");
+        $this->property     = $slug;
+        return $slug;
     }
 
     private $villageMap = [
@@ -51,6 +76,9 @@ class ReservationController extends Controller
     {
         if (!$code)
             return 'N/A';
+        if ($this->property !== 'island') {
+            return $code;
+        }
         $searchCode = strtoupper(trim($code));
 
         // If it exists in our map, return the "actual name"
@@ -268,17 +296,90 @@ class ReservationController extends Controller
         return $village . '&#10;' . $unit;
     }
 
+    /**
+     * Check the sanity/health of all three property APIs.
+     * Returns JSON consumed by the dashboard via AJAX.
+     * GET /api/status
+     */
+    public function apiStatus()
+    {
+        $properties = [
+            'island' => [
+                'label'      => 'Balesin Island',
+                'sanity_url' => config('services.balesin.sanity_url'),
+                'api_key'    => config('services.balesin.api_key'),
+            ],
+            'city' => [
+                'label'      => 'Balesin City',
+                'sanity_url' => config('services.balesin_city.sanity_url'),
+                'api_key'    => config('services.balesin_city.api_key'),
+            ],
+            'pines' => [
+                'label'      => 'Balesin Pines',
+                'sanity_url' => config('services.balesin_pines.sanity_url'),
+                'api_key'    => config('services.balesin_pines.api_key'),
+            ],
+        ];
+
+        $results = [];
+
+        foreach ($properties as $slug => $cfg) {
+            $start = microtime(true);
+            $up    = false;
+            $msg   = '';
+
+            try {
+                $resp = Http::withHeaders(['Authorization' => $cfg['api_key']])
+                    ->withoutVerifying()
+                    ->timeout(8)
+                    ->get($cfg['sanity_url']);
+
+                $up  = $resp->successful();
+                if ($up) {
+                    $json = $resp->json();
+                    if (is_array($json)) {
+                        $msg = $json['msg'] ?? ($json['message'] ?? 'OK');
+                    } else {
+                        $msg = trim($resp->body()) ?: 'OK';
+                    }
+                } else {
+                    $msg = 'HTTP ' . $resp->status();
+                }
+            } catch (\Illuminate\Http\Client\ConnectionException $e) {
+                $msg = 'Connection failed';
+            } catch (\Exception $e) {
+                $msg = 'Error: ' . $e->getMessage();
+            }
+
+            $ms = round((microtime(true) - $start) * 1000);
+
+            $results[$slug] = [
+                'label'   => $cfg['label'],
+                'up'      => $up,
+                'ms'      => $ms,
+                'message' => is_array($msg) ? json_encode($msg) : (string) $msg,
+                'checked' => now()->format('H:i:s'),
+            ];
+        }
+
+        return response()->json($results);
+    }
+
     public function index(Request $request)
     {
-        $resNoList = $request->get('resnolist');
-        $fromDate = $request->get('fromdate');
-        $toDate = $request->get('todate');
+        $property     = $this->resolvePropertyConfig($request->get('property', 'island'));
+        $isIsland     = $property === 'island';
+
+        $resNoList    = $request->get('resnolist');
+        $fromDate     = $request->get('fromdate');
+        $toDate       = $request->get('todate');
         $statusFilter = $request->get('status_filter');
-        $search = $request->get('search');
-        $page = $request->get('page', 1);
-        $perPage = $request->get('per_page', 10);
+        $search       = $request->get('search');
+        $page         = $request->get('page', 1);
+        $perPage      = $request->get('per_page', 10);
         if ($perPage > 100)
             $perPage = 100;
+
 
         $reservations = [];
         $pagedReservations = [];
@@ -310,6 +411,7 @@ class ReservationController extends Controller
             $rateMap = [];
             $listRateMap = [];
             $memberMap = [];
+            $memberMetaMap = [];
             $listData = [];
             if ($fromDate && $toDate) {
                 $listResp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
@@ -317,7 +419,7 @@ class ReservationController extends Controller
                 if ($listResp->successful()) {
                     $listData = $listResp->json()['msg'] ?? [];
                     foreach ($listData as $lr) {
-                        $this->ingestListReservation($lr, $rateMap, $listRateMap, $memberMap);
+                        $this->ingestListReservation($lr, $rateMap, $listRateMap, $memberMap, $memberMetaMap);
                     }
                 }
             }
@@ -353,7 +455,7 @@ class ReservationController extends Controller
                             $reservationPaxCounts[$resNo]++;
                     }
 
-                    $this->hydrateListMetadataFromDetail($msgs, $rateMap, $listRateMap, $memberMap);
+                    $this->hydrateListMetadataFromDetail($msgs, $rateMap, $listRateMap, $memberMap, $memberMetaMap);
 
                     // Build localMetaMap from rateCode in Detail records (rateCode is a string field)
                     $localMetaMap = [];
@@ -402,6 +504,10 @@ class ReservationController extends Controller
                         $resNo = trim($res['resNo'] ?? $res['conf'] ?? '');
 
                         $res['customer_name'] = $memberMap[$resNo] ?? '';
+                        $meta = $memberMetaMap[$resNo] ?? [];
+                        $res['memberNo'] = $meta['memberNo'] ?? $res['memberNo'] ?? '';
+                        $res['bookDate'] = $meta['bookDate'] ?? $res['bookDate'] ?? '';
+                        $res['conactNo'] = $meta['conactNo'] ?? $res['conactNo'] ?? '';
 
                         $res['rate_metadata'] = $this->buildReservationMetadata($resNo, $rateMap, $localMetaMap);
                         $this->appendFvnMetadataFlags($res);
@@ -539,20 +645,22 @@ class ReservationController extends Controller
 
         return view('dashboard', [
             'reservations' => $pagedReservations ?? [],
-            'resNoList' => $resNoList,
-            'fromDate' => $fromDate,
-            'toDate' => $toDate,
+            'resNoList'    => $resNoList,
+            'fromDate'     => $fromDate,
+            'toDate'       => $toDate,
             'statusFilter' => $statusFilter,
-            'dateCols' => $dateCols,
-            'viewType' => $viewType,
-            'error' => $error,
-            'settings' => $settings
+            'dateCols'     => $dateCols,
+            'viewType'     => $viewType,
+            'error'        => $error,
+            'settings'     => $settings,
+            'property'     => $property,
         ]);
     }
 
     public function export(Request $request)
     {
         set_time_limit(0);
+        $this->resolvePropertyConfig($request->get('property', 'island'));
         $resNoList = $request->get('resnolist');
         $fromDate = $request->get('fromdate');
         $toDate = $request->get('todate');
@@ -1263,6 +1371,7 @@ class ReservationController extends Controller
     public function print(Request $request)
     {
         set_time_limit(0);
+        $this->resolvePropertyConfig($request->get('property', 'island'));
         $resNoList = $request->get('resnolist');
         $fromDate = $request->get('fromdate');
         $toDate = $request->get('todate');
@@ -1608,5 +1717,271 @@ class ReservationController extends Controller
     private function balesinLogoImageFormula(): string
     {
         return '=IMAGE("' . $this->balesinLogoUrl() . '")';
+    }
+
+    public function memberSearch(Request $request)
+    {
+        $memberNo = $request->get('member_no');
+        $fromDate = $request->get('fromdate') ?: date('Y-01-01');
+        $toDate   = $request->get('todate')   ?: date('Y-12-31');
+
+        $reservations = [];
+        $errors       = [];
+        $memberDetail = null;
+        $aiSuggestion = null;
+
+        // Fetch & cache official member list from /getmemberlist (cached for 30 minutes)
+        $allMembers = Cache::remember('balesin_all_members_list', 1800, function () {
+            $propConfigs = [
+                'island' => [
+                    'url' => config('services.balesin.memberlist_url'),
+                    'key' => config('services.balesin.api_key'),
+                ],
+                'city' => [
+                    'url' => config('services.balesin_city.memberlist_url'),
+                    'key' => config('services.balesin_city.api_key'),
+                ],
+                'pines' => [
+                    'url' => config('services.balesin_pines.memberlist_url'),
+                    'key' => config('services.balesin_pines.api_key'),
+                ],
+            ];
+
+            $responses = Http::pool(function ($pool) use ($propConfigs) {
+                foreach ($propConfigs as $slug => $cfg) {
+                    if (empty($cfg['url']) || empty($cfg['key'])) continue;
+                    $pool->as($slug)
+                        ->withHeaders(['Authorization' => $cfg['key']])
+                        ->withoutVerifying()
+                        ->timeout(10)
+                        ->get($cfg['url']);
+                }
+            });
+
+            $members = [];
+            foreach ($propConfigs as $slug => $cfg) {
+                $resp = $responses[$slug] ?? null;
+                if ($resp && !($resp instanceof \Exception) && $resp->successful()) {
+                    $json = $resp->json();
+                    $items = $json['msg'] ?? (is_array($json) ? $json : []);
+                    if (is_array($items)) {
+                        foreach ($items as $item) {
+                            $m = trim($item['memNo'] ?? $item['memberNo'] ?? '');
+                            if ($m !== '') {
+                                $members[$m] = $m;
+                            }
+                        }
+                    }
+                }
+            }
+            return array_values($members);
+        });
+
+        // AI Helper Suggestion Logic
+        if ($memberNo) {
+            $inputTrimmed = trim($memberNo);
+            $inputUpper   = strtoupper($inputTrimmed);
+            $exactMatch   = in_array($inputTrimmed, $allMembers, true);
+
+            if (!$exactMatch) {
+                // Strip existing parentheses/tags to get the base membership number
+                $baseInput = preg_replace('/\s*\(.*?\)/', '', $inputUpper);
+                $baseInput = trim($baseInput);
+
+                if ($baseInput !== '') {
+                    $matchedOfficial = null;
+                    $extractedTag    = null;
+
+                    // Search official member list for matching baseInput
+                    foreach ($allMembers as $officialMem) {
+                        $officialUpper = strtoupper($officialMem);
+                        if (str_contains($officialUpper, $baseInput)) {
+                            $matchedOfficial = $officialMem;
+
+                            // Extract parenthesized tag if present in officialMem e.g. "(KEY)", "(CORP)", "(VIP)"
+                            if (preg_match('/\((.*?)\)/', $officialMem, $matches)) {
+                                $tagCandidate = '(' . trim($matches[1]) . ')';
+                                // Only mark missing if user input doesn't already contain the tag text
+                                if (!str_contains($inputUpper, strtoupper(trim($matches[1])))) {
+                                    $extractedTag = $tagCandidate;
+                                }
+                            } elseif (strlen($officialMem) > strlen($inputTrimmed)) {
+                                $suffix = trim(substr($officialMem, strlen($inputTrimmed)));
+                                if ($suffix !== '' && !str_contains($inputUpper, strtoupper($suffix))) {
+                                    $extractedTag = $suffix;
+                                }
+                            }
+                            break;
+                        }
+                    }
+
+                    if ($matchedOfficial) {
+                        $aiSuggestion = [
+                            'original'  => $memberNo,
+                            'suggested' => $matchedOfficial,
+                            'tag'       => $extractedTag
+                        ];
+                    }
+                }
+            }
+        }
+
+        if ($memberNo) {
+            $memberNoSearch = strtolower(trim($memberNo));
+
+            $properties = [
+                'island' => [
+                    'label'         => 'Balesin Island',
+                    'list_url'      => config('services.balesin.list_url'),
+                    'memberdet_url' => config('services.balesin.memberdet_url'),
+                    'api_key'       => config('services.balesin.api_key'),
+                ],
+                'city' => [
+                    'label'         => 'Balesin City',
+                    'list_url'      => config('services.balesin_city.list_url'),
+                    'memberdet_url' => config('services.balesin_city.memberdet_url'),
+                    'api_key'       => config('services.balesin_city.api_key'),
+                ],
+                'pines' => [
+                    'label'         => 'Balesin Pines',
+                    'list_url'      => config('services.balesin_pines.list_url'),
+                    'memberdet_url' => config('services.balesin_pines.memberdet_url'),
+                    'api_key'       => config('services.balesin_pines.api_key'),
+                ],
+            ];
+
+            // ── Step 1: Fire all list calls concurrently ──────────────────────────
+            $listResponses = Http::pool(function ($pool) use ($properties, $fromDate, $toDate) {
+                foreach ($properties as $slug => $cfg) {
+                    if (empty($cfg['list_url']) || empty($cfg['api_key'])) continue;
+                    $pool->as($slug)
+                        ->withHeaders(['Authorization' => $cfg['api_key']])
+                        ->withoutVerifying()
+                        ->timeout(15)
+                        ->get($cfg['list_url'], ['fromdate' => $fromDate, 'todate' => $toDate]);
+                }
+            });
+
+            // ── Step 2: Fire all memberdet calls concurrently ─────────────────────
+            $detResponses = Http::pool(function ($pool) use ($properties, $memberNo) {
+                foreach ($properties as $slug => $cfg) {
+                    if (empty($cfg['memberdet_url']) || empty($cfg['api_key'])) continue;
+                    $pool->as($slug)
+                        ->withHeaders(['Authorization' => $cfg['api_key']])
+                        ->withoutVerifying()
+                        ->timeout(10)
+                        ->get($cfg['memberdet_url'], ['memid' => $memberNo]);
+                }
+            });
+
+            // ── Step 3: Parse memberdet first to resolve memberDetail & name ──────
+            foreach ($properties as $slug => $cfg) {
+                $detResp = $detResponses[$slug] ?? null;
+                if ($detResp === null || $detResp instanceof \Exception) continue;
+
+                if ($detResp->successful()) {
+                    $detData = $detResp->json();
+                    if (isset($detData['msg']) && is_array($detData['msg'])) {
+                        $candidate = is_array($detData['msg'][0] ?? null) ? $detData['msg'][0] : $detData['msg'];
+                    } elseif (is_array($detData)) {
+                        $candidate = $detData;
+                    } else {
+                        $candidate = null;
+                    }
+
+                    if ($candidate && (isset($candidate['roomBal']) || isset($candidate['fbBal']) || isset($candidate['walBal']))) {
+                        $memberDetail = $candidate;
+                        break;
+                    }
+                }
+            }
+
+            // ── Step 4: Parse list responses and filter matching reservations ─────
+            $memberNameNormalized = '';
+            if (!empty($memberDetail['memberName'])) {
+                $memberNameNormalized = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $memberDetail['memberName']));
+            }
+
+            foreach ($properties as $slug => $cfg) {
+                $resp = $listResponses[$slug] ?? null;
+                if ($resp === null) {
+                    \Log::warning("MemberSearch [{$slug}]: no response (pool returned null)");
+                    continue;
+                }
+
+                if ($resp instanceof \Exception) {
+                    \Log::error("MemberSearch [{$slug}]: exception - " . $resp->getMessage());
+                    $errors[] = "{$cfg['label']}: " . $resp->getMessage();
+                    continue;
+                }
+
+                if ($resp->successful()) {
+                    $respBody = $resp->json();
+                    $items = $respBody['msg'] ?? (is_array($respBody) ? $respBody : []);
+                    $matched = 0;
+                    foreach ($items as $res) {
+                        // Try multiple possible member number field names
+                        $resMemberNo = strtolower(trim(
+                            $res['memberNo']  ??
+                            $res['memNo']     ??
+                            $res['member_no'] ??
+                            $res['memberno']  ??
+                            $res['MemberNo']  ??
+                            ''
+                        ));
+
+                        $isMatched = false;
+                        if ($memberNoSearch !== '' && str_contains($resMemberNo, $memberNoSearch)) {
+                            $isMatched = true;
+                        } elseif ($resMemberNo === '' && $memberNameNormalized !== '') {
+                            // Fallback: match by member's name if memberNo field in reservation is empty
+                            $customerNormalized = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $res['customer'] ?? ''));
+                            $guestNormalized    = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $res['guestName'] ?? ''));
+                            
+                            if ($customerNormalized !== '' && (
+                                str_contains($customerNormalized, $memberNameNormalized) ||
+                                str_contains($memberNameNormalized, $customerNormalized) ||
+                                str_contains($guestNormalized, $memberNameNormalized)
+                            )) {
+                                $isMatched = true;
+                            }
+                        }
+
+                        if ($isMatched) {
+                            $res['property']       = $slug;
+                            $res['property_label'] = $cfg['label'];
+                            // If reservation memberNo was empty, populate it with the searched member number for UI display consistency
+                            if (empty($res['memberNo']) && !empty($memberDetail['memberNo'])) {
+                                $res['memberNo'] = $memberDetail['memberNo'];
+                            }
+                            $reservations[]        = $res;
+                            $matched++;
+                        }
+                    }
+                    \Log::info("MemberSearch [{$slug}]: matched {$matched} for memberNo/name '{$memberNoSearch}'");
+                } else {
+                    \Log::error("MemberSearch [{$slug}]: HTTP {$resp->status()} — " . $resp->body());
+                    $errors[] = "{$cfg['label']}: HTTP {$resp->status()}";
+                }
+            }
+
+            // Sort reservations by arrival date descending
+            usort($reservations, function ($a, $b) {
+                $dateA = $a['arrDt'] ?? $a['arrdt'] ?? '';
+                $dateB = $b['arrDt'] ?? $b['arrdt'] ?? '';
+                return strcmp($dateB, $dateA);
+            });
+        }
+
+        return view('member_search', [
+            'reservations' => $reservations,
+            'memberNo'     => $memberNo,
+            'fromDate'     => $fromDate,
+            'toDate'       => $toDate,
+            'errors'       => $errors,
+            'memberDetail' => $memberDetail,
+            'aiSuggestion' => $aiSuggestion,
+            'allMembers'   => $allMembers ?? [],
+        ]);
     }
 }

@@ -14,6 +14,60 @@ class RateCalculatorService
         $this->settings = $settingsService->getSettings();
     }
 
+    public function getPassThroughRates(array $passenger)
+    {
+        $acc = 0;
+        $accDates = [];
+        $air = 0;
+        $han = 0;
+        $avi = 0;
+        $env = 0;
+
+        foreach ($passenger['rate'] ?? [] as $r) {
+            $val = (float) ($r['val'] ?? 0);
+            $desc = strtolower($r['desc'] ?? '');
+            $date = $r['date'] ?? null;
+
+            if (str_contains($desc, 'airfare')) {
+                $air += $val;
+            } elseif (str_contains($desc, 'hangar')) {
+                $han += $val;
+            } elseif (str_contains($desc, 'aviation') || str_contains($desc, 'aof') || str_contains($desc, 'passenger service charge')) {
+                $avi += $val;
+            } elseif (str_contains($desc, 'environmental')) {
+                $env += $val;
+            } else {
+                if ($date) {
+                    $acc += $val;
+                    $accDates[$date] = [
+                        'val' => $val,
+                        'breakdown' => [
+                            'gross_share' => $val,
+                            'is_discounted' => false,
+                            'is_infant' => false,
+                            'divisor' => 1,
+                            'base' => $val,
+                            'discount' => 0,
+                            'sc' => 0,
+                            'vat' => 0
+                        ]
+                    ];
+                }
+            }
+        }
+
+        return [
+            'acc' => $acc,
+            'acc_dates' => $accDates,
+            'air' => $air,
+            'han' => $han,
+            'avi' => $avi,
+            'env' => $env,
+            'is_employee' => false,
+            'base_pax' => 1
+        ];
+    }
+
     public function calculatePassengerRates(
         array $passenger,
         $paxIndex = 0,
