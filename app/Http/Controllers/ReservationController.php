@@ -1719,6 +1719,200 @@ class ReservationController extends Controller
         return '=IMAGE("' . $this->balesinLogoUrl() . '")';
     }
 
+    /**
+     * Resolve FVN rate unit from a single rate string.
+     */
+    private function resolveFvnRateUnitFromString(string $rawRate, ?string $property = null): float
+    {
+        $rawRate = strtoupper(trim($rawRate));
+        if ($rawRate === '') {
+            return 0.0;
+        }
+
+        // Exact / common FVN labels
+        if ($rawRate === '1FVN' || $rawRate === 'KEY-VILLA' || $rawRate === 'KEY-VILLA.01') {
+            return 1.0;
+        }
+        if ($rawRate === '1.5FVN' || $rawRate === '2FVN' || $rawRate === 'KEY-SUITE' || $rawRate === 'KEY-SUITE.02') {
+            return 1.5;
+        }
+        if ($rawRate === '.5FVN' || $rawRate === '0.5FVN' || $rawRate === '.5RATE') {
+            return 0.5;
+        }
+        if ($rawRate === '1/3FVN' || $rawRate === '1\/3FVN') {
+            return round(1 / 3, 4);
+        }
+
+        if (str_contains($rawRate, '1.5FVN') || str_contains($rawRate, '2FVN')) {
+            return 1.5;
+        }
+        // Check 1.5 before 1FVN — "1.5FVN" contains "1FVN" as substring
+        if (str_contains($rawRate, '1FVN') || str_ends_with($rawRate, '.01')) {
+            return 1.0;
+        }
+        if ($rawRate === 'KEY-VILLA' || str_ends_with($rawRate, '.01')) {
+            return 1.0;
+        }
+        if (str_starts_with($rawRate, '.5FVN') || str_starts_with($rawRate, '.5RATE') || str_contains($rawRate, '.5FVN') || str_contains($rawRate, '.5RATE')) {
+            return 0.5;
+        }
+        if (str_ends_with($rawRate, '.02') && $property !== 'pines') {
+            return 1.5;
+        }
+
+        return 0.0;
+    }
+
+    /**
+     * Resolve FVN rate unit from list API rate fields.
+     * Island/City: rateCode may be a numeric amount (e.g. 3700) — also check rate (KEY-SUITE).
+     * Pines: use rate (1FVN / 1.5FVN / .5FVN) — rateCode is a numeric amount.
+     */
+    private function resolveFvnRateUnit(array $res, ?string $property = null): float
+    {
+        $property = $property ?? ($res['property'] ?? null);
+
+        if ($property === 'pines') {
+            return $this->resolveFvnRateUnitFromString(
+                strtoupper(trim((string) ($res['rate'] ?? ''))),
+                $property
+            );
+        }
+
+        // Island/City: try rateCode first, then rate (list API often puts FVN type in rate)
+        $candidates = [
+            strtoupper(trim((string) ($res['rateCode'] ?? $res['ratecode'] ?? $res['rate_code'] ?? ''))),
+            strtoupper(trim((string) ($res['rate'] ?? ''))),
+        ];
+        foreach ($candidates as $raw) {
+            if ($raw === '') {
+                continue;
+            }
+            $unit = $this->resolveFvnRateUnitFromString($raw, $property);
+            if ($unit > 0) {
+                return $unit;
+            }
+        }
+
+        if (isset($res['rate']) && is_array($res['rate'])) {
+            $unit = 0.0;
+            foreach ($res['rate'] as $rateItem) {
+                $rv = round((float) ($rateItem['val'] ?? $rateItem['value'] ?? 0), 2);
+                if ($rv == 0.01) {
+                    $unit = max($unit, 1.0);
+                } elseif ($rv == 0.02) {
+                    $unit = max($unit, 1.5);
+                } elseif ($rv == 0.5) {
+                    $unit = max($unit, 0.5);
+                }
+            }
+            return $unit;
+        }
+
+        return 0.0;
+    }
+
+    /**
+     * Pick the field used to detect FVN for a property.
+     */
+    private function resolveFvnSourceValue(array $res, ?string $property = null): string
+    {
+        $property = $property ?? ($res['property'] ?? null);
+
+        if ($property === 'pines') {
+            return strtoupper(trim((string) ($res['rate'] ?? '')));
+        }
+
+        $rateCode = strtoupper(trim((string) ($res['rateCode'] ?? $res['ratecode'] ?? $res['rate_code'] ?? '')));
+        $rate = strtoupper(trim((string) ($res['rate'] ?? '')));
+
+        if ($this->resolveFvnRateUnitFromString($rateCode, $property) > 0) {
+            return $rateCode;
+        }
+        if ($this->resolveFvnRateUnitFromString($rate, $property) > 0) {
+            return $rate;
+        }
+
+        return $rateCode !== '' ? $rateCode : $rate;
+    }
+
+    private function calcReservationNights(array $res): int
+    {
+        $arr = $res['arrDt'] ?? $res['arrdt'] ?? null;
+        $dep = $res['depDt'] ?? $res['depdt'] ?? null;
+        if (!$arr || !$dep) {
+            return 0;
+        }
+        try {
+            $start = new \DateTimeImmutable(substr((string) $arr, 0, 10));
+            $end = new \DateTimeImmutable(substr((string) $dep, 0, 10));
+            $nights = (int) $start->diff($end)->days;
+            return max(0, $nights);
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+
+    /**
+     * FVN Used = rateUnit × nights × rooms
+     */
+    private function calcFvnUsed(array $res): array
+    {
+        $property = $res['property'] ?? null;
+        $unit = $this->resolveFvnRateUnit($res, $property);
+        $nights = $this->calcReservationNights($res);
+        $roomsRaw = (int) ($res['noRooms'] ?? $res['noOfRooms'] ?? 0);
+        $rooms = $roomsRaw > 0 ? $roomsRaw : ($unit > 0 ? 1 : 0);
+        $rawRate = $this->resolveFvnSourceValue($res, $property);
+        $fvn = ($unit > 0 && $nights > 0 && $rooms > 0)
+            ? round($unit * $nights * $rooms, 2)
+            : 0.0;
+
+        return [
+            'unit' => $unit,
+            'nights' => $nights,
+            'rooms' => $rooms,
+            'fvn' => $fvn,
+            'rawRate' => $rawRate,
+        ];
+    }
+
+    /**
+     * Classify reservation status for FVN balance math.
+     * deducted = already reflected in Intimus roomBal
+     * upcoming = not yet deducted (CONFIRMED, PENDING, and other active statuses)
+     * ignored  = cancelled / no-show / etc.
+     */
+    private function classifyFvnStatus(string $status): string
+    {
+        $s = strtoupper(trim($status));
+        if ($s === '') {
+            return 'ignored';
+        }
+
+        $deducted = [
+            'ARRIVED', 'PARTLY ARRIVED', 'CHECKOUT', 'COMPLETED',
+            'IN HOUSE', 'CHECKEDIN', 'CHECKED IN',
+        ];
+        foreach ($deducted as $d) {
+            if ($s === $d || str_starts_with($s, $d)) {
+                return 'deducted';
+            }
+        }
+
+        $ignored = [
+            'CANCELLED', 'SYSTEM CANCELLED', 'SYSTEM-CANCELLED',
+            'PARTIAL SYS CANCELLED', 'PARTLY CANCELLED', 'DELETED', 'NO SHOW',
+        ];
+        foreach ($ignored as $i) {
+            if ($s === $i || str_starts_with($s, $i) || str_contains($s, 'CANCEL')) {
+                return 'ignored';
+            }
+        }
+
+        return 'upcoming';
+    }
+
     public function memberSearch(Request $request)
     {
         $memberNo = $request->get('member_no');
@@ -1729,6 +1923,30 @@ class ReservationController extends Controller
         $errors       = [];
         $memberDetail = null;
         $aiSuggestion = null;
+        $upcomingBookings = [];
+        $upcomingFvn = 0.0;
+        $intimusFvn = 0.0;
+        $projectedRemaining = null;
+        $isOverCommitted = false;
+
+        if ($fromDate && $toDate && $fromDate > $toDate) {
+            $errors[] = 'From Date cannot be later than To Date.';
+            return view('member_search', [
+                'reservations' => [],
+                'memberNo'     => $memberNo,
+                'fromDate'     => $fromDate,
+                'toDate'       => $toDate,
+                'errors'       => $errors,
+                'memberDetail' => null,
+                'aiSuggestion' => null,
+                'allMembers'   => [],
+                'upcomingBookings' => [],
+                'upcomingFvn' => 0,
+                'intimusFvn' => 0,
+                'projectedRemaining' => null,
+                'isOverCommitted' => false,
+            ]);
+        }
 
         // Fetch & cache official member list from /getmemberlist (cached for 30 minutes)
         $allMembers = Cache::remember('balesin_all_members_list', 1800, function () {
@@ -1850,15 +2068,21 @@ class ReservationController extends Controller
                 ],
             ];
 
+            // Expand list range so upcoming stays beyond To Date are still available for balance math
+            $today = date('Y-m-d');
+            $futureHorizon = date('Y-m-d', strtotime('+2 years'));
+            $listFrom = min($fromDate, $today);
+            $listTo = max($toDate, $futureHorizon);
+
             // ── Step 1: Fire all list calls concurrently ──────────────────────────
-            $listResponses = Http::pool(function ($pool) use ($properties, $fromDate, $toDate) {
+            $listResponses = Http::pool(function ($pool) use ($properties, $listFrom, $listTo) {
                 foreach ($properties as $slug => $cfg) {
                     if (empty($cfg['list_url']) || empty($cfg['api_key'])) continue;
                     $pool->as($slug)
                         ->withHeaders(['Authorization' => $cfg['api_key']])
                         ->withoutVerifying()
-                        ->timeout(15)
-                        ->get($cfg['list_url'], ['fromdate' => $fromDate, 'todate' => $toDate]);
+                        ->timeout(30)
+                        ->get($cfg['list_url'], ['fromdate' => $listFrom, 'todate' => $listTo]);
                 }
             });
 
@@ -1874,103 +2098,224 @@ class ReservationController extends Controller
                 }
             });
 
-            // ── Step 3: Parse memberdet first to resolve memberDetail & name ──────
+            // ── Step 3: Parse memberdet to resolve memberDetail & name ────────────
+            $parseMemberDet = function ($detResp) {
+                if ($detResp === null || $detResp instanceof \Exception || !$detResp->successful()) {
+                    return null;
+                }
+                $detData = $detResp->json();
+                if (isset($detData['msg']) && is_array($detData['msg'])) {
+                    $candidate = is_array($detData['msg'][0] ?? null) ? $detData['msg'][0] : $detData['msg'];
+                } elseif (is_array($detData)) {
+                    $candidate = $detData;
+                } else {
+                    $candidate = null;
+                }
+                if ($candidate && (isset($candidate['roomBal']) || isset($candidate['fbBal']) || isset($candidate['walBal']) || !empty($candidate['memberName']))) {
+                    return $candidate;
+                }
+                return null;
+            };
+
             foreach ($properties as $slug => $cfg) {
-                $detResp = $detResponses[$slug] ?? null;
-                if ($detResp === null || $detResp instanceof \Exception) continue;
-
-                if ($detResp->successful()) {
-                    $detData = $detResp->json();
-                    if (isset($detData['msg']) && is_array($detData['msg'])) {
-                        $candidate = is_array($detData['msg'][0] ?? null) ? $detData['msg'][0] : $detData['msg'];
-                    } elseif (is_array($detData)) {
-                        $candidate = $detData;
-                    } else {
-                        $candidate = null;
-                    }
-
-                    if ($candidate && (isset($candidate['roomBal']) || isset($candidate['fbBal']) || isset($candidate['walBal']))) {
-                        $memberDetail = $candidate;
-                        break;
-                    }
+                $candidate = $parseMemberDet($detResponses[$slug] ?? null);
+                if ($candidate) {
+                    $memberDetail = $candidate;
+                    break;
                 }
             }
 
-            // ── Step 4: Parse list responses and filter matching reservations ─────
-            $memberNameNormalized = '';
-            if (!empty($memberDetail['memberName'])) {
-                $memberNameNormalized = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $memberDetail['memberName']));
+            // City/Pines getmemberdet often 500s; retry Island memberdet sequentially if pool missed it
+            if (!$memberDetail && !empty($properties['island']['memberdet_url']) && !empty($properties['island']['api_key'])) {
+                try {
+                    $retryDet = Http::withHeaders(['Authorization' => $properties['island']['api_key']])
+                        ->withoutVerifying()
+                        ->timeout(15)
+                        ->get($properties['island']['memberdet_url'], ['memid' => $memberNo]);
+                    $memberDetail = $parseMemberDet($retryDet);
+                } catch (\Throwable $e) {
+                    \Log::warning('MemberSearch: island memberdet retry failed - ' . $e->getMessage());
+                }
             }
 
+            // ── Step 4: Collect list payloads ─────────────────────────────────────
+            $listItemsByProperty = [];
             foreach ($properties as $slug => $cfg) {
                 $resp = $listResponses[$slug] ?? null;
                 if ($resp === null) {
                     \Log::warning("MemberSearch [{$slug}]: no response (pool returned null)");
                     continue;
                 }
-
                 if ($resp instanceof \Exception) {
                     \Log::error("MemberSearch [{$slug}]: exception - " . $resp->getMessage());
                     $errors[] = "{$cfg['label']}: " . $resp->getMessage();
                     continue;
                 }
-
-                if ($resp->successful()) {
-                    $respBody = $resp->json();
-                    $items = $respBody['msg'] ?? (is_array($respBody) ? $respBody : []);
-                    $matched = 0;
-                    foreach ($items as $res) {
-                        // Try multiple possible member number field names
-                        $resMemberNo = strtolower(trim(
-                            $res['memberNo']  ??
-                            $res['memNo']     ??
-                            $res['member_no'] ??
-                            $res['memberno']  ??
-                            $res['MemberNo']  ??
-                            ''
-                        ));
-
-                        $isMatched = false;
-                        if ($memberNoSearch !== '' && str_contains($resMemberNo, $memberNoSearch)) {
-                            $isMatched = true;
-                        } elseif ($resMemberNo === '' && $memberNameNormalized !== '') {
-                            // Fallback: match by member's name if memberNo field in reservation is empty
-                            $customerNormalized = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $res['customer'] ?? ''));
-                            $guestNormalized    = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $res['guestName'] ?? ''));
-                            
-                            if ($customerNormalized !== '' && (
-                                str_contains($customerNormalized, $memberNameNormalized) ||
-                                str_contains($memberNameNormalized, $customerNormalized) ||
-                                str_contains($guestNormalized, $memberNameNormalized)
-                            )) {
-                                $isMatched = true;
-                            }
-                        }
-
-                        if ($isMatched) {
-                            $res['property']       = $slug;
-                            $res['property_label'] = $cfg['label'];
-                            // If reservation memberNo was empty, populate it with the searched member number for UI display consistency
-                            if (empty($res['memberNo']) && !empty($memberDetail['memberNo'])) {
-                                $res['memberNo'] = $memberDetail['memberNo'];
-                            }
-                            $reservations[]        = $res;
-                            $matched++;
-                        }
-                    }
-                    \Log::info("MemberSearch [{$slug}]: matched {$matched} for memberNo/name '{$memberNoSearch}'");
-                } else {
+                if (!$resp->successful()) {
                     \Log::error("MemberSearch [{$slug}]: HTTP {$resp->status()} — " . $resp->body());
                     $errors[] = "{$cfg['label']}: HTTP {$resp->status()}";
+                    continue;
+                }
+                $respBody = $resp->json();
+                $listItemsByProperty[$slug] = $respBody['msg'] ?? (is_array($respBody) ? $respBody : []);
+            }
+
+            $normalizePersonName = function ($name) {
+                return strtolower(preg_replace('/[^a-zA-Z0-9]/', '', (string) $name));
+            };
+            $extractResMemberNo = function (array $res) {
+                $raw = trim((string) (
+                    $res['memberNo']  ??
+                    $res['memNo']     ??
+                    $res['member_no'] ??
+                    $res['memberno']  ??
+                    $res['MemberNo']  ??
+                    ''
+                ));
+                $normalized = strtolower($raw);
+                // City/Pines often send blank or literal "null"
+                return ($normalized === '' || $normalized === 'null') ? '' : $normalized;
+            };
+            $namesMatch = function ($memberNameNormalized, array $res) use ($normalizePersonName) {
+                if ($memberNameNormalized === '') {
+                    return false;
+                }
+                $customerNormalized = $normalizePersonName($res['customer'] ?? '');
+                $guestNormalized    = $normalizePersonName($res['guestName'] ?? '');
+                return ($customerNormalized !== '' && (
+                        str_contains($customerNormalized, $memberNameNormalized) ||
+                        str_contains($memberNameNormalized, $customerNormalized)
+                    ))
+                    || ($guestNormalized !== '' && (
+                        str_contains($guestNormalized, $memberNameNormalized) ||
+                        str_contains($memberNameNormalized, $guestNormalized)
+                    ));
+            };
+
+            // Pass 1: match by member number (works for Island; rare for City/Pines)
+            $matchedKeys = [];
+            $namesFromMemberNoHits = [];
+            foreach ($listItemsByProperty as $slug => $items) {
+                $cfg = $properties[$slug];
+                $matched = 0;
+                foreach ($items as $idx => $res) {
+                    $resMemberNo = $extractResMemberNo($res);
+                    if ($memberNoSearch === '' || $resMemberNo === '' || !str_contains($resMemberNo, $memberNoSearch)) {
+                        continue;
+                    }
+                    $customer = trim((string) ($res['customer'] ?? ''));
+                    if ($customer !== '') {
+                        $namesFromMemberNoHits[] = $customer;
+                    }
+                    if (empty($res['memberNo']) || strtolower(trim((string) $res['memberNo'])) === 'null') {
+                        $res['memberNo'] = $memberDetail['memberNo'] ?? $memberNo;
+                    }
+                    $res['property']       = $slug;
+                    $res['property_label'] = $cfg['label'];
+                    $reservations[]        = $res;
+                    $matchedKeys[$slug . ':' . $idx] = true;
+                    $matched++;
+                }
+                if ($matched > 0) {
+                    \Log::info("MemberSearch [{$slug}]: matched {$matched} by memberNo for '{$memberNoSearch}'");
                 }
             }
 
-            // Sort reservations by arrival date descending
+            // Resolve display/search name: memberdet first, else customer from memberNo hits
+            $memberNameNormalized = '';
+            if (!empty($memberDetail['memberName'])) {
+                $memberNameNormalized = $normalizePersonName($memberDetail['memberName']);
+            } elseif (!empty($namesFromMemberNoHits)) {
+                $derivedName = $namesFromMemberNoHits[0];
+                $memberNameNormalized = $normalizePersonName($derivedName);
+                if (!$memberDetail) {
+                    $memberDetail = [
+                        'memberNo'   => $memberNo,
+                        'memberName' => $derivedName,
+                        'roomBal'    => null,
+                        'fbBal'      => null,
+                        'walBal'     => null,
+                    ];
+                }
+                \Log::info("MemberSearch: derived member name '{$derivedName}' from memberNo list hits");
+            }
+
+            // Pass 2: City/Pines usually omit memberNo — match blank-memberNo rows by name
+            if ($memberNameNormalized !== '') {
+                foreach ($listItemsByProperty as $slug => $items) {
+                    $cfg = $properties[$slug];
+                    $matched = 0;
+                    foreach ($items as $idx => $res) {
+                        $key = $slug . ':' . $idx;
+                        if (isset($matchedKeys[$key])) {
+                            continue;
+                        }
+                        if ($extractResMemberNo($res) !== '') {
+                            continue; // has a different member number
+                        }
+                        if (!$namesMatch($memberNameNormalized, $res)) {
+                            continue;
+                        }
+                        $res['memberNo']       = $memberDetail['memberNo'] ?? $memberNo;
+                        $res['property']       = $slug;
+                        $res['property_label'] = $cfg['label'];
+                        $reservations[]        = $res;
+                        $matchedKeys[$key]     = true;
+                        $matched++;
+                    }
+                    \Log::info("MemberSearch [{$slug}]: matched {$matched} by name for '{$memberNoSearch}'");
+                }
+            } else {
+                \Log::info("MemberSearch: no member name available for City/Pines fallback ('{$memberNoSearch}')");
+            }
+
+            // Enrich all matches with FVN math, then split display vs upcoming-balance sets
+            $allMatched = $reservations;
+            $reservations = [];
+            $upcomingBookings = [];
+            $upcomingFvn = 0.0;
+            $today = date('Y-m-d');
+
+            foreach ($allMatched as $res) {
+                $fvnMeta = $this->calcFvnUsed($res);
+                $status = strtoupper(trim((string) ($res['status'] ?? '')));
+                $bucket = $this->classifyFvnStatus($status);
+                $arrDt = substr((string) ($res['arrDt'] ?? $res['arrdt'] ?? ''), 0, 10);
+
+                $res['fvn_unit'] = $fvnMeta['unit'];
+                $res['fvn_nights'] = $fvnMeta['nights'];
+                $res['fvn_rooms'] = $fvnMeta['rooms'];
+                $res['fvn_used'] = $fvnMeta['fvn'];
+                $res['fvn_bucket'] = $bucket;
+                $res['fvn_raw_rate'] = $fvnMeta['rawRate'];
+
+                // Main table: only reservations whose arrival falls in the selected From/To window
+                if ($arrDt !== '' && $arrDt >= $fromDate && $arrDt <= $toDate) {
+                    $reservations[] = $res;
+                }
+
+                // Upcoming commitment: all future matched stays (ignore From/To), not yet deducted by Intimus
+                if ($bucket === 'upcoming' && $arrDt !== '' && $arrDt >= $today && $fvnMeta['fvn'] > 0) {
+                    $upcomingBookings[] = $res;
+                    $upcomingFvn += $fvnMeta['fvn'];
+                }
+            }
+
             usort($reservations, function ($a, $b) {
                 $dateA = $a['arrDt'] ?? $a['arrdt'] ?? '';
                 $dateB = $b['arrDt'] ?? $b['arrdt'] ?? '';
                 return strcmp($dateB, $dateA);
             });
+
+            usort($upcomingBookings, function ($a, $b) {
+                $dateA = $a['arrDt'] ?? $a['arrdt'] ?? '';
+                $dateB = $b['arrDt'] ?? $b['arrdt'] ?? '';
+                return strcmp($dateA, $dateB);
+            });
+
+            $intimusFvn = (float) ($memberDetail['roomBal'] ?? 0);
+            $projectedRemaining = round($intimusFvn - $upcomingFvn, 2);
+            $isOverCommitted = $projectedRemaining < 0;
         }
 
         return view('member_search', [
@@ -1982,6 +2327,11 @@ class ReservationController extends Controller
             'memberDetail' => $memberDetail,
             'aiSuggestion' => $aiSuggestion,
             'allMembers'   => $allMembers ?? [],
+            'upcomingBookings' => $upcomingBookings,
+            'upcomingFvn' => $upcomingFvn,
+            'intimusFvn' => $intimusFvn,
+            'projectedRemaining' => $projectedRemaining,
+            'isOverCommitted' => $isOverCommitted,
         ]);
     }
 }

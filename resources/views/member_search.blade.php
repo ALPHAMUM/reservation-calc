@@ -232,11 +232,11 @@
                 </div>
                 <div class="input-group">
                     <label for="fromdate">From Date</label>
-                    <input type="date" id="fromdate" name="fromdate" value="{{ $fromDate }}">
+                    <input type="date" id="fromdate" name="fromdate" value="{{ $fromDate }}" max="{{ $toDate }}">
                 </div>
                 <div class="input-group">
                     <label for="todate">To Date</label>
-                    <input type="date" id="todate" name="todate" value="{{ $toDate }}">
+                    <input type="date" id="todate" name="todate" value="{{ $toDate }}" min="{{ $fromDate }}">
                 </div>
                 <div>
                     <button type="submit" class="btn-submit" id="btnSubmit">
@@ -245,33 +245,28 @@
                     </button>
                 </div>
             </div>
+            <div id="dateRangeError" role="alert" aria-live="polite" style="min-height: 1.25rem; margin-top: 0.5rem; color: #f87171; font-size: 0.8rem; line-height: 1.25rem;"></div>
         </form>
     </div>
 
     <!-- Results Table -->
     @if($memberNo)
         @php
+            $upcomingBookings = $upcomingBookings ?? [];
+            $upcomingFvn = (float) ($upcomingFvn ?? 0);
+            $intimusFvn = (float) ($intimusFvn ?? ($memberDetail['roomBal'] ?? 0));
+            $projectedRemaining = $projectedRemaining ?? round($intimusFvn - $upcomingFvn, 2);
+            $isOverCommitted = $isOverCommitted ?? ($projectedRemaining < 0);
+
+            $fmtFvn = function ($v) {
+                $v = (float) $v;
+                if (abs($v - round($v)) < 0.001) return (string) (int) round($v);
+                return rtrim(rtrim(number_format($v, 2, '.', ''), '0'), '.');
+            };
+
             $totalFvn = 0;
-            foreach($reservations as $r) {
-                $countForRes = 0;
-                $rawRate = strtoupper(trim((string)($r['rateCode'] ?? $r['ratecode'] ?? $r['rate_code'] ?? $r['rate'] ?? '')));
-
-                if ($rawRate === 'KEY-VILLA' || $rawRate === 'KEY-VILLA.01' || str_ends_with($rawRate, '.01') || str_contains($rawRate, '1FVN')) {
-                    $countForRes = 1;
-                } elseif ($rawRate === 'KEY-SUITE' || $rawRate === 'KEY-SUITE.02' || str_ends_with($rawRate, '.02') || str_contains($rawRate, '1.5FVN') || str_contains($rawRate, '2FVN')) {
-                    $countForRes = 1.5;
-                } elseif (str_starts_with($rawRate, '.5FVN') || str_starts_with($rawRate, '.5RATE') || str_contains($rawRate, '.5FVN') || str_contains($rawRate, '.5RATE')) {
-                    $countForRes = 0.5;
-                } elseif (isset($r['rate']) && is_array($r['rate'])) {
-                    foreach ($r['rate'] as $rateItem) {
-                        $val = round((float)($rateItem['val'] ?? $rateItem['value'] ?? 0), 2);
-                        if ($val == 0.01)     { $countForRes = max($countForRes, 1);   }
-                        elseif ($val == 0.02) { $countForRes = max($countForRes, 1.5); }
-                        elseif ($val == 0.5)  { $countForRes = max($countForRes, 0.5); }
-                    }
-                }
-
-                $totalFvn += $countForRes;
+            foreach ($reservations as $r) {
+                $totalFvn += (float) ($r['fvn_used'] ?? 0);
             }
         @endphp
         <div class="table-container animate-in">
@@ -296,48 +291,101 @@
                 </div>
             </div>
 
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
 
-                {{-- Free Villa Night --}}
+                {{-- Intimus FVN (already deducted for arrived) --}}
                 <div style="background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(99,102,241,0.05)); border: 1px solid rgba(99,102,241,0.3); border-radius: 1rem; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 0.4rem;">
-                    <div style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #818cf8;">Free Villa Night</div>
+                    <div style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #818cf8;">Intimus FVN Balance</div>
                     <div style="font-size: 1.6rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums;">
-                        {{ number_format((float)($memberDetail['roomBal'] ?? 0), 0) }}
+                        {{ $fmtFvn($intimusFvn) }}
                     </div>
+                    <div style="font-size: 0.72rem; color: var(--text-muted);">Deducted only when booking has arrived</div>
                 </div>
 
-                {{-- Total Free Villa Night --}}
-                <div style="background: linear-gradient(135deg, rgba(168,85,247,0.15), rgba(168,85,247,0.05)); border: 1px solid rgba(168,85,247,0.3); border-radius: 1rem; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 0.4rem;">
-                    <div style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #c084fc;">Total Free Villa Night</div>
+                {{-- Upcoming FVN commitment --}}
+                <div style="background: linear-gradient(135deg, rgba(251,191,36,0.15), rgba(251,191,36,0.05)); border: 1px solid rgba(251,191,36,0.35); border-radius: 1rem; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 0.4rem;">
+                    <div style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #fbbf24;">Upcoming FVN</div>
                     <div style="font-size: 1.6rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums;">
-                        {{ $totalFvn == intval($totalFvn) ? (int)$totalFvn : $totalFvn }}
+                        {{ $fmtFvn($upcomingFvn) }}
                     </div>
+                    <div style="font-size: 0.72rem; color: var(--text-muted);">{{ count($upcomingBookings) }} future booking(s) not yet deducted</div>
                 </div>
 
-                {{-- Consumable Balance (Commented out)
-                <div style="background: linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.05)); border: 1px solid rgba(34,197,94,0.3); border-radius: 1rem; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 0.4rem;">
-                    <div style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #4ade80;">Consumable Balance</div>
-                    <div style="font-size: 1.6rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums;">
-                        {{ number_format((float)($memberDetail['fbBal'] ?? 0), 0) }}
+                {{-- Projected remaining --}}
+                <div style="background: linear-gradient(135deg, {{ $isOverCommitted ? 'rgba(248,113,113,0.18), rgba(248,113,113,0.05)' : 'rgba(74,222,128,0.15), rgba(74,222,128,0.05)' }}); border: 1px solid {{ $isOverCommitted ? 'rgba(248,113,113,0.45)' : 'rgba(74,222,128,0.35)' }}; border-radius: 1rem; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 0.4rem;">
+                    <div style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{ $isOverCommitted ? '#f87171' : '#4ade80' }};">Projected Remaining</div>
+                    <div style="font-size: 1.6rem; font-weight: 700; color: {{ $isOverCommitted ? '#fca5a5' : 'var(--text)' }}; font-variant-numeric: tabular-nums;">
+                        {{ $fmtFvn($projectedRemaining) }}
+                    </div>
+                    <div style="font-size: 0.72rem; color: {{ $isOverCommitted ? '#f87171' : 'var(--text-muted)' }};">
+                        @if($isOverCommitted)
+                            Over-committed — upcoming FVN exceeds Intimus balance
+                        @else
+                            Intimus − upcoming commitment
+                        @endif
                     </div>
                 </div>
-                --}}
-
-                {{-- Club Wallet Balance (Commented out)
-                <div style="background: linear-gradient(135deg, rgba(251,191,36,0.15), rgba(251,191,36,0.05)); border: 1px solid rgba(251,191,36,0.3); border-radius: 1rem; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 0.4rem;">
-                    <div style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #fbbf24;">Club Wallet Balance</div>
-                    <div style="font-size: 1.6rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums;">
-                        {{ number_format((float)($memberDetail['walBal'] ?? 0), 0) }}
-                    </div>
-                </div>
-                --}}
 
             </div>
+
+            @if($isOverCommitted)
+                <div style="margin-bottom: 1.5rem; padding: 0.85rem 1.1rem; border-radius: 0.75rem; border: 1px solid rgba(248,113,113,0.35); background: rgba(248,113,113,0.1); color: #fca5a5; font-size: 0.88rem;">
+                    Warning: this member is over-committed by <strong>{{ $fmtFvn(abs($projectedRemaining)) }} FVN</strong> after upcoming bookings.
+                </div>
+            @endif
+            @endif
+
+            {{-- Upcoming bookings (all future matched, independent of From/To filter) --}}
+            @if(count($upcomingBookings) > 0)
+                <div style="margin-bottom: 1.5rem; border: 1px solid rgba(251,191,36,0.25); background: rgba(251,191,36,0.06); border-radius: 1rem; padding: 1rem 1.25rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.85rem;">
+                        <div style="font-size: 0.85rem; font-weight: 700; color: #fbbf24; text-transform: uppercase; letter-spacing: 0.05em;">Upcoming Bookings</div>
+                        <div style="font-size: 0.8rem; color: var(--text-muted);">Committed FVN: <strong style="color: #fbbf24;">{{ $fmtFvn($upcomingFvn) }}</strong></div>
+                    </div>
+                    <div style="overflow-x: auto;">
+                        <table style="width:100%; border-collapse: collapse; font-size: 0.85rem;">
+                            <thead>
+                                <tr style="color: var(--text-muted); text-align: left;">
+                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border);">Property</th>
+                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border);">Res No</th>
+                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border);">Arrival</th>
+                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border);">Departure</th>
+                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border); text-align:center;">Nights</th>
+                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border); text-align:center;">Rooms</th>
+                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border);">Rate</th>
+                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border); text-align:center;">FVN</th>
+                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border);">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($upcomingBookings as $ub)
+                                    @php
+                                        $uArr = $ub['arrDt'] ?? $ub['arrdt'] ?? '';
+                                        $uDep = $ub['depDt'] ?? $ub['depdt'] ?? '';
+                                        try { $uArrFmt = $uArr ? \Carbon\Carbon::parse($uArr)->format('M d, Y') : ''; } catch (\Exception $e) { $uArrFmt = $uArr; }
+                                        try { $uDepFmt = $uDep ? \Carbon\Carbon::parse($uDep)->format('M d, Y') : ''; } catch (\Exception $e) { $uDepFmt = $uDep; }
+                                    @endphp
+                                    <tr>
+                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04);">{{ $ub['property_label'] ?? $ub['property'] ?? '' }}</td>
+                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--primary); font-weight: 600;">#{{ $ub['conf'] ?? $ub['resNo'] ?? '—' }}</td>
+                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); white-space: nowrap;">{{ $uArrFmt }}</td>
+                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); white-space: nowrap;">{{ $uDepFmt }}</td>
+                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); text-align:center;">{{ $ub['fvn_nights'] ?? 0 }}</td>
+                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); text-align:center;">{{ $ub['fvn_rooms'] ?? ($ub['noRooms'] ?? 0) }}</td>
+                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); font-family: monospace; font-size: 0.78rem;">{{ $ub['fvn_raw_rate'] ?: '—' }}</td>
+                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); text-align:center; font-weight: 700; color: #fbbf24;">{{ $fmtFvn($ub['fvn_used'] ?? 0) }}</td>
+                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04);">{{ $ub['status'] ?? '' }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             @endif
 
             <div style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
                 <div style="font-size: 0.875rem; color: var(--text-muted); background: rgba(255,255,255,0.05); padding: 0.4rem 0.8rem; border-radius: 0.5rem; border: 1px solid var(--border)">
-                    Found <strong>{{ count($reservations) }}</strong> reservation(s) &mdash; <span id="filteredCount">{{ count($reservations) }}</span> shown &mdash; Used FVN: <strong id="fvnTotal">{{ $totalFvn == intval($totalFvn) ? (int)$totalFvn : $totalFvn }}</strong>
+                    Found <strong>{{ count($reservations) }}</strong> reservation(s) in date range &mdash; <span id="filteredCount">{{ count($reservations) }}</span> shown &mdash; Used FVN: <strong id="fvnTotal">{{ $fmtFvn($totalFvn) }}</strong>
                 </div>
 
                 {{-- Status Filter --}}
@@ -376,7 +424,7 @@
                                 <th>Book Date</th>
                                 <th>Guest Name</th>
                                 <th># Rooms</th>
-                                <th>Rate Code</th>
+                                <th>Rate</th>
                                 <th>FVN Used</th>
                                 <th>Arrival</th>
                                 <th>Departure</th>
@@ -391,26 +439,16 @@
                                     $propLabel = $res['property_label'] ?? 'Island';
                                     $status = strtoupper(trim($res['status'] ?? ''));
 
-                                    // FVN Used: derive from rate code string returned by list API
-                                    // KEY-VILLA = 1 (0.01), KEY-SUITE = 1.5 (0.02), .5FVN-* / .5RATE-* = 0.5 (0.5)
-                                    $fvnUsed = 0;
-                                    $rawRate = strtoupper(trim((string)($res['rateCode'] ?? $res['ratecode'] ?? $res['rate_code'] ?? $res['rate'] ?? '')));
-                                    if ($rawRate === 'KEY-VILLA' || $rawRate === 'KEY-VILLA.01' || str_ends_with($rawRate, '.01') || str_contains($rawRate, '1FVN')) {
-                                        $fvnUsed = 1;
-                                    } elseif ($rawRate === 'KEY-SUITE' || $rawRate === 'KEY-SUITE.02' || str_ends_with($rawRate, '.02') || str_contains($rawRate, '1.5FVN') || str_contains($rawRate, '2FVN')) {
-                                        $fvnUsed = 1.5;
-                                    } elseif (str_starts_with($rawRate, '.5FVN') || str_starts_with($rawRate, '.5RATE') || str_contains($rawRate, '.5FVN') || str_contains($rawRate, '.5RATE')) {
-                                        $fvnUsed = 0.5;
-                                    } elseif (isset($res['rate']) && is_array($res['rate'])) {
-                                        // fallback: scan detail rate items
-                                        foreach ($res['rate'] as $rateItem) {
-                                            $rv = round((float)($rateItem['val'] ?? $rateItem['value'] ?? 0), 2);
-                                            if ($rv == 0.01)     { $fvnUsed = max($fvnUsed, 1);   }
-                                            elseif ($rv == 0.02) { $fvnUsed = max($fvnUsed, 1.5); }
-                                            elseif ($rv == 0.5)  { $fvnUsed = max($fvnUsed, 0.5); }
-                                        }
-                                    }
-                                    $fvnDisplay = ($fvnUsed > 0) ? ($fvnUsed == intval($fvnUsed) ? (int)$fvnUsed : $fvnUsed) : '—';
+                                    // FVN Used = rateUnit × nights × rooms (precomputed in controller)
+                                    $fvnUsed = (float) ($res['fvn_used'] ?? 0);
+                                    $fvnUnit = (float) ($res['fvn_unit'] ?? 0);
+                                    $fvnNights = (int) ($res['fvn_nights'] ?? 0);
+                                    $fvnRooms = (int) ($res['fvn_rooms'] ?? 0);
+                                    $rawRate = $res['fvn_raw_rate'] ?? strtoupper(trim((string)($res['rateCode'] ?? $res['ratecode'] ?? $res['rate_code'] ?? $res['rate'] ?? '')));
+                                    $fvnDisplay = ($fvnUsed > 0) ? $fmtFvn($fvnUsed) : '—';
+                                    $fvnDetail = ($fvnUsed > 0)
+                                        ? ($fmtFvn($fvnUnit) . ' × ' . $fvnNights . 'n × ' . $fvnRooms . 'r')
+                                        : '';
 
                                     $bDate = $res['bookDate'] ?? null;
                                     $bDateFormatted = 'N/A';
@@ -450,8 +488,13 @@
                                         <div style="font-size: 0.75rem; color: var(--text-muted)">{{ $res['customer'] ?? '' }}</div>
                                     </td>
                                     <td style="text-align: center;">{{ $res['noRooms'] ?? $res['noOfRooms'] ?? '0' }}</td>
-                                    <td style="font-family: monospace; font-size: 0.8rem;">{{ $rawRate ?: 'N/A' }}</td>
-                                    <td style="text-align: center; font-weight: 700; color: {{ $fvnUsed > 0 ? '#818cf8' : 'var(--text-muted)' }};">{{ $fvnDisplay }}</td>
+                                    <td style="font-family: monospace; font-size: 0.8rem;">{{ $rawRate ?: '0' }}</td>
+                                    <td style="text-align: center; font-weight: 700; color: {{ $fvnUsed > 0 ? '#818cf8' : 'var(--text-muted)' }};">
+                                        <div>{{ $fvnDisplay }}</div>
+                                        @if($fvnDetail)
+                                            <div style="font-size: 0.68rem; font-weight: 500; color: var(--text-muted); margin-top: 0.15rem;">{{ $fvnDetail }}</div>
+                                        @endif
+                                    </td>
                                     <td style="white-space: nowrap;">{{ $aDateFormatted }}</td>
                                     <td style="white-space: nowrap;">{{ $dDateFormatted }}</td>
                                     <td>
@@ -491,14 +534,7 @@
     // --- FVN data embedded from server ---
     const rowFvnData = {};
     @foreach($reservations as $idx => $res)
-        @php
-            $rr = strtoupper(trim((string)($res['rateCode'] ?? $res['ratecode'] ?? $res['rate_code'] ?? $res['rate'] ?? '')));
-            $rf = 0;
-            if ($rr === 'KEY-VILLA' || $rr === 'KEY-VILLA.01' || str_ends_with($rr, '.01') || str_contains($rr, '1FVN')) $rf = 1;
-            elseif ($rr === 'KEY-SUITE' || $rr === 'KEY-SUITE.02' || str_ends_with($rr, '.02') || str_contains($rr, '1.5FVN') || str_contains($rr, '2FVN')) $rf = 1.5;
-            elseif (str_starts_with($rr, '.5FVN') || str_starts_with($rr, '.5RATE') || str_contains($rr, '.5FVN') || str_contains($rr, '.5RATE')) $rf = 0.5;
-        @endphp
-        rowFvnData[{{ $idx }}] = { fvn: {{ $rf }}, status: '{{ strtoupper(trim($res['status'] ?? '')) }}' };
+        rowFvnData[{{ $idx }}] = { fvn: {{ (float) ($res['fvn_used'] ?? 0) }}, status: '{{ strtoupper(trim($res['status'] ?? '')) }}' };
     @endforeach
 
     // --- Status filter logic ---
@@ -560,13 +596,61 @@
         }
     }
 
-    document.getElementById('searchForm').addEventListener('submit', function() {
-        var btn = document.getElementById('btnSubmit');
-        var spinner = document.getElementById('spinner');
-        var btnText = document.getElementById('btnText');
-        btn.disabled = true;
-        spinner.style.display = 'inline-block';
-        btnText.textContent = 'Searching...';
-    });
+    (function () {
+        var fromInput = document.getElementById('fromdate');
+        var toInput = document.getElementById('todate');
+        var dateError = document.getElementById('dateRangeError');
+
+        function syncDateBounds() {
+            if (fromInput.value) toInput.min = fromInput.value;
+            else toInput.removeAttribute('min');
+            if (toInput.value) fromInput.max = toInput.value;
+            else fromInput.removeAttribute('max');
+        }
+
+        function isDateRangeValid() {
+            if (!fromInput.value || !toInput.value) return true;
+            return fromInput.value <= toInput.value;
+        }
+
+        function showDateError(show) {
+            if (!dateError) return;
+            if (show) {
+                dateError.textContent = 'From Date cannot be later than To Date.';
+                fromInput.style.borderColor = '#f87171';
+                toInput.style.borderColor = '#f87171';
+            } else {
+                dateError.textContent = '';
+                fromInput.style.borderColor = '';
+                toInput.style.borderColor = '';
+            }
+        }
+
+        fromInput.addEventListener('change', function () {
+            syncDateBounds();
+            showDateError(!isDateRangeValid());
+        });
+        toInput.addEventListener('change', function () {
+            syncDateBounds();
+            showDateError(!isDateRangeValid());
+        });
+        syncDateBounds();
+
+        document.getElementById('searchForm').addEventListener('submit', function (e) {
+            if (!isDateRangeValid()) {
+                e.preventDefault();
+                showDateError(true);
+                fromInput.focus();
+                return;
+            }
+            showDateError(false);
+            var btn = document.getElementById('btnSubmit');
+            var spinner = document.getElementById('spinner');
+            var btnText = document.getElementById('btnText');
+            btn.disabled = true;
+            spinner.style.display = 'inline-block';
+            btnText.textContent = 'Searching...';
+        });
+    })();
 </script>
 @endsection
