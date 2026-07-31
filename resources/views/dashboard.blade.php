@@ -866,7 +866,9 @@
                 @endif
                 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;">
                     @if($detMemberNo)
-                    <span style="font-size: 0.8rem; font-family: monospace; font-weight: 700; color: #818cf8; letter-spacing: 0.04em;">{{ $detMemberNo }}</span>
+                    <a href="{{ route('member.search', ['member_no' => $detMemberNo]) }}" title="View Member Reservation Filter for {{ $detMemberNo }}" style="font-size: 0.8rem; font-family: monospace; font-weight: 700; color: #818cf8; letter-spacing: 0.04em; text-decoration: none; display: inline-flex; align-items: center; gap: 0.25rem;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>{{ $detMemberNo }}
+                    </a>
                     @endif
                     @if($detBookDateFormatted)
                     <span style="font-size: 0.75rem; color: var(--text-muted);">·</span>
@@ -1088,7 +1090,19 @@
                     </thead>
                     <tbody>
                         @foreach($reservations as $res)
-                            @php $currentResNo = $res['resNo'] ?? $res['conf'] ?? null; @endphp
+                            @php
+                                $currentResNo = $res['resNo'] ?? $res['conf'] ?? null;
+                                $memNo = trim((string) (
+                                    $res['memberNo']  ??
+                                    $res['memNo']     ??
+                                    $res['member_no'] ??
+                                    $res['memberno']  ??
+                                    $res['MemberNo']  ??
+                                    ''
+                                ));
+                                $memNoLower = strtolower($memNo);
+                                $hasMemberNo = $memNo !== '' && !in_array($memNoLower, ['n/a', 'na', 'none', 'null', '0', 'false', 'no']);
+                            @endphp
                             <tr data-pax="{{ (int)($res['noPax'] ?? $res['noOfPax'] ?? 0) }}" data-status="{{ strtoupper(trim($res['status'] ?? '')) }}">
                                 <td style="text-align: center;">
                                     @if($currentResNo)
@@ -1106,7 +1120,21 @@
                                 </td>
                                 <td>
                                     <div>{{ $res['gstName'] ?? $res['guestName'] ?? $res['custName'] ?? $res['customer'] ?? 'Unknown' }}</div>
-                                    <div style="font-size: 0.75rem; color: var(--text-muted)">{{ $res['custName'] ?? $res['customer'] ?? '' }}</div>
+                                    @if($res['custName'] ?? $res['customer'] ?? null)
+                                        <div style="font-size: 0.75rem; color: var(--text-muted)">{{ $res['custName'] ?? $res['customer'] }}</div>
+                                    @endif
+                                    @if($hasMemberNo)
+                                        <div style="margin-top: 0.25rem;">
+                                            <a href="{{ route('member.search', ['member_no' => $memNo]) }}" 
+                                               title="View Member Reservation Filter for {{ $memNo }}" 
+                                               style="font-size: 0.75rem; font-family: monospace; color: #818cf8; text-decoration: none; display: inline-flex; align-items: center; gap: 0.25rem; font-weight: 600;"
+                                               onmouseover="this.style.textDecoration='underline'"
+                                               onmouseout="this.style.textDecoration='none'">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                                                <span>{{ $memNo }}</span>
+                                            </a>
+                                        </div>
+                                    @endif
                                 </td>
                                 <td>{{ $res['noRooms'] ?? $res['noOfRooms'] ?? '0' }}</td>
                                 <td>{{ $res['noPax'] ?? $res['noOfPax'] ?? '0' }}</td>

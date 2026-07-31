@@ -289,22 +289,19 @@
                     </span>
                     @endif
                 </div>
-            </div>
-
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
 
                 {{-- Intimus FVN (already deducted for arrived) --}}
                 <div style="background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(99,102,241,0.05)); border: 1px solid rgba(99,102,241,0.3); border-radius: 1rem; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 0.4rem;">
-                    <div style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #818cf8;">Intimus FVN Balance</div>
+                    <div style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #818cf8;">Available FVN Balance</div>
                     <div style="font-size: 1.6rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums;">
                         {{ $fmtFvn($intimusFvn) }}
                     </div>
-                    <div style="font-size: 0.72rem; color: var(--text-muted);">Deducted only when booking has arrived</div>
                 </div>
 
                 {{-- Upcoming FVN commitment --}}
                 <div style="background: linear-gradient(135deg, rgba(251,191,36,0.15), rgba(251,191,36,0.05)); border: 1px solid rgba(251,191,36,0.35); border-radius: 1rem; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 0.4rem;">
-                    <div style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #fbbf24;">Upcoming FVN</div>
+                    <div style="font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #fbbf24;">FVN Confirmed to be use</div>
                     <div style="font-size: 1.6rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums;">
                         {{ $fmtFvn($upcomingFvn) }}
                     </div>
@@ -319,9 +316,9 @@
                     </div>
                     <div style="font-size: 0.72rem; color: {{ $isOverCommitted ? '#f87171' : 'var(--text-muted)' }};">
                         @if($isOverCommitted)
-                            Over-committed — upcoming FVN exceeds Intimus balance
+                            Over-committed — FVN confirmed to be use exceeds available balance
                         @else
-                            Intimus − upcoming commitment
+                            Available − confirmed commitment
                         @endif
                     </div>
                 </div>
@@ -340,24 +337,24 @@
                 <div style="margin-bottom: 1.5rem; border: 1px solid rgba(251,191,36,0.25); background: rgba(251,191,36,0.06); border-radius: 1rem; padding: 1rem 1.25rem;">
                     <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.85rem;">
                         <div style="font-size: 0.85rem; font-weight: 700; color: #fbbf24; text-transform: uppercase; letter-spacing: 0.05em;">Upcoming Bookings</div>
-                        <div style="font-size: 0.8rem; color: var(--text-muted);">Committed FVN: <strong style="color: #fbbf24;">{{ $fmtFvn($upcomingFvn) }}</strong></div>
+                        <div style="font-size: 0.8rem; color: #ffffff;">Committed FVN: <strong style="color: #fbbf24;">{{ $fmtFvn($upcomingFvn) }}</strong></div>
                     </div>
                     <div style="overflow-x: auto;">
-                        <table style="width:100%; border-collapse: collapse; font-size: 0.85rem;">
+                        <table style="width:100%; border-collapse: collapse; font-size: 0.85rem; color: #ffffff;">
                             <thead>
-                                <tr style="color: var(--text-muted); text-align: left;">
-                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border);">Property</th>
-                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border);">Res No</th>
-                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border);">Arrival</th>
-                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border);">Departure</th>
-                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border); text-align:center;">Nights</th>
-                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border); text-align:center;">Rooms</th>
-                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border);">Rate</th>
-                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border); text-align:center;">FVN</th>
-                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border);">Status</th>
+                                <tr style="color: #ffffff; text-align: left;">
+                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border); color: #ffffff;">Property</th>
+                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border); color: #ffffff;">Res No</th>
+                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border); color: #ffffff;">Arrival</th>
+                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border); color: #ffffff;">Departure</th>
+                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border); text-align:center; color: #ffffff;">Nights</th>
+                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border); text-align:center; color: #ffffff;">Rooms</th>
+                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border); color: #ffffff;">Rate</th>
+                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border); text-align:center; color: #ffffff;">FVN</th>
+                                    <th style="padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--border); color: #ffffff;">Status</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody style="color: #ffffff;">
                                 @foreach($upcomingBookings as $ub)
                                     @php
                                         $uArr = $ub['arrDt'] ?? $ub['arrdt'] ?? '';
@@ -365,16 +362,16 @@
                                         try { $uArrFmt = $uArr ? \Carbon\Carbon::parse($uArr)->format('M d, Y') : ''; } catch (\Exception $e) { $uArrFmt = $uArr; }
                                         try { $uDepFmt = $uDep ? \Carbon\Carbon::parse($uDep)->format('M d, Y') : ''; } catch (\Exception $e) { $uDepFmt = $uDep; }
                                     @endphp
-                                    <tr>
-                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04);">{{ $ub['property_label'] ?? $ub['property'] ?? '' }}</td>
+                                    <tr style="color: #ffffff;">
+                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); color: #ffffff;">{{ $ub['property_label'] ?? $ub['property'] ?? '' }}</td>
                                         <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--primary); font-weight: 600;">#{{ $ub['conf'] ?? $ub['resNo'] ?? '—' }}</td>
-                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); white-space: nowrap;">{{ $uArrFmt }}</td>
-                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); white-space: nowrap;">{{ $uDepFmt }}</td>
-                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); text-align:center;">{{ $ub['fvn_nights'] ?? 0 }}</td>
-                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); text-align:center;">{{ $ub['fvn_rooms'] ?? ($ub['noRooms'] ?? 0) }}</td>
-                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); font-family: monospace; font-size: 0.78rem;">{{ $ub['fvn_raw_rate'] ?: '—' }}</td>
+                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); white-space: nowrap; color: #ffffff;">{{ $uArrFmt }}</td>
+                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); white-space: nowrap; color: #ffffff;">{{ $uDepFmt }}</td>
+                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); text-align:center; color: #ffffff;">{{ $ub['fvn_nights'] ?? 0 }}</td>
+                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); text-align:center; color: #ffffff;">{{ $ub['fvn_rooms'] ?? ($ub['noRooms'] ?? 0) }}</td>
+                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); font-family: monospace; font-size: 0.78rem; color: #ffffff;">{{ $ub['fvn_raw_rate'] ?: '—' }}</td>
                                         <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); text-align:center; font-weight: 700; color: #fbbf24;">{{ $fmtFvn($ub['fvn_used'] ?? 0) }}</td>
-                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04);">{{ $ub['status'] ?? '' }}</td>
+                                        <td style="padding: 0.55rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.04); color: #ffffff;">{{ $ub['status'] ?? '' }}</td>
                                     </tr>
                                 @endforeach
                             </tbody>
