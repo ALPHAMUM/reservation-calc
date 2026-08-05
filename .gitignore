@@ -18,3 +18,4 @@ yarn-error.log
 /database/database.sqlite
 /database/reservation.db
 /scratch
+public/web.config
