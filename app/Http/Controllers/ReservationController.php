@@ -367,6 +367,11 @@ class ReservationController extends Controller
 
     public function index(Request $request)
     {
+        set_time_limit(300);
+        if ($request->get('property') === 'pines') {
+            return app(BalesinPinesController::class)->index($request);
+        }
+
         $property     = $this->resolvePropertyConfig($request->get('property', 'island'));
         $isIsland     = $property === 'island';
 
@@ -1370,7 +1375,10 @@ class ReservationController extends Controller
 
     public function print(Request $request)
     {
-        set_time_limit(0);
+        set_time_limit(300);
+        if ($request->get('property') === 'pines') {
+            return app(BalesinPinesController::class)->print($request);
+        }
         $this->resolvePropertyConfig($request->get('property', 'island'));
         $resNoList = $request->get('resnolist');
         $fromDate = $request->get('fromdate');
@@ -1711,12 +1719,13 @@ class ReservationController extends Controller
 
     private function balesinLogoUrl(): string
     {
-        return 'https://balesin.com/wp-content/uploads/2025/09/balesin-island-logo-dark-blue-min.png';
+        return 'https://balesin.com/wp-content/uploads/2026/02/Balesin-Island-Alternate-Logo_Primary-Color.png';
+        // return 'https://balesin.com/wp-content/uploads/2025/09/balesin-island-logo-dark-blue-min.png';
     }
 
     private function balesinLogoImageFormula(): string
     {
-        return '=IMAGE("' . $this->balesinLogoUrl() . '")';
+        return '=IMAGE("' . $this->balesinLogoUrl() . '",,3,0,150)';
     }
 
     /**
@@ -1915,6 +1924,7 @@ class ReservationController extends Controller
 
     public function memberSearch(Request $request)
     {
+        set_time_limit(300);
         $memberNo = $request->get('member_no');
         $fromDate = $request->get('fromdate') ?: date('Y-01-01');
         $toDate   = $request->get('todate')   ?: date('Y-12-31');

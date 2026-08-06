@@ -754,16 +754,20 @@
                         <button type="submit" formaction="{{ route('print') }}" formtarget="_blank" class="btn btn-primary btn-export-pdf" style="background: #ef4444">
                             Export PDF
                         </button>
-                    @else
-                        @php $propName = $property === 'city' ? 'Balesin City' : 'Balesin Pines'; @endphp
-                        <span title="Export not yet available for {{ $propName }}" style="display:inline-flex; gap:0.5rem;">
-                            <button type="button" class="btn btn-primary btn-export-excel" style="background: var(--success); opacity: 0.4; cursor: not-allowed;" disabled>
-                                Export Excel
-                            </button>
-                            <button type="button" class="btn btn-primary btn-export-pdf" style="background: #ef4444; opacity: 0.4; cursor: not-allowed;" disabled>
-                                Export PDF
-                            </button>
-                        </span>
+                    @elseif($property === 'pines')
+                        <button type="submit" formaction="{{ route('pines.export') }}" class="btn btn-primary btn-export-excel" style="background: var(--success)">
+                            Export Excel
+                        </button>
+                        <button type="submit" formaction="{{ route('pines.print') }}" formtarget="_blank" class="btn btn-primary btn-export-pdf" style="background: #ef4444">
+                            Export PDF
+                        </button>
+                    @elseif($property === 'city')
+                        <button type="submit" formaction="{{ route('city.export') }}" class="btn btn-primary btn-export-excel" style="background: var(--success)">
+                            Export Excel
+                        </button>
+                        <button type="submit" formaction="{{ route('city.print') }}" formtarget="_blank" class="btn btn-primary btn-export-pdf" style="background: #ef4444">
+                            Export PDF
+                        </button>
                     @endif
                 </div>
             </div>
