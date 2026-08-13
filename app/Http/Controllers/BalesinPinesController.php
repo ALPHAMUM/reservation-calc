@@ -98,18 +98,38 @@ class BalesinPinesController extends Controller
             // Apply Pines rate calculator logic
             $calculator = app(\App\Services\BalesinPinesRateCalculatorService::class);
             $reservations = [];
+            $resOccupantIndex = [];
+
             foreach ($rawDetail as $res) {
+                $resNo = trim((string)($res['resNo'] ?? $res['conf'] ?? ''));
+                if (!isset($resOccupantIndex[$resNo])) {
+                    $resOccupantIndex[$resNo] = 0;
+                }
+                $occupantIndex = $resOccupantIndex[$resNo]++;
+
                 $roomType = $res['roomtyp'] ?? $res['roomType'] ?? '';
                 $unitType = $calculator->resolvePinesUnitType($roomType, $res['rateCode'] ?? '');
 
                 $res['calculated_rates'] = $calculator->calculatePassengerRates(
                     $res,
-                    0,
+                    $occupantIndex,
                     $roomType,
-                    2
+                    2,
+                    $occupantIndex
                 );
                 $res['village_name'] = $unitType;
                 $res['is_employee']  = false;
+
+                if (isset($res['rate']) && is_array($res['rate'])) {
+                    foreach ($res['rate'] as &$r) {
+                        $d = $r['date'] ?? '';
+                        if ($d && isset($res['calculated_rates']['acc_dates'][$d]['breakdown'])) {
+                            $r['breakdown'] = $res['calculated_rates']['acc_dates'][$d]['breakdown'];
+                        }
+                    }
+                    unset($r);
+                }
+
                 $reservations[] = $res;
             }
 
@@ -129,11 +149,61 @@ class BalesinPinesController extends Controller
         ksort($allDates);
         $dateCols = array_keys($allDates);
 
-        // Group rows by reservation number
-        $accSpans = [];
+        // Pre-calculate spans per reservation for Pines (base_pax = 2)
+        $resGroups = [];
         foreach ($reservations as $r) {
-            $accSpans[] = ['span' => 1, 'totals' => []];
+            $rn = trim($r['resNo'] ?? $r['conf'] ?? 'N/A');
+            $resGroups[$rn][] = $r;
         }
+
+        $accSpans = [];
+        foreach ($resGroups as $rn => $rows) {
+            $count = count($rows);
+            $basePax = 2;
+            $curr = 0;
+            while ($curr < $count) {
+                $blockStart = $curr;
+                $blockSize = min($count - $curr, $basePax);
+                $groupTotals = [];
+                foreach ($dateCols as $d) {
+                    $uv = 0;
+                    foreach ($rows[$blockStart]['rate'] ?? [] as $rt) {
+                        if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                    }
+                    $groupTotals[$d] = $uv;
+                }
+                for ($i = 0; $i < $blockSize; $i++) {
+                    $span = ($i === 0) ? $blockSize : 0;
+                    $isExtraPerson = (($curr + $i) >= 2 && isset($rows[$curr + $i]));
+                    if ($isExtraPerson) {
+                        $extraTotals = [];
+                        foreach ($dateCols as $d) {
+                            $uv = (float)($rows[$curr + $i]['calculated_rates']['acc_dates'][$d]['val'] ?? 0);
+                            if ($uv == 0) {
+                                foreach ($rows[$curr + $i]['rate'] ?? [] as $rt) {
+                                    if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                                }
+                            }
+                            $extraTotals[$d] = $uv;
+                        }
+                        $accSpans[] = ['span' => 1, 'totals' => $extraTotals, 'group_size' => 1, 'is_extra_person' => true];
+                    } else {
+                        $accSpans[] = ['span' => $span, 'totals' => $groupTotals, 'group_size' => $blockSize, 'is_extra_person' => false];
+                    }
+                }
+                $curr += $blockSize;
+            }
+        }
+
+        // Attach to each reservation
+        foreach ($reservations as $idx => &$res) {
+            $spanInfo = $accSpans[$idx] ?? ['span' => 1, 'totals' => [], 'group_size' => 1, 'is_extra_person' => false];
+            $res['acc_span']          = $spanInfo['span'];
+            $res['acc_group_size']    = $spanInfo['group_size'];
+            $res['acc_group_totals']  = $spanInfo['totals'];
+            $res['is_extra_person']   = $spanInfo['is_extra_person'] ?? false;
+        }
+        unset($res);
 
         $logoPath = public_path('images/balesin-logo.png');
         $balesinLogoUrl = file_exists($logoPath) ? 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath)) : '';
@@ -194,10 +264,18 @@ class BalesinPinesController extends Controller
 
         $calculator   = app(\App\Services\BalesinPinesRateCalculatorService::class);
         $reservations = [];
+        $resOccupantIndex = [];
+
         foreach ($rawDetail as $res) {
+            $resNo = trim((string)($res['resNo'] ?? $res['conf'] ?? ''));
+            if (!isset($resOccupantIndex[$resNo])) {
+                $resOccupantIndex[$resNo] = 0;
+            }
+            $occupantIndex = $resOccupantIndex[$resNo]++;
+
             $roomType                = $res['roomtyp'] ?? $res['roomType'] ?? '';
             $unitType                = $calculator->resolvePinesUnitType($roomType, $res['rateCode'] ?? '');
-            $res['calculated_rates'] = $calculator->calculatePassengerRates($res, 0, $roomType, 2);
+            $res['calculated_rates'] = $calculator->calculatePassengerRates($res, $occupantIndex, $roomType, 2, $occupantIndex);
             $res['village_name']     = $unitType;
             $res['is_employee']      = false;
             $reservations[]          = $res;
@@ -215,6 +293,70 @@ class BalesinPinesController extends Controller
         ksort($allDates);
         $dateCols  = array_keys($allDates);
         $dateCount = count($dateCols);
+
+        // ========== SPAN COMPUTATION (grouping per reservation, base_pax=2) ==========
+        $resGroups = [];
+        foreach ($reservations as $r) {
+            $rn = trim($r['resNo'] ?? $r['conf'] ?? 'N/A');
+            $resGroups[$rn][] = $r;
+        }
+
+        $accSpans = [];
+        foreach ($resGroups as $rn => $rows) {
+            $count = count($rows);
+            $basePax = 2;
+            $curr = 0;
+            while ($curr < $count) {
+                $blockStart = $curr;
+                $blockSize = min($count - $curr, $basePax);
+                $groupTotals = [];
+                foreach ($dateCols as $d) {
+                    $uv = 0;
+                    foreach ($rows[$blockStart]['rate'] ?? [] as $rt) {
+                        if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                    }
+                    $groupTotals[$d] = $uv;
+                }
+                for ($i = 0; $i < $blockSize; $i++) {
+                    $span = ($i === 0) ? $blockSize : 0;
+                    $isExtraPerson = (($curr + $i) >= 2 && isset($rows[$curr + $i]));
+                    if ($isExtraPerson) {
+                        $extraTotals = [];
+                        foreach ($dateCols as $d) {
+                            $uv = (float)($rows[$curr + $i]['calculated_rates']['acc_dates'][$d]['val'] ?? 0);
+                            if ($uv == 0) {
+                                foreach ($rows[$curr + $i]['rate'] ?? [] as $rt) {
+                                    if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                                }
+                            }
+                            $extraTotals[$d] = $uv;
+                        }
+                        $accSpans[] = ['span' => 1, 'totals' => $extraTotals, 'group_size' => 1, 'is_extra_person' => true];
+                    } else {
+                        $accSpans[] = ['span' => $span, 'totals' => $groupTotals, 'group_size' => $blockSize, 'is_extra_person' => false];
+                    }
+                }
+                $curr += $blockSize;
+            }
+        }
+
+        // Attach to each reservation
+        foreach ($reservations as $idx => &$res) {
+            $spanInfo = $accSpans[$idx] ?? ['span' => 1, 'totals' => [], 'group_size' => 1, 'is_extra_person' => false];
+            $res['acc_span']          = $spanInfo['span'];
+            $res['acc_group_size']    = $spanInfo['group_size'];
+            $res['acc_group_totals']  = $spanInfo['totals'];
+            $res['is_extra_person']   = $spanInfo['is_extra_person'] ?? false;
+        }
+        unset($res);
+        // ======================================================================
+
+        // Pre-compute reservation group counts for rowspan on RSVN# and Room Type
+        $resGroupCounts = [];
+        foreach ($reservations as $res) {
+            $rn = trim($res['resNo'] ?? $res['conf'] ?? '');
+            $resGroupCounts[$rn] = ($resGroupCounts[$rn] ?? 0) + 1;
+        }
 
         // Extract header metadata
         $firstMemberName = '';
@@ -245,20 +387,12 @@ class BalesinPinesController extends Controller
 
         if (ob_get_level()) ob_end_clean();
 
-        // Pre-compute reservation group counts
-        $resGroupCounts = [];
-        foreach ($reservations as $res) {
-            $rn                  = trim($res['resNo'] ?? $res['conf'] ?? '');
-            $resGroupCounts[$rn] = ($resGroupCounts[$rn] ?? 0) + 1;
-        }
-
         return response()->stream(function () use (
             $reservations, $dateCols, $dateCount, $logoImageFormula,
             $firstMemberName, $firstMemberNo, $firstContactNo, $formattedBookDate,
             $resGroupCounts
         ) {
-            // Col count: 9 fixed + date cols + 1 (TOTAL RATE — no airfare cols for Pines)
-            $emptyColsSpan = $dateCount + 1;
+            $emptyColsSpan = $dateCount + 1; // +1 for Total Rate column
 
             echo '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
             echo '<head><meta http-equiv="Content-type" content="text/html;charset=utf-8" />';
@@ -274,13 +408,12 @@ class BalesinPinesController extends Controller
             echo '<table style="border-collapse: collapse; border: none;">';
             echo '<colgroup><col style="mso-width-source:userset; width:15pt;"></colgroup>';
 
-            // Row 1: narrow top margin
+            // ---- Header rows (Logo, Member info, Note) ----
             echo '<tr style="height:10pt;">';
             echo '<td style="border:none; width:15pt;"></td>';
             echo '<td colspan="' . (8 + $emptyColsSpan) . '" style="border:none;"></td>';
             echo '</tr>';
 
-            // Logo + MEMBER'S NAME row
             echo '<tr>';
             echo '<td style="border:none; width:15pt;"></td>';
             echo '<td rowspan="5" colspan="2" style="text-align: center; vertical-align: middle; padding: 10px; border: none; border-left: 0.5pt solid #9fd99c; border-top: 0.5pt solid #9fd99c; border-bottom: 20px solid transparent;"';
@@ -311,7 +444,6 @@ class BalesinPinesController extends Controller
             echo '<td colspan="' . $emptyColsSpan . '" style="border: none;"></td>';
             echo '</tr>';
 
-            // NOTE row below booking date
             echo '<tr>';
             echo '<td style="border:none; width:15pt;"></td>';
             echo '<td colspan="' . (6 + $emptyColsSpan) . '" style="border:none; font-size:5.5pt; color:#1e293b; font-style:italic; padding: 4px 0px; text-align: left; white-space: nowrap; vertical-align: middle;">';
@@ -319,10 +451,9 @@ class BalesinPinesController extends Controller
             echo '</td>';
             echo '</tr>';
 
-            // Spacer
             echo '<tr><td style="border:none; width:15pt;"></td><td colspan="' . (8 + $emptyColsSpan) . '" style="border: none; height: 10px;"></td></tr>';
 
-            // Header Row 1
+            // ---- Table headers ----
             echo '<tr>';
             echo '<td rowspan="2" style="border:none; width:15pt;"></td>';
             echo '<td rowspan="2" class="hdr" style="width: 70pt;">RSVN#</td>';
@@ -337,7 +468,6 @@ class BalesinPinesController extends Controller
             echo '<td rowspan="2" class="hdr" style="width: 90pt; word-wrap:normal;">TOTAL RATE (Per Occupant)</td>';
             echo '</tr>';
 
-            // Header Row 2: date sub-columns
             echo '<tr>';
             foreach ($dateCols as $d) {
                 $label = $d;
@@ -365,17 +495,35 @@ class BalesinPinesController extends Controller
                 $privCardLower = strtolower($privCard);
                 $isValidCard   = $privCard !== '' && !in_array($privCardLower, ['n', 'no', 'false', '0', 'none', 'null']);
 
+                $span        = $res['acc_span'] ?? 1;
                 $groupTotals = $res['acc_group_totals'] ?? [];
+                $groupSize   = max(1, (int) ($res['acc_group_size'] ?? 1));
+                $isExtraPerson = $res['is_extra_person'] ?? false;
+
+                // Compute groupAccSum excluding FVN
                 $groupAccSum = 0;
                 foreach ($groupTotals as $gv) {
                     $grv = round((float)$gv, 2);
-                    if ($grv !== 0.01 && $grv !== 0.02 && $grv !== 0.5) {
+                    $frac = round($grv - floor($grv), 2);
+                    if (!in_array($frac, [0.01, 0.02, 0.5])) {
                         $groupAccSum += (float)$gv;
                     }
                 }
-                $span           = $res['acc_span'] ?? 1;
-                $groupSize      = max(1, (int) ($res['acc_group_size'] ?? $span ?? 1));
-                $perOccupantAcc = $rates['acc'] ?? ($groupAccSum / $groupSize);
+
+                if ($isExtraPerson) {
+                    $perOccupantAcc = 0;
+                    foreach ($dateCols as $d) {
+                        $val = $rates['acc_dates'][$d]['val'] ?? 0;
+                        $rv = round($val, 2);
+                        $frac = round($rv - floor($rv), 2);
+                        if (!in_array($frac, [0.01, 0.02, 0.5])) {
+                            $perOccupantAcc += $val;
+                        }
+                    }
+                } else {
+                    $perOccupantAcc = ($groupSize > 0) ? ($groupAccSum / $groupSize) : 0;
+                }
+
                 $accGrandTotal += $perOccupantAcc;
 
                 $relation = strtoupper(htmlspecialchars($res['gstType'] ?? ''));
@@ -397,40 +545,40 @@ class BalesinPinesController extends Controller
                 echo '<td style="text-align:center">' . htmlspecialchars($res['age'] ?? '') . '</td>';
                 echo '<td style="text-align:center">' . htmlspecialchars($res['dateOfBirth'] ?? '') . '</td>';
 
-
                 $arrDt = $res['arrdt'] ?? $res['arrDt'] ?? '';
                 $depDt = $res['depdt'] ?? $res['depDt'] ?? '';
                 echo '<td style=\'mso-number-format:"\\@"; text-align:center;\'>' . ($arrDt ? date('m/d/Y', strtotime($arrDt)) : '') . '</td>';
                 echo '<td style=\'mso-number-format:"\\@"; text-align:center;\'>' . ($depDt ? date('m/d/Y', strtotime($depDt)) : '') . '</td>';
 
+                // Accommodation cells – merged using rowspan
                 if ($span > 0) {
                     foreach ($dateCols as $d) {
                         $val = $rates['acc_dates'][$d]['val'] ?? ($groupTotals[$d] ?? 0);
                         $rv  = round($val, 2);
-                        if ($rv == 0.01)        $formattedVal = '1 FVN';
-                        elseif ($rv == 0.02)    $formattedVal = '1.5 FVN';
-                        elseif ($rv == 0.5)     $formattedVal = '.5 FVN';
-                        elseif ($rv == 3700.01) $formattedVal = '3700.01';
+                        $frac = round($rv - floor($rv), 2);
+                        if ($frac == 0.01)      $formattedVal = '1 FVN';
+                        elseif ($frac == 0.02)  $formattedVal = '1.5 FVN';
+                        elseif ($frac == 0.5)   $formattedVal = '.5 FVN';
                         else                    $formattedVal = ($val > 0 ? number_format($val, 2) : '');
 
                         echo '<td class="num" rowspan="' . $span . '" style="text-align: center;">' . $formattedVal . '</td>';
 
-                        if ($rv !== 0.01 && $rv !== 0.02 && $rv !== 0.5) {
+                        if (!in_array($frac, [0.01, 0.02, 0.5])) {
                             $dateTotals[$d] += (float) $val;
                         }
                     }
                 }
 
-                echo '<td class="num-center" style="font-weight:bold">' . ($perOccupantAcc > 0 ? number_format($perOccupantAcc, 2) : '') . '</td>';
+                echo '<td class="num-center" style="font-weight:bold">' . number_format($perOccupantAcc, 2) . '</td>';
                 echo '</tr>';
                 flush();
             }
 
+            // ---- Grand totals row ----
             $totalPax          = count($reservations);
             $overallGrandTotal = $accGrandTotal;
-            $fullColspan       = 9 + $dateCount + 1;
+            $fullColspan       = 9 + $dateCount + 1; // 8 fixed columns + date cols + 1 total rate
 
-            // Grand totals row
             echo '<tr style="font-weight:bold;background:#eef7ee">';
             echo '<td style="border:none; width:15pt;"></td>';
             echo '<td colspan="2" style="text-align:right">TOTAL PAX:</td>';
@@ -442,7 +590,7 @@ class BalesinPinesController extends Controller
             echo '<td class="num" style="font-weight:bold;text-align:center;">' . number_format($overallGrandTotal, 2) . '</td>';
             echo '</tr>';
 
-            // Guidelines & Payments section params
+            // ---- Guidelines & Payments section ----
             $totalTableCols = 8 + $dateCount + 1;
             $guidelinesCols = (int) floor(($totalTableCols - 1) * 0.50);
             $spacerCols     = 1;
@@ -456,42 +604,42 @@ class BalesinPinesController extends Controller
                 echo '<tr><td style="border:none; width:15pt;"></td><td colspan="' . $fullColspan . '" style="border:none;">&nbsp;</td></tr>';
             }
 
-            // TOTAL AMOUNT DUE on single row (aligned with PAYMENT/S columns)
+            // TOTAL AMOUNT DUE row (replace existing)
             echo '<tr>';
             echo '<td style="border:none; width:15pt;"></td>';
             echo '<td colspan="' . $leftOffsetCols . '" style="border:none;"></td>';
-            echo '<td colspan="' . $payDescCols . '" style="background-color:#caeac8; color:#1e293b; font-weight:bold; font-size:11pt; padding:8px 12px; border:0.5pt solid #9fd99c; text-align:left; vertical-align:middle;">TOTAL AMOUNT DUE:</td>';
-            echo '<td colspan="' . $payAmtCols . '" class="num" style="background-color:#caeac8; color:#1e293b; font-weight:bold; font-size:13pt; padding:8px 12px; border:0.5pt solid #9fd99c; text-align:right; vertical-align:middle;">&#8369;' . number_format($overallGrandTotal, 2) . '</td>';
+            echo '<td colspan="' . $payDescCols . '" style="background-color:#caeac8; color:#1e293b; font-weight:bold; font-size:10pt; padding:8px 12px; border:0.5pt solid #9fd99c; text-align:left; vertical-align:middle;">TOTAL AMOUNT DUE:</td>';
+            echo '<td colspan="' . $payAmtCols . '" class="num" style="background-color:#caeac8; color:#1e293b; font-weight:bold; font-size:10pt; padding:8px 12px; border:0.5pt solid #9fd99c; text-align:right; vertical-align:middle;" x:fmla="' . $overallGrandTotal . '">&#8369;' . number_format($overallGrandTotal, 2) . '</td>';
             echo '</tr>';
 
-            // VAT note
+            // VAT note – smaller font (7pt)
             echo '<tr>';
             echo '<td style="border:none; width:15pt;"></td>';
             echo '<td colspan="' . $leftOffsetCols . '" style="border:none;"></td>';
-            echo '<td colspan="' . $paymentCols . '" style="text-align:right; border:none; font-style:italic; color:#64748b; font-size:9pt; padding-top:4px; padding-bottom:12px;">Room Rates include service charge (10%) and VAT (12%)</td>';
+            echo '<td colspan="' . $paymentCols . '" style="text-align:right; border:none; font-style:italic; color:#64748b; font-size:7pt; padding-top:4px; padding-bottom:12px;">Room Rates include service charge (10%) and VAT (12%)</td>';
             echo '</tr>';
 
             // Row 1: Booking Guidelines title + PAYMENT/S header
             echo '<tr>';
             echo '<td style="border:none; width:15pt;"></td>';
-            echo '<td colspan="' . $guidelinesCols . '" style="border-top: 1px solid #9fd99c; border-left: 1px solid #9fd99c; border-right: 1px solid #9fd99c; border-bottom: none; font-weight:bold; font-size:11pt; color:#2d6b2b; padding: 10px 15px 2px 15px; text-align: left; background-color:#ffffff;">Booking Guidelines:</td>';
+            echo '<td colspan="' . $guidelinesCols . '" style="border-top: 1px solid #9fd99c; border-left: 1px solid #9fd99c; border-right: 1px solid #9fd99c; border-bottom: none; font-weight:bold; font-size:10pt; color:#2d6b2b; padding: 10px 15px 2px 15px; text-align: left; background-color:#ffffff;">Booking Guidelines:</td>';
             echo '<td colspan="' . $spacerCols . '" style="border:none;"></td>';
-            echo '<td colspan="' . $paymentCols . '" style="border:none; font-weight:bold; font-size:10pt; color:#0f172a; text-align: left; padding-bottom:5px; padding-left:8px;">PAYMENT/S:</td>';
+            echo '<td colspan="' . $paymentCols . '" style="border:none; font-weight:bold; font-size:9pt; color:#0f172a; text-align: left; padding-bottom:5px; padding-left:8px;">PAYMENT/S:</td>';
             echo '</tr>';
 
-            // Row 2: Entry to Property subtitle + Payment row 1
+            // Row 2: Entry to Property subtitle + Payment row 1 (empty)
             echo '<tr>';
             echo '<td style="border:none; width:15pt;"></td>';
-            echo '<td colspan="' . $guidelinesCols . '" style="border-top: none; border-left: 1px solid #9fd99c; border-right: 1px solid #9fd99c; border-bottom: none; font-weight:bold; font-size:9.5pt; color:#1e293b; padding: 5px 15px 2px 15px; text-align: left; background-color:#ffffff;"><u>Entry to Property</u></td>';
+            echo '<td colspan="' . $guidelinesCols . '" style="border-top: none; border-left: 1px solid #9fd99c; border-right: 1px solid #9fd99c; border-bottom: none; font-weight:bold; font-size:8.5pt; color:#1e293b; padding: 5px 15px 2px 15px; text-align: left; background-color:#ffffff;"><u>Entry to Property</u></td>';
             echo '<td colspan="' . $spacerCols . '" style="border:none;"></td>';
             echo '<td colspan="' . $payDescCols . '" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
             echo '<td colspan="' . $payAmtCols . '" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
             echo '</tr>';
 
-            // Row 3: Entry to Property content + Payment row 2
+            // Row 3: Entry to Property content (smaller font) + Payment row 2
             echo '<tr>';
             echo '<td style="border:none; width:15pt;"></td>';
-            echo '<td colspan="' . $guidelinesCols . '" style="border-top: none; border-left: 1px solid #9fd99c; border-right: 1px solid #9fd99c; border-bottom: none; font-size:8.5pt; color:#334155; white-space:normal; vertical-align:top; text-align:left; padding: 0px 15px 8px 15px; background-color:#ffffff;">Entry to Alphaland Baguio Mountain Lodges &amp; Balesin Pines will be strictly limited to the guests declared on your confirmed reservation. All members and guests must present a valid government-issued ID at the Alphaland Baguio Mountain Lodges main gate for verification.</td>';
+            echo '<td colspan="' . $guidelinesCols . '" style="border-top: none; border-left: 1px solid #9fd99c; border-right: 1px solid #9fd99c; border-bottom: none; font-size:7.5pt; color:#334155; white-space:normal; vertical-align:top; text-align:left; padding: 0px 15px 8px 15px; background-color:#ffffff;">Entry to Alphaland Baguio Mountain Lodges &amp; Balesin Pines will be strictly limited to the guests declared on your confirmed reservation. All members and guests must present a valid government-issued ID at the Alphaland Baguio Mountain Lodges main gate for verification.</td>';
             echo '<td colspan="' . $spacerCols . '" style="border:none;"></td>';
             echo '<td colspan="' . $payDescCols . '" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
             echo '<td colspan="' . $payAmtCols . '" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
@@ -500,20 +648,22 @@ class BalesinPinesController extends Controller
             // Row 4: Cancellation Policy subtitle + Payment row 3
             echo '<tr>';
             echo '<td style="border:none; width:15pt;"></td>';
-            echo '<td colspan="' . $guidelinesCols . '" style="border-top: none; border-left: 1px solid #9fd99c; border-right: 1px solid #9fd99c; border-bottom: none; font-weight:bold; font-size:9.5pt; color:#1e293b; padding: 5px 15px 2px 15px; text-align: left; background-color:#ffffff;"><u>Cancellation Policy</u></td>';
+            echo '<td colspan="' . $guidelinesCols . '" style="border-top: none; border-left: 1px solid #9fd99c; border-right: 1px solid #9fd99c; border-bottom: none; font-weight:bold; font-size:8.5pt; color:#1e293b; padding: 5px 15px 2px 15px; text-align: left; background-color:#ffffff;"><u>Cancellation Policy</u></td>';
             echo '<td colspan="' . $spacerCols . '" style="border:none;"></td>';
             echo '<td colspan="' . $payDescCols . '" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
             echo '<td colspan="' . $payAmtCols . '" style="border: 1px solid #cbd5e1; background-color: #ffffff; height: 18pt;"></td>';
             echo '</tr>';
 
-            // Row 5: Cancellation Policy content + Balance to settle
+            // Row 5: Cancellation Policy content (smaller font)
             echo '<tr>';
             echo '<td style="border:none; width:15pt;"></td>';
-            echo '<td colspan="' . $guidelinesCols . '" style="border-top: none; border-left: 1px solid #9fd99c; border-right: 1px solid #9fd99c; border-bottom: 1px solid #9fd99c; font-size:8.5pt; color:#334155; white-space:normal; vertical-align:top; text-align:left; padding: 0px 15px 15px 15px; background-color:#ffffff;">Cancellations made within 7 days of the check-in date will result in the forfeiture of the first night\'s accommodation cost. For advance cancellations (entire booking, room, or occupant), any unused payments may be applied to future bookings and food &amp; beverage charges across three Balesin Key locations.</td>';
+            echo '<td colspan="' . $guidelinesCols . '" style="border-top: none; border-left: 1px solid #9fd99c; border-right: 1px solid #9fd99c; border-bottom: 1px solid #9fd99c; font-size:7.5pt; color:#334155; white-space:normal; vertical-align:top; text-align:left; padding: 0px 15px 15px 15px; background-color:#ffffff;">Cancellations made within 7 days of the check-in date will result in the forfeiture of the first night\'s accommodation cost. For advance cancellations (entire booking, room, or occupant), any unused payments may be applied to future bookings and food &amp; beverage charges across three Balesin Key locations.</td>';
             echo '<td colspan="' . $spacerCols . '" style="border:none;"></td>';
-            echo '<td colspan="' . $paymentCols . '" style="border: 1.5pt solid #2d6b2b; background-color: #eef7ee; color: #2d6b2b; font-weight: bold; font-size: 10pt; padding: 6px 10px; text-align: center; vertical-align: middle;">BALANCE TO SETTLE</td>';
+            
+            // BALANCE TO SETTLE with amount
+            echo '<td colspan="' . $payDescCols . '" style="border: 1.5pt solid #2d6b2b; background-color: #eef7ee; color: #2d6b2b; font-weight: bold; font-size: 10pt; padding: 6px 10px; text-align: left; vertical-align: middle;">BALANCE TO SETTLE: </td>';
+            echo '<td colspan="' . $payAmtCols . '" style="border: 1.5pt solid #2d6b2b; background-color: #eef7ee; color: #2d6b2b; font-weight: bold; font-size: 10pt; padding: 6px 10px; text-align: right; vertical-align: middle;" x:fmla="=R[-6]C - SUM(R[-3]C:R[-1]C)">' . number_format($overallGrandTotal, 2) . '</td>';
             echo '</tr>';
-
             echo '</table></body></html>';
         }, 200, [
             'Content-Type'        => 'application/vnd.ms-excel',

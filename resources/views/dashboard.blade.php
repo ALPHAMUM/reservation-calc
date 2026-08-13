@@ -919,22 +919,24 @@
                                 $accSpans = [];
                                 foreach($resGroups as $rn => $rows) {
                                     $count = count($rows);
+                                    // Determine base_pax: Island uses 4 or 8, Pines uses 2, City uses 1
                                     $basePax = 4;
-                                    foreach ($rows as $r) {
-                                        $bp = $r['calculated_rates']['base_pax'] ?? 4;
-                                        if ($bp === 8) {
-                                            $basePax = 8;
-                                            break;
+                                    if ($property === 'pines') {
+                                        $basePax = 2;
+                                    } elseif ($property === 'island') {
+                                        foreach ($rows as $r) {
+                                            $bp = $r['calculated_rates']['base_pax'] ?? 4;
+                                            if ($bp === 8) { $basePax = 8; break; }
                                         }
                                     }
                                     
                                     $curr = 0;
                                     while ($curr < $count) {
                                         $blockStart = $curr;
-                                        // For island: limit block size to unit capacity (basePax). For City/Pines: no grouping, blockSize is 1
-                                        $blockSize = ($property === 'island') ? min($count - $curr, $basePax) : 1;
+                                        // For island & pines: limit block size to unit capacity (basePax). For City: no grouping, blockSize is 1
+                                        $blockSize = ($property === 'island' || $property === 'pines') ? min($count - $curr, $basePax) : 1;
                                         
-                                        if ($property === 'island') {
+                                        if ($property === 'island' || $property === 'pines') {
                                             $groupTotals = [];
                                             foreach($dateCols as $d) {
                                                 $uv = 0;
@@ -945,15 +947,40 @@
                                             }
                                             for ($i = 0; $i < $blockSize; $i++) {
                                                 $span = ($i === 0) ? $blockSize : 0;
-                                                $accSpans[] = [
-                                                    'span' => $span,
-                                                    'totals' => $groupTotals,
-                                                    'group_size' => $blockSize,
-                                                    'has_fvn' => false
-                                                ];
+                                                // For pines: 3rd+ occupant (extra person) always gets their own cell (no merging beyond base_pax)
+                                                // Extra person rate is stored directly in their rate[] array as 3700
+                                                $isExtraPerson = ($property === 'pines' && ($curr + $i) >= 2 && isset($rows[$curr + $i]));
+                                                if ($isExtraPerson) {
+                                                    // Extra person: show their calculated extra person rate (3700 or discounted rate), not the shared group total/FVN
+                                                    $extraTotals = [];
+                                                    foreach ($dateCols as $d) {
+                                                        $uv = (float)($rows[$curr + $i]['calculated_rates']['acc_dates'][$d]['val'] ?? 0);
+                                                        if ($uv == 0) {
+                                                            foreach ($rows[$curr + $i]['rate'] ?? [] as $rt) {
+                                                                if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                                                            }
+                                                        }
+                                                        $extraTotals[$d] = $uv;
+                                                    }
+                                                    $accSpans[] = [
+                                                        'span' => 1,
+                                                        'totals' => $extraTotals,
+                                                        'group_size' => 1,
+                                                        'has_fvn' => false,
+                                                        'is_extra_person' => true
+                                                    ];
+                                                } else {
+                                                    $accSpans[] = [
+                                                        'span' => $span,
+                                                        'totals' => $groupTotals,
+                                                        'group_size' => $blockSize,
+                                                        'has_fvn' => false,
+                                                        'is_extra_person' => false
+                                                    ];
+                                                }
                                             }
                                         } else {
-                                            // Non-island: each passenger has their own rates, no span merging
+                                            // Non-island/pines: each passenger has their own rates, no span merging
                                             $passTotals = [];
                                             foreach ($dateCols as $d) {
                                                 $uv = 0;
@@ -966,7 +993,8 @@
                                                 'span' => 1,
                                                 'totals' => $passTotals,
                                                 'group_size' => 1,
-                                                'has_fvn' => false
+                                                'has_fvn' => false,
+                                                'is_extra_person' => false
                                             ];
                                         }
                                         $curr += $blockSize;
@@ -1020,21 +1048,32 @@
                                             @endphp
                                             <td class="rate-cell" data-date="{{ $date }}" rowspan="{{ $spanInfo['span'] }}" style="vertical-align: middle; text-align: center; cursor: pointer;">
                                                 @if(isset($spanInfo['totals'][$date]))
-                                                    @php $dayRate = (float)($spanInfo['totals'][$date]); @endphp
-                                                    @php $isFvnRate = in_array(round($dayRate, 2), [0.01, 0.02, 0.5]); @endphp
+                                                    @php 
+                                                        $dayRate = (float)($spanInfo['totals'][$date]); 
+                                                        $rounded = round($dayRate, 2);
+                                                        $frac = round($rounded - floor($rounded), 2); // fractional part: 0.01, 0.02, 0.5, or 0
+                                                        $isExtra = $spanInfo['is_extra_person'] ?? false;
+                                                    @endphp
                                                     <div class="stay-block" draggable="true">
-                                                        {{-- Display mode --}}
-                                                        <span class="rate-display {{ $isFvnRate ? 'fvn-display' : '' }}">
-                                                            @if(round($dayRate, 2) == 0.01)
-                                                                1 FVN
-                                                            @elseif(round($dayRate, 2) == 0.02)
-                                                                1.5 FVN
-                                                            @elseif(round($dayRate, 2) == 0.5)
-                                                                .5 FVN
-                                                            @elseif(round($dayRate, 2) == 3700.01)
-                                                                3700.01
+                                                        <span class="rate-display {{ (!$isExtra && in_array($frac, [0.01, 0.02, 0.5])) ? 'fvn-display' : '' }}">
+                                                            @if($isExtra)
+                                                                {{-- Extra person: show rate + "extra" --}}
+                                                                @if($rounded == 3700)
+                                                                    3700.00
+                                                                @else
+                                                                    {{ number_format($rounded, 2) }} extra
+                                                                @endif
                                                             @else
-                                                                {{ number_format($dayRate, 2) }}
+                                                                {{-- Base occupants: check fractional part for FVN --}}
+                                                                @if($frac == 0.01)
+                                                                    1 FVN
+                                                                @elseif($frac == 0.02)
+                                                                    1.5 FVN
+                                                                @elseif($frac == 0.5)
+                                                                    .5 FVN
+                                                                @else
+                                                                    {{ number_format($rounded, 2) }}
+                                                                @endif
                                                             @endif
                                                         </span>
                                                     </div>
@@ -1045,18 +1084,29 @@
                                         @endforeach
                                     @endif
                                           @php
-                                            $spanInfo = $accSpans[$idx] ?? ['span' => 1, 'totals' => [], 'group_size' => 1, 'has_fvn' => false];
+                                            $spanInfo = $accSpans[$idx] ?? ['span' => 1, 'totals' => [], 'group_size' => 1, 'has_fvn' => false, 'is_extra_person' => false];
                                             $groupAccSum = 0;
                                             foreach(($spanInfo['totals'] ?? []) as $gv) {
                                                 $grv = round((float)$gv, 2);
-                                                if ($grv !== 0.01 && $grv !== 0.02 && $grv !== 0.5) {
+                                                $frac = round($grv - floor($grv), 2); // fractional part: .01, .02, .5
+                                                // Exclude FVN rates (fractional parts .01, .02, .5)
+                                                if (!in_array($frac, [0.01, 0.02, 0.5])) {
                                                     $groupAccSum += (float)$gv;
                                                 }
                                             }
                                             $groupSize = max(1, (int)($spanInfo['group_size'] ?? 1));
                                             
                                             $r = $res['calculated_rates'] ?? [];
-                                            $perOccupantAcc = ($property === 'island') ? ($groupAccSum / $groupSize) : ($r['acc'] ?? 0);
+                                            // Island & Pines: distribute shared accommodation across group members
+                                            // Pines extra person: uses their own flat 3700 rate directly
+                                            $isExtraPerson = $spanInfo['is_extra_person'] ?? false;
+                                            if ($property === 'island') {
+                                                $perOccupantAcc = $groupAccSum / $groupSize;
+                                            } elseif ($property === 'pines' && !$isExtraPerson) {
+                                                $perOccupantAcc = $groupAccSum / $groupSize;
+                                            } else {
+                                                $perOccupantAcc = $r['acc'] ?? 0;
+                                            }
                                             
                                             $total = $perOccupantAcc + ($r['air'] ?? 0) + ($r['han'] ?? 0) + ($r['avi'] ?? 0) + ($r['env'] ?? 0);
                                             $baseFees = ($r['air'] ?? 0) + ($r['han'] ?? 0) + ($r['avi'] ?? 0) + ($r['env'] ?? 0);
@@ -1073,6 +1123,8 @@
                     </table>
                     <script>
                         window.__resData = {!! json_encode($resDataForJs ?? []) !!};
+                        window.__property = '{{ $property }}';
+                        window.__accSpans = {!! json_encode(array_map(fn($s) => ['span' => $s['span'], 'group_size' => $s['group_size'], 'is_extra_person' => $s['is_extra_person'] ?? false], $accSpans)) !!};
                     </script>
             </div>
         @else
@@ -1392,7 +1444,8 @@
                         const inp  = cell.find('.rate-input');
                         if (!inp.length) return;
                         const val  = parseFloat(inp.val()) || 0;
-                        const isFvn = (Math.round(val * 100) / 100 === 0.01 || Math.round(val * 100) / 100 === 0.02 || Math.round(val * 100) / 100 === 0.5);
+                        const frac = Math.round((val - Math.floor(val)) * 100) / 100;
+                        const isFvn = (frac === 0.01 || frac === 0.02 || frac === 0.5);
                         if (!isFvn) {
                             groupAccTotal += val;
                         }
@@ -1426,7 +1479,8 @@
                     const inp  = cell.find('.rate-input');
                     if (!inp.length) return;
                     const val  = parseFloat(inp.val()) || 0;
-                    const isFvn = (Math.round(val * 100) / 100 === 0.01 || Math.round(val * 100) / 100 === 0.02 || Math.round(val * 100) / 100 === 0.5);
+                    const frac = Math.round((val - Math.floor(val)) * 100) / 100;
+                    const isFvn = (frac === 0.01 || frac === 0.02 || frac === 0.5);
                     if (!isFvn) {
                         accTotal += val;
                     }
@@ -1707,20 +1761,31 @@
             const res = window.__resData[idx];
             if (!res) return;
 
+            const property = window.__property || 'island';
+            const spanInfo = (window.__accSpans && window.__accSpans[idx]) ? window.__accSpans[idx] : { span: 1, group_size: 1, is_extra_person: false };
+            const isExtraPerson = spanInfo.is_extra_person || false;
+
             // Find all occupants of this reservation group to compute distributed share
             const groupRows = window.__resData.filter(item => (item.resNo || item.conf) === (res.resNo || res.conf));
-            const groupSize = res.group_size || Math.max(1, groupRows.length);
+            const groupSize = isExtraPerson ? 1 : (res.group_size || spanInfo.group_size || Math.max(1, groupRows.length));
             const ratesToUse = res.rate || [];
 
             const privCard = (res.privCard || res.privcard || '').trim();
             const privCardLower = privCard.toLowerCase();
             const isValidCard = privCard !== '' && !['n', 'no', 'false', '0', 'none', 'null'].includes(privCardLower);
 
+            // For pines: determine unit label
+            const unitLabel = res.village_name || 'N/A';
+            let extraPersonNote = '';
+            if (property === 'pines' && isExtraPerson) {
+                extraPersonNote = ' <span style="font-size: 0.7rem; background: rgba(251,191,36,0.2); color: #fbbf24; border-radius: 4px; padding: 2px 6px;">Extra Person</span>';
+            }
+
             let html = `
                 <div style="margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border);">
-                    <div style="font-weight: bold; font-size: 1.25rem; color: var(--primary);">${res.gstName || res.guestName || 'Unknown'}</div>
+                    <div style="font-weight: bold; font-size: 1.25rem; color: var(--primary);">${res.gstName || res.guestName || 'Unknown'}${extraPersonNote}</div>
                     <div style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;">
-                        Reservation <span style="color: white; font-weight: 600;">#${res.resNo || res.conf}</span> | Unit: <span style="color: white; font-weight: 600;">${res.village_name || 'N/A'}</span>
+                        Reservation <span style="color: white; font-weight: 600;">#${res.resNo || res.conf}</span> | Unit: <span style="color: white; font-weight: 600;">${unitLabel}</span>
                         ${res.is_employee ? ' | <span class="badge badge-member" style="font-size: 0.65rem;">Employee</span>' : ''}
                         ${isValidCard ? ` | <span class="badge badge-member" style="font-size: 0.65rem; background: var(--primary); color: black;">${privCard}</span>` : ''}
                     </div>
@@ -1761,22 +1826,30 @@
 
                 const dateStr = r.date;
                 let detailHtml = '';
-                if (b.is_discounted) {
-                    detailHtml = `
-                        <div style="font-size: 0.7rem; color: #4ade80;">- 20% Disc: ₱${discVal.toFixed(2)}</div>
-                        <div style="font-size: 0.7rem; color: var(--text-muted);">+ 10% SC: ₱${scVal.toFixed(2)}</div>
-                        <div style="font-size: 0.7rem; color: #f87171;">VAT EXEMPT</div>
-                    `;
-                } else {
-                    detailHtml = `
-                        <div style="font-size: 0.7rem; color: var(--text-muted);">+ 10% SC: ₱${scVal.toFixed(2)}</div>
-                        <div style="font-size: 0.7rem; color: var(--text-muted);">+ 12% VAT: ₱${vatVal.toFixed(2)}</div>
-                    `;
+
+                // Pines: show SC/VAT/Discount breakdown for base occupants and extra person
+                // Island: full breakdown as before
+                const showBreakdown = (property === 'island' || property === 'pines');
+
+                if (showBreakdown) {
+                    if (b.is_discounted) {
+                        detailHtml = `
+                            <div style="font-size: 0.7rem; color: #4ade80;">- 20% Disc: ₱${discVal.toFixed(2)}</div>
+                            <div style="font-size: 0.7rem; color: var(--text-muted);">+ 10% SC: ₱${scVal.toFixed(2)}</div>
+                            <div style="font-size: 0.7rem; color: #f87171;">VAT EXEMPT</div>
+                        `;
+                    } else {
+                        detailHtml = `
+                            <div style="font-size: 0.7rem; color: var(--text-muted);">+ 10% SC: ₱${scVal.toFixed(2)}</div>
+                            <div style="font-size: 0.7rem; color: var(--text-muted);">+ 12% VAT: ₱${vatVal.toFixed(2)}</div>
+                        `;
+                    }
                 }
 
                 if (isFvn) {
                     const fvnLabelMap = { 0.01: '1', 0.02: '1.5', 0.5: '.5' };
-                    const fvnLabel = fvnLabelMap[b.fvn_rate] || b.fvn_rate;
+                    const numericVal = Math.round(r.val * 100) / 100; // avoid floating‑point quirks
+                    const fvnLabel = fvnLabelMap[numericVal] || numericVal;
                     html += `
                         <tr style="background: rgba(239, 68, 68, 0.1);">
                             <td style="white-space: nowrap; font-weight: 600;">${dateStr}</td>
@@ -1790,6 +1863,22 @@
                             </td>
                         </tr>
                     `;
+                } else if (property === 'pines' && isExtraPerson) {
+                    // Extra person row: show flat 3,700/night rate
+                    html += `
+                        <tr style="background: rgba(251,191,36,0.05);">
+                            <td style="white-space: nowrap; font-weight: 600;">${dateStr}</td>
+                            <td>
+                                <div style="font-weight: 500; color: #fbbf24;">Extra Person Charge${b.is_discounted ? ' <span style="font-size: 0.65rem; color: #4ade80;">(Senior/PWD)</span>' : ''}</div>
+                                <div style="font-size: 0.65rem; color: var(--text-muted);">Base Rate: ₱3,700.00/night</div>
+                            </td>
+                            <td>₱${dailyVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            <td>${showBreakdown ? detailHtml : '-'}</td>
+                            <td style="font-weight: bold; text-align: right; color: #fbbf24;">
+                                ₱${dailyVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                            </td>
+                        </tr>
+                    `;
                 } else {
                     html += `
                         <tr>
@@ -1799,7 +1888,7 @@
                                 <div style="font-size: 0.65rem; color: var(--text-muted);">Gross Share: ₱${grossShareVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
                             </td>
                             <td>₱${baseVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                            <td>${detailHtml}</td>
+                            <td>${showBreakdown ? detailHtml : '-'}</td>
                             <td style="font-weight: bold; text-align: right; color: white;">
                                 ₱${dailyVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                             </td>
@@ -1809,33 +1898,35 @@
 
             });
 
-            // Add other fees
-            const fees = res.calculated_rates || {};
-            const feeItems = [
-                { label: 'Airfare', val: fees.air },
-                { label: 'Hangar Fee', val: fees.han },
-                { label: 'Aviation Operational Fee', val: fees.avi },
-                { label: 'Environmental Fee', val: fees.env }
-            ];
+            // Add other fees — only for Island (Pines has no additional airfare/hangar/aviation/env fees)
+            if (property !== 'pines') {
+                const fees = res.calculated_rates || {};
+                const feeItems = [
+                    { label: 'Airfare', val: fees.air },
+                    { label: 'Hangar Fee', val: fees.han },
+                    { label: 'Aviation Operational Fee', val: fees.avi },
+                    { label: 'Environmental Fee', val: fees.env }
+                ];
 
-            let hasFees = false;
-            feeItems.forEach(f => {
-                if (f.val > 0) {
-                    if (!hasFees) {
-                        html += `<tr><td colspan="5" style="padding: 1rem 0.5rem 0.5rem 0.5rem; color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: none;">Additional Fees</td></tr>`;
-                        hasFees = true;
+                let hasFees = false;
+                feeItems.forEach(f => {
+                    if (f.val > 0) {
+                        if (!hasFees) {
+                            html += `<tr><td colspan="5" style="padding: 1rem 0.5rem 0.5rem 0.5rem; color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: none;">Additional Fees</td></tr>`;
+                            hasFees = true;
+                        }
+                        html += `
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                <td colspan="2">${f.label}</td>
+                                <td></td>
+                                <td></td>
+                                <td style="font-weight: bold; text-align: right; color: white;">₱${parseFloat(f.val).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                            </tr>
+                        `;
+                        overallTotal += parseFloat(f.val);
                     }
-                    html += `
-                        <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                            <td colspan="2">${f.label}</td>
-                            <td></td>
-                            <td></td>
-                            <td style="font-weight: bold; text-align: right; color: white;">₱${parseFloat(f.val).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
-                        </tr>
-                    `;
-                    overallTotal += parseFloat(f.val);
-                }
-            });
+                });
+            }
 
             html += `
                     </tbody>

@@ -49,6 +49,9 @@ class BalesinPinesHandler extends AbstractPropertyHandler
         // Track member unit count per member for 3-unit Member Rate limit rule
         $memberUnitCounts = [];
 
+        // Track occupant index per reservation (to identify extra persons: 3rd+ pax)
+        $resOccupantIndex = [];
+
         foreach ($msgs as &$res) {
             $memNo = trim((string)($res['memberNo'] ?? $res['memNo'] ?? ''));
             if ($memNo !== '') {
@@ -58,24 +61,41 @@ class BalesinPinesHandler extends AbstractPropertyHandler
         unset($res);
 
         foreach ($msgs as &$res) {
-            $memNo = trim((string)($res['memberNo'] ?? $res['memNo'] ?? ''));
+            $memNo     = trim((string)($res['memberNo'] ?? $res['memNo'] ?? ''));
             $unitCount = $memberUnitCounts[$memNo] ?? 1;
+
+            // Determine occupant index within this reservation (0-based)
+            $resNo = trim((string)($res['resNo'] ?? $res['conf'] ?? ''));
+            if (!isset($resOccupantIndex[$resNo])) {
+                $resOccupantIndex[$resNo] = 0;
+            }
+            $occupantIndex = $resOccupantIndex[$resNo]++;
 
             $roomType = $res['roomtyp'] ?? $res['roomType'] ?? '';
             $unitType = $calculator->resolvePinesUnitType($roomType, $res['rateCode'] ?? '');
 
             $res['calculated_rates'] = $calculator->calculatePassengerRates(
                 $res,
-                0,
+                $occupantIndex,
                 $roomType,
-                2,
-                null,
+                2,                // base pax = 2 for Pines
+                $occupantIndex,   // pass actual occupant index so extra person (>=2) is detected
                 0.0,
                 $unitCount
             );
 
             $res['village_name'] = $unitType;
             $res['is_employee']  = false;
+
+            if (isset($res['rate']) && is_array($res['rate'])) {
+                foreach ($res['rate'] as &$r) {
+                    $d = $r['date'] ?? '';
+                    if ($d && isset($res['calculated_rates']['acc_dates'][$d]['breakdown'])) {
+                        $r['breakdown'] = $res['calculated_rates']['acc_dates'][$d]['breakdown'];
+                    }
+                }
+                unset($r);
+            }
 
             $out[] = $res;
         }

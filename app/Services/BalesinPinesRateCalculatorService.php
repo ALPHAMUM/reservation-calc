@@ -27,10 +27,11 @@ class BalesinPinesRateCalculatorService
     public function resolvePinesUnitType(string $roomType = '', string $rateCode = ''): string
     {
         $rt = strtolower($roomType . ' ' . $rateCode);
-        if (str_contains($rt, 'suite') || str_contains($rt, 'js') || str_contains($rt, 'junior')) {
+        if (str_contains($rt, 'suite') || str_contains($rt, 'js') || str_contains($rt, 'junior') || str_contains($rt, 'jrs') ) {
             return 'JUNIOR SUITE';
         }
-        return 'DELUXE ROOM';
+            return 'DELUXE ROOM';
+        
     }
 
     /**
@@ -179,17 +180,48 @@ class BalesinPinesRateCalculatorService
             }
 
             $totalAcc += $finalVal;
+
+            // Compute actual SC / VAT / discount amounts for breakdown modal display
+            if ($isExtraPerson) {
+                $displayBase     = $baseFee;
+                $displayGross    = $baseFee;
+                if ($hasPrivCard) {
+                    $displayVatExempt = round($baseFee / 1.12, 2);
+                    $displayDiscount  = round($displayVatExempt * 0.20, 2);
+                    $displaySc        = round(($displayVatExempt - $displayDiscount) * 0.10, 2);
+                    $displayVat       = 0;
+                } else {
+                    $displayVatExempt = 0;
+                    $displayDiscount  = 0;
+                    $displaySc        = round(($baseFee / 1.22) * 0.10, 2);
+                    $displayVat       = round(($baseFee / 1.22) * 0.12, 2);
+                }
+            } else {
+                $displayGross = $grossVal;
+                if ($hasPrivCard) {
+                    $displayVatExempt = round($individualShare / 1.12, 2);
+                    $displayDiscount  = round($displayVatExempt * 0.20, 2);
+                    $displaySc        = round(($displayVatExempt - $displayDiscount) * 0.10, 2);
+                    $displayVat       = 0;
+                } else {
+                    $displayVatExempt = 0;
+                    $displayDiscount  = 0;
+                    $displaySc        = round(($individualShare / 1.22) * 0.10, 2);
+                    $displayVat       = round(($individualShare / 1.22) * 0.12, 2);
+                }
+            }
+
             $accDates[$date] = [
                 'val'       => $finalVal,
                 'breakdown' => [
-                    'gross_share'   => $grossVal,
+                    'gross_share'   => $displayGross,
                     'is_discounted' => $hasPrivCard,
                     'is_infant'     => false,
                     'divisor'       => $isExtraPerson ? 1 : max(1, min(2, $totalBillable)),
                     'base'          => $finalVal,
-                    'discount'      => $hasPrivCard ? ($vatExemptBase * 0.20) : 0,
-                    'sc'            => $hasPrivCard ? 1 : 0,
-                    'vat'           => $hasPrivCard ? 0 : 12
+                    'discount'      => $hasPrivCard ? ($isExtraPerson ? round(round($baseFee / 1.12, 2) * 0.20, 2) : $displayDiscount) : 0,
+                    'sc'            => $displaySc,
+                    'vat'           => $displayVat,
                 ]
             ];
         }

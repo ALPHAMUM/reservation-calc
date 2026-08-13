@@ -390,38 +390,61 @@
                     @php
                         $span        = $res['acc_span'] ?? 1;
                         $groupTotals = $res['acc_group_totals'] ?? [];
+                        $groupSize   = max(1, (int) ($res['acc_group_size'] ?? 1));
+                        $isExtraPerson = $res['is_extra_person'] ?? false;
 
                         $groupAccSum = 0;
                         foreach ($groupTotals as $gv) {
                             $grv = round((float)$gv, 2);
-                            if ($grv !== 0.01 && $grv !== 0.02 && $grv !== 0.5) {
+                            $frac = round($grv - floor($grv), 2);
+                            if (!in_array($frac, [0.01, 0.02, 0.5])) {
                                 $groupAccSum += (float)$gv;
                             }
                         }
-                        $groupSize = max(1, (int) ($res['acc_group_size'] ?? $span ?? 1));
-                        $perOccupantAcc = $rates['acc'] ?? ($groupAccSum / $groupSize);
-                    @endphp
-                    @if($span > 0)
-                        @foreach($dateCols as $d)
-                            @php
-                                $val = $rates['acc_dates'][$d]['val'] ?? ($groupTotals[$d] ?? 0);
+                        // For base occupants: divide group sum by group size
+                        // For extra persons: use their own total (they have no group sharing)
+                        if ($isExtraPerson) {
+                            // Sum the individual's rates (from calculated_rates or raw rate)
+                            $perOccupantAcc = 0;
+                            foreach ($dateCols as $d) {
+                                $val = $rates['acc_dates'][$d]['val'] ?? 0;
+                                // Exclude any FVN if present (but extra person won't have FVN)
                                 $rv = round($val, 2);
-                                $displayVal = ($val > 0 ? number_format($val, 2) : '');
-                                if ($rv == 0.01)        $displayVal = '1 FVN';
-                                elseif ($rv == 0.02)    $displayVal = '1.5 FVN';
-                                elseif ($rv == 0.5)     $displayVal = '.5 FVN';
-                                elseif ($rv == 3700.01) $displayVal = '3700.01';
-                            @endphp
-                            <td class="num {{ $span > 1 ? 'merged' : '' }}" rowspan="{{ $span }}" style="text-align: center;">{{ $displayVal }}</td>
-                        @endforeach
-                    @endif
+                                $frac = round($rv - floor($rv), 2);
+                                if (!in_array($frac, [0.01, 0.02, 0.5])) {
+                                    $perOccupantAcc += $val;
+                                }
+                            }
+                        } else {
+                            $perOccupantAcc = $groupAccSum / $groupSize;
+                        }
+                    @endphp
+                @if($span > 0)
+    @foreach($dateCols as $d)
+        @php
+            $val = $rates['acc_dates'][$d]['val'] ?? ($groupTotals[$d] ?? 0);
+            $rv = round($val, 2);
+            $frac = round($rv - floor($rv), 2);
+            $displayVal = ($val > 0 ? number_format($val, 2) : '');
+            if ($frac == 0.01)      $displayVal = '1 FVN';
+            elseif ($frac == 0.02)  $displayVal = '1.5 FVN';
+            elseif ($frac == 0.5)   $displayVal = '.5 FVN';
+        @endphp
+        <td class="num {{ $span > 1 ? 'merged' : '' }}"
+            rowspan="{{ $span > 0 ? $span : 1 }}"
+            style="text-align: center;">
+            {{ $displayVal }}
+        </td>
+    @endforeach
+@endif
 
                     @if($span > 0)
                         @foreach($dateCols as $d)
                             @php
                                 $val = $rates['acc_dates'][$d]['val'] ?? ($groupTotals[$d] ?? 0);
                                 $rv  = round($val, 2);
-                                if ($rv !== 0.01 && $rv !== 0.02 && $rv !== 0.5) {
+                                $frac = round($rv - floor($rv), 2);
+                                if (!in_array($frac, [0.01, 0.02, 0.5])) {
                                     $dateTotals[$d] += (float) $val;
                                 }
                             @endphp
@@ -429,7 +452,9 @@
                     @endif
                     @php $accGrandTotal += $perOccupantAcc; @endphp
 
-                    <td style="text-align: center; font-weight: bold;">{{ $perOccupantAcc > 0 ? number_format($perOccupantAcc, 2) : '' }}</td>
+                    <td style="text-align: center; font-weight: bold;">
+                         {{ number_format($perOccupantAcc, 2) }}
+                    </td>
                 </tr>
             @endforeach
 
