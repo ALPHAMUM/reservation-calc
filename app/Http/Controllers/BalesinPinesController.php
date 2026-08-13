@@ -553,7 +553,7 @@ class BalesinPinesController extends Controller
                 // Accommodation cells – merged using rowspan
                 if ($span > 0) {
                     foreach ($dateCols as $d) {
-                        $val = $rates['acc_dates'][$d]['val'] ?? ($groupTotals[$d] ?? 0);
+                        $val = $groupTotals[$d] ?? ($rates['acc_dates'][$d]['val'] ?? 0);
                         $rv  = round($val, 2);
                         $frac = round($rv - floor($rv), 2);
                         if ($frac == 0.01)      $formattedVal = '1 FVN';

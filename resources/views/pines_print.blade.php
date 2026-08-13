@@ -422,7 +422,7 @@
                 @if($span > 0)
     @foreach($dateCols as $d)
         @php
-            $val = $rates['acc_dates'][$d]['val'] ?? ($groupTotals[$d] ?? 0);
+            $val = $groupTotals[$d] ?? ($rates['acc_dates'][$d]['val'] ?? 0);
             $rv = round($val, 2);
             $frac = round($rv - floor($rv), 2);
             $displayVal = ($val > 0 ? number_format($val, 2) : '');
@@ -441,7 +441,7 @@
                     @if($span > 0)
                         @foreach($dateCols as $d)
                             @php
-                                $val = $rates['acc_dates'][$d]['val'] ?? ($groupTotals[$d] ?? 0);
+                                $val = $groupTotals[$d] ?? ($rates['acc_dates'][$d]['val'] ?? 0);
                                 $rv  = round($val, 2);
                                 $frac = round($rv - floor($rv), 2);
                                 if (!in_array($frac, [0.01, 0.02, 0.5])) {
