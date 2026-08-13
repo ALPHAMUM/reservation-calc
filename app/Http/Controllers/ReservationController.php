@@ -142,7 +142,7 @@ class ReservationController extends Controller
 
         if ($memberMetaMap !== null) {
             $memberMetaMap[$c] = [
-                'memberNo' => trim($lr['memberNo'] ?? ''),
+                'memberNo' => trim((string)($lr['memberNo'] ?? $lr['memNo'] ?? $lr['member_no'] ?? $lr['memberno'] ?? $lr['MemberNo'] ?? $lr['mem_no'] ?? '')),
                 'bookDate' => trim($lr['bookDate'] ?? ''),
                 'conactNo' => trim($lr['conactNo'] ?? $lr['contactNo'] ?? ''),
             ];
@@ -370,6 +370,9 @@ class ReservationController extends Controller
         set_time_limit(300);
         if ($request->get('property') === 'pines') {
             return app(BalesinPinesController::class)->index($request);
+        }
+        if ($request->get('property') === 'city') {
+            return app(BalesinCityController::class)->index($request);
         }
 
         $property     = $this->resolvePropertyConfig($request->get('property', 'island'));
@@ -606,6 +609,9 @@ class ReservationController extends Controller
                 $pagedReservations = array_values($all);
 
                 foreach ($pagedReservations as &$res) {
+                    if (empty($res['memberNo'])) {
+                        $res['memberNo'] = trim((string)($res['memNo'] ?? $res['member_no'] ?? $res['memberno'] ?? $res['MemberNo'] ?? $res['mem_no'] ?? ''));
+                    }
                     $roomType = $res['roomtyp'] ?? $res['roomType'] ?? '';
                     $res['village_name'] = $this->getVillageName($roomType);
                     $listRate = is_string($res['rate'] ?? null)
@@ -665,6 +671,12 @@ class ReservationController extends Controller
     public function export(Request $request)
     {
         set_time_limit(0);
+        if ($request->get('property') === 'pines') {
+            return app(BalesinPinesController::class)->export($request);
+        }
+        if ($request->get('property') === 'city') {
+            return app(BalesinCityController::class)->export($request);
+        }
         $this->resolvePropertyConfig($request->get('property', 'island'));
         $resNoList = $request->get('resnolist');
         $fromDate = $request->get('fromdate');
@@ -916,11 +928,13 @@ class ReservationController extends Controller
             $firstContactNo = '';
             $firstBookDate = '';
             foreach ($allRows as $row) {
-                if (!$firstMemberName && !empty($row['res']['customer_name'])) {
-                    $firstMemberName = $row['res']['customer_name'];
+                if (!$firstMemberName) {
+                    $cCandidate = trim((string)($row['res']['customer_name'] ?? $row['res']['custName'] ?? $row['res']['customer'] ?? $row['res']['cust_name'] ?? $row['res']['guestName'] ?? $row['res']['gstName'] ?? ''));
+                    if ($cCandidate !== '') $firstMemberName = $cCandidate;
                 }
-                if (!$firstMemberNo && !empty($row['res']['memberNo'])) {
-                    $firstMemberNo = $row['res']['memberNo'];
+                if (!$firstMemberNo) {
+                    $mCandidate = trim((string)($row['res']['memNo'] ?? $row['res']['memberNo'] ?? $row['res']['member_no'] ?? $row['res']['MemberNo'] ?? $row['res']['memberno'] ?? $row['res']['mem_no'] ?? ''));
+                    if ($mCandidate !== '') $firstMemberNo = $mCandidate;
                 }
                 if (!$firstContactNo && !empty($row['res']['conactNo'])) {
                     $firstContactNo = $row['res']['conactNo'];
@@ -1378,6 +1392,9 @@ class ReservationController extends Controller
         set_time_limit(300);
         if ($request->get('property') === 'pines') {
             return app(BalesinPinesController::class)->print($request);
+        }
+        if ($request->get('property') === 'city') {
+            return app(BalesinCityController::class)->print($request);
         }
         $this->resolvePropertyConfig($request->get('property', 'island'));
         $resNoList = $request->get('resnolist');

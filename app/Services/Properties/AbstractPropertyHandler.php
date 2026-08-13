@@ -169,13 +169,23 @@ abstract class AbstractPropertyHandler
             // Merge list-level member meta fields into each detail record
             foreach ($msgs as &$msg) {
                 $rn = trim($msg['resNo'] ?? $msg['conf'] ?? '');
-                if ($rn !== '' && isset($listMap[$rn])) {
-                    $lr = $listMap[$rn];
-                    if (empty($msg['memberNo']))      $msg['memberNo']      = $lr['memberNo']  ?? '';
-                    if (empty($msg['bookDate']))       $msg['bookDate']      = $lr['bookDate']  ?? '';
-                    if (empty($msg['conactNo']))       $msg['conactNo']      = $lr['conactNo']  ?? '';
-                    if (empty($msg['customer_name']))  $msg['customer_name'] = trim(($lr['custName'] ?? $lr['guestName'] ?? $lr['gstName'] ?? ''));
+                $lr = $listMap[$rn] ?? [];
+
+                $mNo = trim((string)($msg['memNo'] ?? $msg['memberNo'] ?? $msg['member_no'] ?? $lr['memberNo'] ?? $lr['memNo'] ?? $lr['member_no'] ?? $lr['memberno'] ?? $lr['MemberNo'] ?? $lr['mem_no'] ?? ''));
+                if ($mNo !== '') {
+                    $msg['memberNo'] = $mNo;
+                    $msg['memNo']    = $mNo;
                 }
+
+                $cName = trim((string)($msg['custName'] ?? $msg['customer_name'] ?? $msg['customer'] ?? $lr['customer'] ?? $lr['custName'] ?? $lr['guestName'] ?? $lr['gstName'] ?? ''));
+                if ($cName !== '') {
+                    $msg['customer_name'] = $cName;
+                    $msg['customer']      = $cName;
+                    $msg['custName']      = $cName;
+                }
+
+                if (empty($msg['bookDate'])) $msg['bookDate'] = $lr['bookDate'] ?? '';
+                if (empty($msg['conactNo'])) $msg['conactNo'] = $lr['conactNo'] ?? $lr['contactNo'] ?? '';
             }
             unset($msg);
 
@@ -183,6 +193,95 @@ abstract class AbstractPropertyHandler
         }
 
         return $out;
+    }
+
+    /**
+     * Helper to backfill missing/invalid memberNo and custName in list records by calling
+     * the detail API endpoint (getresdetforcalc) for the reservations in listData.
+     */
+    protected function hydrateMemberNumbersFromDetail(array $listData): array
+    {
+        if (empty($listData)) {
+            return [];
+        }
+
+        $resIds = [];
+        $invalidValues = ['n/a', 'na', 'none', 'null', 'false', 'no'];
+
+        foreach ($listData as $res) {
+            $rn = trim((string)($res['resNo'] ?? $res['conf'] ?? $res['res_no'] ?? $res['confNo'] ?? ''));
+            if ($rn !== '') {
+                $resIds[] = $rn;
+                $resIds[] = ltrim($rn, '0');
+            }
+        }
+
+        $resIds = array_unique(array_filter($resIds));
+        if (empty($resIds)) {
+            return $listData;
+        }
+
+        $chunks = array_chunk($resIds, 25);
+        $memNoMap    = [];
+        $custNameMap = [];
+
+        foreach ($chunks as $chunk) {
+            try {
+                $resp = Http::withHeaders(['Authorization' => $this->apiKey])
+                    ->withoutVerifying()
+                    ->timeout(15)
+                    ->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
+
+                if ($resp->successful()) {
+                    $msgs = $resp->json()['msg'] ?? [];
+                    foreach ($msgs as $msg) {
+                        $rn = trim((string)($msg['resNo'] ?? $msg['conf'] ?? $msg['res_no'] ?? $msg['confNo'] ?? ''));
+                        if ($rn === '') continue;
+
+                        $mNo = trim((string)($msg['memNo'] ?? $msg['memberNo'] ?? $msg['member_no'] ?? $msg['MemberNo'] ?? $msg['memberno'] ?? $msg['mem_no'] ?? ''));
+                        $mNoLower = strtolower($mNo);
+
+                        if ($mNo !== '' && !in_array($mNoLower, $invalidValues)) {
+                            $memNoMap[$rn] = $mNo;
+                            $memNoMap[ltrim($rn, '0')] = $mNo;
+                        }
+
+                        $cName = trim((string)($msg['custName'] ?? $msg['customer_name'] ?? $msg['customer'] ?? $msg['cust_name'] ?? ''));
+                        if ($cName !== '') {
+                            $custNameMap[$rn] = $cName;
+                            $custNameMap[ltrim($rn, '0')] = $cName;
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                // Ignore API errors during background hydration
+            }
+        }
+
+        foreach ($listData as &$res) {
+            $rn = trim((string)($res['resNo'] ?? $res['conf'] ?? $res['res_no'] ?? $res['confNo'] ?? ''));
+            $unpaddedRn = ltrim($rn, '0');
+
+            $mNo = trim((string)($res['memberNo'] ?? $res['memNo'] ?? $res['member_no'] ?? $res['memberno'] ?? $res['MemberNo'] ?? $res['mem_no'] ?? ''));
+            $mNoLower = strtolower($mNo);
+            $isValidMNo = $mNo !== '' && !in_array($mNoLower, $invalidValues);
+
+            // If existing memberNo is invalid/empty, update it from detail map
+            if (!$isValidMNo && (isset($memNoMap[$rn]) || isset($memNoMap[$unpaddedRn]))) {
+                $validMNo = $memNoMap[$rn] ?? $memNoMap[$unpaddedRn];
+                $res['memberNo'] = $validMNo;
+                $res['memNo']    = $validMNo;
+            }
+
+            if ((empty($res['custName']) || empty($res['customer'])) && (isset($custNameMap[$rn]) || isset($custNameMap[$unpaddedRn]))) {
+                $validCName = $custNameMap[$rn] ?? $custNameMap[$unpaddedRn];
+                $res['custName'] = $validCName;
+                if (empty($res['customer'])) $res['customer'] = $validCName;
+            }
+        }
+        unset($res);
+
+        return $listData;
     }
 
     // ──────────────────────────────────────────────────────────────────

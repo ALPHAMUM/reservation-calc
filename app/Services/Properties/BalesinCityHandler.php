@@ -24,8 +24,13 @@ class BalesinCityHandler extends AbstractPropertyHandler
 
     protected function processListData(array $listData): array
     {
+        $listData = $this->hydrateMemberNumbersFromDetail($listData);
+
         $out = [];
         foreach ($listData as $res) {
+            if (empty($res['memberNo'])) {
+                $res['memberNo'] = trim((string)($res['memNo'] ?? $res['member_no'] ?? $res['memberno'] ?? $res['MemberNo'] ?? $res['mem_no'] ?? ''));
+            }
             $out[] = $res;
         }
         return $out;

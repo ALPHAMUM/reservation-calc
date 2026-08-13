@@ -848,8 +848,14 @@
                 $detBookDate  = '';
                 $detContactNo = '';
                 foreach ($reservations as $_r) {
-                    if (!$detMemberName && !empty($_r['customer_name'])) $detMemberName = $_r['customer_name'];
-                    if (!$detMemberNo  && !empty($_r['memberNo']))       $detMemberNo  = $_r['memberNo'];
+                    if (!$detMemberName) {
+                        $cCandidate = trim((string)($_r['customer_name'] ?? $_r['custName'] ?? $_r['customer'] ?? $_r['cust_name'] ?? $_r['guestName'] ?? $_r['gstName'] ?? ''));
+                        if ($cCandidate !== '') $detMemberName = $cCandidate;
+                    }
+                    if (!$detMemberNo) {
+                        $mCandidate = trim((string)($_r['memNo'] ?? $_r['memberNo'] ?? $_r['member_no'] ?? $_r['MemberNo'] ?? $_r['memberno'] ?? $_r['mem_no'] ?? ''));
+                        if ($mCandidate !== '') $detMemberNo = $mCandidate;
+                    }
                     if (!$detBookDate  && !empty($_r['bookDate']))        $detBookDate  = $_r['bookDate'];
                     if (!$detContactNo && !empty($_r['conactNo']))        $detContactNo = $_r['conactNo'];
                     elseif (!$detContactNo && !empty($_r['contactNo']))   $detContactNo = $_r['contactNo'];
@@ -860,6 +866,9 @@
                 if ($detBookDate) {
                     try { $detBookDateFormatted = (new \DateTime($detBookDate))->format('l, d F Y'); } catch (\Exception $e) { $detBookDateFormatted = $detBookDate; }
                 }
+                $detMemNoClean = trim((string)$detMemberNo);
+                $detMemNoLower = strtolower($detMemNoClean);
+                $hasDetMemberNo = $detMemNoClean !== '' && !in_array($detMemNoLower, ['n/a', 'na', 'none', 'null', '0', 'false', 'no']);
             @endphp
             @if($detMemberName || $detMemberNo || $detBookDate || $detContactNo)
             <div style="margin-bottom: 1rem;">
@@ -869,10 +878,14 @@
                 </div>
                 @endif
                 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;">
-                    @if($detMemberNo)
-                    <a href="{{ route('member.search', ['member_no' => $detMemberNo]) }}" title="View Member Reservation Filter for {{ $detMemberNo }}" style="font-size: 0.8rem; font-family: monospace; font-weight: 700; color: #818cf8; letter-spacing: 0.04em; text-decoration: none; display: inline-flex; align-items: center; gap: 0.25rem;">
+                    @if($hasDetMemberNo)
+                    <a href="{{ route('member.search', ['member_no' => $detMemberNo]) }}" target="_blank" title="View Member Reservation Filter for {{ $detMemberNo }}" style="font-size: 0.8rem; font-family: monospace; font-weight: 700; color: #818cf8; letter-spacing: 0.04em; text-decoration: none; display: inline-flex; align-items: center; gap: 0.25rem;">
                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>{{ $detMemberNo }}
                     </a>
+                    @elseif($detMemberNo)
+                    <span style="font-size: 0.8rem; font-family: monospace; font-weight: 700; color: var(--text-muted); letter-spacing: 0.04em;">
+                        {{ $detMemberNo }}
+                    </span>
                     @endif
                     @if($detBookDateFormatted)
                     <span style="font-size: 0.75rem; color: var(--text-muted);">·</span>
@@ -1149,11 +1162,14 @@
                             @php
                                 $currentResNo = $res['resNo'] ?? $res['conf'] ?? null;
                                 $memNo = trim((string) (
-                                    $res['memberNo']  ??
-                                    $res['memNo']     ??
-                                    $res['member_no'] ??
-                                    $res['memberno']  ??
-                                    $res['MemberNo']  ??
+                                    $res['memberNo']    ??
+                                    $res['memNo']       ??
+                                    $res['member_no']   ??
+                                    $res['memberno']    ??
+                                    $res['MemberNo']    ??
+                                    $res['mem_no']      ??
+                                    $res['custNo']      ??
+                                    $res['customer_no'] ??
                                     ''
                                 ));
                                 $memNoLower = strtolower($memNo);
@@ -1175,13 +1191,19 @@
                                     @endif
                                 </td>
                                 <td>
-                                    <div>{{ $res['gstName'] ?? $res['guestName'] ?? $res['custName'] ?? $res['customer'] ?? 'Unknown' }}</div>
-                                    @if($res['custName'] ?? $res['customer'] ?? null)
-                                        <div style="font-size: 0.75rem; color: var(--text-muted)">{{ $res['custName'] ?? $res['customer'] }}</div>
+                                    @php
+                                        $primaryName = $res['gstName'] ?? $res['guestName'] ?? $res['custName'] ?? $res['customer'] ?? $res['customer_name'] ?? 'Unknown';
+                                        $secondaryName = $res['custName'] ?? $res['customer'] ?? $res['customer_name'] ?? null;
+                                        $showSecondary = $secondaryName && strtolower(trim($secondaryName)) !== strtolower(trim($primaryName));
+                                    @endphp
+                                    <div>{{ $primaryName }}</div>
+                                    @if($showSecondary)
+                                        <div style="font-size: 0.75rem; color: var(--text-muted)">{{ $secondaryName }}</div>
                                     @endif
                                     @if($hasMemberNo)
                                         <div style="margin-top: 0.25rem;">
                                             <a href="{{ route('member.search', ['member_no' => $memNo]) }}" 
+                                               target="_blank"
                                                title="View Member Reservation Filter for {{ $memNo }}" 
                                                style="font-size: 0.75rem; font-family: monospace; color: #818cf8; text-decoration: none; display: inline-flex; align-items: center; gap: 0.25rem; font-weight: 600;"
                                                onmouseover="this.style.textDecoration='underline'"

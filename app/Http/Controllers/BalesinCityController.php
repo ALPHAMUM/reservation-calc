@@ -89,7 +89,36 @@ class BalesinCityController extends Controller
                 }
 
                 $calculator = app(\App\Services\BalesinCityRateCalculatorService::class);
+                
+                // Build list lookup map if listData is available
+                $listMap = [];
+                if (!empty($listData)) {
+                    foreach ($listData as $lr) {
+                        $k = trim($lr['resNo'] ?? $lr['conf'] ?? '');
+                        if ($k !== '') $listMap[$k] = $lr;
+                    }
+                }
+
                 foreach ($rawDetail as $res) {
+                    $resNo = trim((string)($res['resNo'] ?? $res['conf'] ?? ''));
+                    $lr = $listMap[$resNo] ?? [];
+
+                    $mNo = trim((string)($res['memNo'] ?? $res['memberNo'] ?? $res['member_no'] ?? $lr['memberNo'] ?? $lr['memNo'] ?? $lr['member_no'] ?? $lr['memberno'] ?? $lr['MemberNo'] ?? $lr['mem_no'] ?? ''));
+                    if ($mNo !== '') {
+                        $res['memberNo'] = $mNo;
+                        $res['memNo']    = $mNo;
+                    }
+
+                    $cName = trim((string)($res['custName'] ?? $res['customer_name'] ?? $res['customer'] ?? $lr['customer'] ?? $lr['custName'] ?? $lr['guestName'] ?? $lr['gstName'] ?? ''));
+                    if ($cName !== '') {
+                        $res['customer_name'] = $cName;
+                        $res['customer']      = $cName;
+                        $res['custName']      = $cName;
+                    }
+
+                    if (empty($res['bookDate'])) $res['bookDate'] = $lr['bookDate'] ?? '';
+                    if (empty($res['conactNo'])) $res['conactNo'] = $lr['conactNo'] ?? $lr['contactNo'] ?? '';
+
                     $roomType                = $res['roomtyp'] ?? $res['roomType'] ?? '';
                     $unitType                = $calculator->resolveCityUnitType($roomType, $res['rateCode'] ?? '');
                     $res['calculated_rates'] = $calculator->getPassThroughRates($res);
@@ -203,9 +232,15 @@ class BalesinCityController extends Controller
         $firstContactNo  = '';
         $firstBookDate   = '';
         foreach ($reservations as $res) {
-            if (!$firstMemberName && !empty($res['customer_name']))   $firstMemberName = $res['customer_name'];
-            if (!$firstMemberNo   && !empty($res['memberNo']))         $firstMemberNo   = $res['memberNo'];
-            if (!$firstContactNo  && !empty($res['conactNo']))         $firstContactNo  = (string)$res['conactNo'];
+            if (!$firstMemberName) {
+                $cCandidate = trim((string)($res['customer_name'] ?? $res['custName'] ?? $res['customer'] ?? $res['cust_name'] ?? $res['guestName'] ?? $res['gstName'] ?? ''));
+                if ($cCandidate !== '') $firstMemberName = $cCandidate;
+            }
+            if (!$firstMemberNo) {
+                $mCandidate = trim((string)($res['memNo'] ?? $res['memberNo'] ?? $res['member_no'] ?? $res['MemberNo'] ?? $res['memberno'] ?? $res['mem_no'] ?? ''));
+                if ($mCandidate !== '') $firstMemberNo = $mCandidate;
+            }
+            if (!$firstContactNo && !empty($res['conactNo']))         $firstContactNo  = (string)$res['conactNo'];
             elseif (!$firstContactNo && !empty($res['contactNo']))     $firstContactNo  = (string)$res['contactNo'];
             if (!$firstBookDate   && !empty($res['bookDate']))         $firstBookDate   = $res['bookDate'];
         }

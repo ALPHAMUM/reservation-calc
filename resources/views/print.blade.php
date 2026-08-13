@@ -245,11 +245,17 @@
         foreach ($reservations as $r) {
             $rn = trim((string)($r['resNo'] ?? $r['conf'] ?? ''));
             $resGroupCounts[$rn] = ($resGroupCounts[$rn] ?? 0) + 1;
-            if (!$firstMemberName && !empty($r['customer_name'])) {
-                $firstMemberName = $r['customer_name'];
+            if (!$firstMemberName) {
+                $cCandidate = trim((string)($r['customer_name'] ?? $r['custName'] ?? $r['customer'] ?? $r['cust_name'] ?? $r['guestName'] ?? $r['gstName'] ?? ''));
+                if ($cCandidate !== '') {
+                    $firstMemberName = $cCandidate;
+                }
             }
-            if (!$firstMemberNo && !empty($r['memberNo'])) {
-                $firstMemberNo = $r['memberNo'];
+            if (!$firstMemberNo) {
+                $mNoCandidate = trim((string)($r['memNo'] ?? $r['memberNo'] ?? $r['member_no'] ?? $r['MemberNo'] ?? $r['memberno'] ?? $r['mem_no'] ?? ''));
+                if ($mNoCandidate !== '') {
+                    $firstMemberNo = $mNoCandidate;
+                }
             }
             if (!$firstContactNo && !empty($r['conactNo'])) {
                 $firstContactNo = (string)$r['conactNo'];
@@ -260,6 +266,10 @@
                 $firstBookDate = $r['bookDate'];
             }
         }
+
+        $firstMemNoClean = trim((string)$firstMemberNo);
+        $firstMemNoLower = strtolower($firstMemNoClean);
+        $hasValidMemberNo = $firstMemNoClean !== '' && !in_array($firstMemNoLower, ['n/a', 'na', 'none', 'null', '0', 'false', 'no']);
 
         $formattedBookDate = '';
         if ($firstBookDate) {
@@ -284,7 +294,15 @@
             </tr>
             <tr>
                 <td style="font-weight: bold; background-color: #dbeafe; border: 1px solid #cbd5e1; padding: 5px; text-align: center;">MEMBERSHIP NUMBER:</td>
-                <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;">{{ $firstMemberNo }}</td>
+                <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;">
+                    @if($hasValidMemberNo)
+                        <a href="{{ route('member.search', ['member_no' => $firstMemberNo]) }}" target="_blank" title="View Member Reservation Filter for {{ $firstMemberNo }}" style="color: inherit; text-decoration: underline;">
+                            {{ $firstMemberNo }}
+                        </a>
+                    @else
+                        {{ $firstMemberNo ?: 'N/A' }}
+                    @endif
+                </td>
                 <td colspan="{{ count($dateCols) + 5 }}" style="border: none;"></td>
             </tr>
             <tr>
