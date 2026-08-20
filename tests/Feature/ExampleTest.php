@@ -14,6 +14,9 @@ class ExampleTest extends TestCase
      */
     public function test_example()
     {
+        \Illuminate\Support\Facades\Http::fake([
+            '*' => \Illuminate\Support\Facades\Http::response(['msg' => []], 200),
+        ]);
         $response = $this->get('/');
 
         $response->assertStatus(200);

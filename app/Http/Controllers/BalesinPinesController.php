@@ -533,29 +533,7 @@ class BalesinPinesController extends Controller
                 $groupSize   = max(1, (int) ($res['acc_group_size'] ?? 1));
                 $isExtraPerson = $res['is_extra_person'] ?? false;
 
-                // Compute groupAccSum excluding FVN
-                $groupAccSum = 0;
-                foreach ($groupTotals as $gv) {
-                    $grv = round((float)$gv, 2);
-                    $frac = round($grv - floor($grv), 2);
-                    if (!in_array($frac, [0.01, 0.02, 0.5])) {
-                        $groupAccSum += (float)$gv;
-                    }
-                }
-
-                if ($isExtraPerson) {
-                    $perOccupantAcc = 0;
-                    foreach ($dateCols as $d) {
-                        $val = $rates['acc_dates'][$d]['val'] ?? 0;
-                        $rv = round($val, 2);
-                        $frac = round($rv - floor($rv), 2);
-                        if (!in_array($frac, [0.01, 0.02, 0.5])) {
-                            $perOccupantAcc += $val;
-                        }
-                    }
-                } else {
-                    $perOccupantAcc = ($groupSize > 0) ? ($groupAccSum / $groupSize) : 0;
-                }
+                $perOccupantAcc = $rates['acc'] ?? 0;
 
                 $accGrandTotal += $perOccupantAcc;
 
@@ -587,17 +565,22 @@ class BalesinPinesController extends Controller
                 if ($span > 0) {
                     foreach ($dateCols as $d) {
                         $val = $groupTotals[$d] ?? ($rates['acc_dates'][$d]['val'] ?? 0);
-                        $rv  = round($val, 2);
+                        $rv = round($val, 2);
                         $frac = round($rv - floor($rv), 2);
+                        $integerPart = floor($rv);
                         if ($frac == 0.01)      $formattedVal = '1 FVN';
                         elseif ($frac == 0.02)  $formattedVal = '1.5 FVN';
-                        elseif ($frac == 0.5)   $formattedVal = '.5 FVN';
+                        elseif ($frac == 0.03)  $formattedVal = ($integerPart > 0) ? number_format($integerPart, 2) . '<br>.5 FVN' : '.5 FVN';
                         else                    $formattedVal = ($val > 0 ? number_format($val, 2) : '');
 
                         echo '<td class="num" rowspan="' . $span . '" style="text-align: center;">' . $formattedVal . '</td>';
 
-                        if (!in_array($frac, [0.01, 0.02, 0.5])) {
+                        if (!in_array($frac, [0.01, 0.02, 0.03])) {
                             $dateTotals[$d] += (float) $val;
+                        } else {
+                            if ($frac == 0.03) {
+                                $dateTotals[$d] += floor($val);
+                            }
                         }
                     }
                 }

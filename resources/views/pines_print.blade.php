@@ -411,31 +411,8 @@
                         $groupSize   = max(1, (int) ($res['acc_group_size'] ?? 1));
                         $isExtraPerson = $res['is_extra_person'] ?? false;
 
-                        $groupAccSum = 0;
-                        foreach ($groupTotals as $gv) {
-                            $grv = round((float)$gv, 2);
-                            $frac = round($grv - floor($grv), 2);
-                            if (!in_array($frac, [0.01, 0.02, 0.5])) {
-                                $groupAccSum += (float)$gv;
-                            }
-                        }
-                        // For base occupants: divide group sum by group size
-                        // For extra persons: use their own total (they have no group sharing)
-                        if ($isExtraPerson) {
-                            // Sum the individual's rates (from calculated_rates or raw rate)
-                            $perOccupantAcc = 0;
-                            foreach ($dateCols as $d) {
-                                $val = $rates['acc_dates'][$d]['val'] ?? 0;
-                                // Exclude any FVN if present (but extra person won't have FVN)
-                                $rv = round($val, 2);
-                                $frac = round($rv - floor($rv), 2);
-                                if (!in_array($frac, [0.01, 0.02, 0.5])) {
-                                    $perOccupantAcc += $val;
-                                }
-                            }
-                        } else {
-                            $perOccupantAcc = $groupAccSum / $groupSize;
-                        }
+                        // $groupAccSum and $groupSize remain defined for the merged cell, but we use the calculator's result for per-occupant total
+                        $perOccupantAcc = $rates['acc'] ?? 0;
                     @endphp
                 @if($span > 0)
     @foreach($dateCols as $d)
@@ -443,10 +420,11 @@
             $val = $groupTotals[$d] ?? ($rates['acc_dates'][$d]['val'] ?? 0);
             $rv = round($val, 2);
             $frac = round($rv - floor($rv), 2);
-            $displayVal = ($val > 0 ? number_format($val, 2) : '');
+            $integerPart = floor($rv);
             if ($frac == 0.01)      $displayVal = '1 FVN';
             elseif ($frac == 0.02)  $displayVal = '1.5 FVN';
-            elseif ($frac == 0.5)   $displayVal = '.5 FVN';
+            elseif ($frac == 0.03)  $displayVal = ($integerPart > 0) ? number_format($integerPart, 2) . '<br><span style="font-size: 8px;">.5 FVN</span>' : '.5 FVN';
+            else                    $displayVal = ($val > 0 ? number_format($val, 2) : '');
         @endphp
         <td class="num {{ $span > 1 ? 'merged' : '' }}"
             rowspan="{{ $span > 0 ? $span : 1 }}"
@@ -462,8 +440,12 @@
                                 $val = $groupTotals[$d] ?? ($rates['acc_dates'][$d]['val'] ?? 0);
                                 $rv  = round($val, 2);
                                 $frac = round($rv - floor($rv), 2);
-                                if (!in_array($frac, [0.01, 0.02, 0.5])) {
+                                if (!in_array($frac, [0.01, 0.02, 0.03])) {
                                     $dateTotals[$d] += (float) $val;
+                                } else {
+                                    if ($frac == 0.03) {
+                                        $dateTotals[$d] += floor($val);
+                                    }
                                 }
                             @endphp
                         @endforeach

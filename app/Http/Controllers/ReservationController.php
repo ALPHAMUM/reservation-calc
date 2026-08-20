@@ -440,6 +440,42 @@ class ReservationController extends Controller
                 $paxIndices = [];
                 $occupantIndices = [];
                 $reservationPaxCounts = [];
+
+                // Parse SC/PWD override: "resNo:occupantIdx" comma-separated pairs
+                $scOverrideRaw = $request->get('sc_override', '');
+                $scOverrideMap = [];
+                if ($scOverrideRaw) {
+                    foreach (explode(',', $scOverrideRaw) as $pair) {
+                        $parts = explode(':', trim($pair));
+                        if (count($parts) === 2) {
+                            $scOverrideMap[trim($parts[0])][] = (int) $parts[1];
+                        }
+                    }
+                }
+
+                // Parse SC/PWD remove: strip discount from API SC/PWD guests
+                $scRemoveRaw = $request->get('sc_remove', '');
+                $scRemoveMap = [];
+                if ($scRemoveRaw) {
+                    foreach (explode(',', $scRemoveRaw) as $pair) {
+                        $parts = explode(':', trim($pair));
+                        if (count($parts) === 2) {
+                            $scRemoveMap[trim($parts[0])][] = (int) $parts[1];
+                        }
+                    }
+                }
+
+                // Parse SC/PWD target mode: "resNo:occupantIdx:mode" (air|villa|both|none)
+                $scTargetRaw = $request->get('sc_target', '');
+                $scTargetMap = [];
+                if ($scTargetRaw) {
+                    foreach (explode(',', $scTargetRaw) as $pair) {
+                        $parts = explode(':', trim($pair));
+                        if (count($parts) === 3) {
+                            $scTargetMap[trim($parts[0])][(int) $parts[1]] = strtolower(trim($parts[2]));
+                        }
+                    }
+                }
                 foreach ($chunks as $chunk) {
                     $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                         ->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
@@ -534,9 +570,35 @@ class ReservationController extends Controller
                         $res['roomtyp'] = $roomType;
                         $res['roomType'] = $roomType;
                         $totalBillable = $reservationPaxCounts[$resNo] ?? 1;
+                        $res['occupant_idx'] = $occupantIndex;
+
+                        // Apply SC/PWD target mode or override/remove if requested for this occupant
+                        $resForCalc = $res;
+                        $targetMode = $scTargetMap[$resNo][$occupantIndex] ?? null;
+                        if ($targetMode !== null) {
+                            $resForCalc['sc_target_villa'] = in_array($targetMode, ['villa', 'both'], true);
+                            $resForCalc['sc_target_air']   = in_array($targetMode, ['air', 'both'], true);
+                            $resForCalc['sc_mode']         = $targetMode;
+                        } else {
+                            if (isset($scOverrideMap[$resNo]) && in_array($occupantIndex, $scOverrideMap[$resNo], true)) {
+                                $resForCalc['privCard'] = 'Senior Citizen';
+                                $resForCalc['sc_target_villa'] = true;
+                                $resForCalc['sc_target_air']   = true;
+                                $resForCalc['sc_mode']         = 'both';
+                            }
+                            if (isset($scRemoveMap[$resNo]) && in_array($occupantIndex, $scRemoveMap[$resNo], true)) {
+                                $resForCalc['privCard'] = 'N';
+                                $resForCalc['sc_target_villa'] = false;
+                                $resForCalc['sc_target_air']   = false;
+                                $resForCalc['sc_mode']         = 'none';
+                            }
+                        }
+                        $res['sc_target_villa'] = $resForCalc['sc_target_villa'] ?? null;
+                        $res['sc_target_air']   = $resForCalc['sc_target_air']   ?? null;
+                        $res['sc_mode']         = $resForCalc['sc_mode']         ?? null;
 
                         $res['calculated_rates'] = $calculator->calculatePassengerRates(
-                            $res,
+                            $resForCalc,
                             $paxIndex,
                             $roomType,
                             $totalBillable,
@@ -562,6 +624,11 @@ class ReservationController extends Controller
                         $res['village_name'] = $this->getVillageName($roomType);
                         $this->applyUnitTypeLabel($res, $resUnitTypes[$resNo] ?? 'VILLA');
                         $res['nationality_name'] = $this->getNationalityName($res['nationality'] ?? '');
+                        // Mark infants/young children so the dashboard skips their accommodation
+                        $resAgeRaw = $res['age'] ?? null;
+                        $resGstTypeLow = strtolower($res['gstType'] ?? '');
+                        $resAgeInt = ($resAgeRaw !== null && $resAgeRaw !== '') ? (int)$resAgeRaw : 99;
+                        $res['is_infant'] = str_contains($resGstTypeLow, 'infant') || ($resAgeRaw !== null && $resAgeRaw !== '' && $resAgeInt >= 0 && $resAgeInt <= 1);
                     }
                     unset($res); // Fix reference leak
                     $reservations = array_merge($reservations, $msgs);
@@ -665,6 +732,9 @@ class ReservationController extends Controller
             'error'        => $error,
             'settings'     => $settings,
             'property'     => $property,
+            'scOverrideRaw' => $scOverrideRaw ?? '',
+            'scRemoveRaw'   => $scRemoveRaw ?? '',
+            'scTargetRaw'   => $scTargetRaw ?? '',
         ]);
     }
 
@@ -776,6 +846,42 @@ class ReservationController extends Controller
         $allDates = [];
         $calculator = app(\App\Services\RateCalculatorService::class);
 
+        // Parse SC/PWD override: "resNo:occupantIdx" comma-separated pairs
+        $scOverrideRaw = $request->get('sc_override', '');
+        $scOverrideMap = [];
+        if ($scOverrideRaw) {
+            foreach (explode(',', $scOverrideRaw) as $pair) {
+                $parts = explode(':', trim($pair));
+                if (count($parts) === 2) {
+                    $scOverrideMap[trim($parts[0])][] = (int) $parts[1];
+                }
+            }
+        }
+
+        // Parse SC/PWD remove: strip discount from API SC/PWD guests
+        $scRemoveRaw = $request->get('sc_remove', '');
+        $scRemoveMap = [];
+        if ($scRemoveRaw) {
+            foreach (explode(',', $scRemoveRaw) as $pair) {
+                $parts = explode(':', trim($pair));
+                if (count($parts) === 2) {
+                    $scRemoveMap[trim($parts[0])][] = (int) $parts[1];
+                }
+            }
+        }
+
+        // Parse SC/PWD target mode: "resNo:occupantIdx:mode" (air|villa|both|none)
+        $scTargetRaw = $request->get('sc_target', '');
+        $scTargetMap = [];
+        if ($scTargetRaw) {
+            foreach (explode(',', $scTargetRaw) as $pair) {
+                $parts = explode(':', trim($pair));
+                if (count($parts) === 3) {
+                    $scTargetMap[trim($parts[0])][(int) $parts[1]] = strtolower(trim($parts[2]));
+                }
+            }
+        }
+
         $paxIndices = [];
         $occupantIndices = [];
         $reservationPaxCounts = [];
@@ -865,8 +971,27 @@ class ReservationController extends Controller
                     $occupantIndex = $occupantIndices[$resNo];
                     $totalBillable = $reservationPaxCounts[$resNo] ?? 1;
 
+                    // Apply SC/PWD target mode or override/remove if requested for this occupant
+                    $resForCalc = $res;
+                    $targetMode = $scTargetMap[$resNo][$occupantIndex] ?? null;
+                    if ($targetMode !== null) {
+                        $resForCalc['sc_target_villa'] = in_array($targetMode, ['villa', 'both'], true);
+                        $resForCalc['sc_target_air']   = in_array($targetMode, ['air', 'both'], true);
+                    } else {
+                        if (isset($scOverrideMap[$resNo]) && in_array($occupantIndex, $scOverrideMap[$resNo], true)) {
+                            $resForCalc['privCard'] = 'Senior Citizen';
+                            $resForCalc['sc_target_villa'] = true;
+                            $resForCalc['sc_target_air']   = true;
+                        }
+                        if (isset($scRemoveMap[$resNo]) && in_array($occupantIndex, $scRemoveMap[$resNo], true)) {
+                            $resForCalc['privCard'] = 'N';
+                            $resForCalc['sc_target_villa'] = false;
+                            $resForCalc['sc_target_air']   = false;
+                        }
+                    }
+
                     $calcResult = $calculator->calculatePassengerRates(
-                        $res,
+                        $resForCalc,
                         $paxIndex,
                         $roomType,
                         $totalBillable,
@@ -1084,12 +1209,43 @@ class ReservationController extends Controller
                      $span = $mergeLimit - $startIdx;
                      $i = $mergeLimit;
 
+                     // ── Detect whether ANY base occupant in this block has a Villa SC/PWD discount ──
+                     $hasAnyVillaScInBlock = false;
                      for ($k = $startIdx; $k < $mergeLimit; $k++) {
-                         $rows[$k]['accRowSpan'] = ($k === $startIdx) ? $span : 0;
-                         $rows[$k]['accGroupSize'] = $span;
-                         $rows[$k]['accGroupTotals'] = [];
-                         foreach ($dateCols as $d) {
-                             $rows[$k]['accGroupTotals'][$d] = (float) ($rows[$startIdx]['rateDates'][$d] ?? 0);
+                         $isExtra = ($rows[$k]['res']['is_extra_person'] ?? false) || ($k >= $basePax);
+                         if (!$isExtra) {
+                             $hasVillaSc = (bool) ($rows[$k]['res']['sc_target_villa'] ?? false);
+                             if (!$hasVillaSc && isset($rows[$k]['res']['sc_mode'])) {
+                                 $hasVillaSc = in_array($rows[$k]['res']['sc_mode'], ['villa', 'both'], true);
+                             }
+                             if ($hasVillaSc) {
+                                 $hasAnyVillaScInBlock = true;
+                                 break;
+                             }
+                         }
+                     }
+
+                     for ($k = $startIdx; $k < $mergeLimit; $k++) {
+                         if ($hasAnyVillaScInBlock) {
+                             // UNSPAN: Give every occupant row its own cell with per-person rate
+                             $rows[$k]['accRowSpan'] = 1;
+                             $rows[$k]['accGroupSize'] = 1;
+                             $rows[$k]['accGroupTotals'] = [];
+                             foreach ($dateCols as $d) {
+                                 $uv = (float) ($rows[$k]['res']['calculated_rates']['acc_dates'][$d]['val'] ?? 0);
+                                 if ($uv == 0 && isset($rows[$k]['rateDates'][$d])) {
+                                     $uv = (float) ($rows[$k]['rateDates'][$d] ?? 0);
+                                 }
+                                 $rows[$k]['accGroupTotals'][$d] = $uv / $span;
+                             }
+                         } else {
+                             // GROUPED: Merge into single cell showing full room rate
+                             $rows[$k]['accRowSpan'] = ($k === $startIdx) ? $span : 0;
+                             $rows[$k]['accGroupSize'] = $span;
+                             $rows[$k]['accGroupTotals'] = [];
+                             foreach ($dateCols as $d) {
+                                 $rows[$k]['accGroupTotals'][$d] = (float) ($rows[$startIdx]['rateDates'][$d] ?? 0);
+                             }
                          }
 
                          $rows[$k]['feeGroupTotals'] = [
@@ -1492,6 +1648,42 @@ class ReservationController extends Controller
         $reservationPaxCounts = [];
         $memberMap = $memberMap ?? [];
         $listRateMap = $listRateMap ?? [];
+
+        // Parse SC/PWD override: "resNo:occupantIdx" comma-separated pairs
+        $scOverrideRaw = $request->get('sc_override', '');
+        $scOverrideMap = [];
+        if ($scOverrideRaw) {
+            foreach (explode(',', $scOverrideRaw) as $pair) {
+                $parts = explode(':', trim($pair));
+                if (count($parts) === 2) {
+                    $scOverrideMap[trim($parts[0])][] = (int) $parts[1];
+                }
+            }
+        }
+
+        // Parse SC/PWD remove: strip discount from API SC/PWD guests
+        $scRemoveRaw = $request->get('sc_remove', '');
+        $scRemoveMap = [];
+        if ($scRemoveRaw) {
+            foreach (explode(',', $scRemoveRaw) as $pair) {
+                $parts = explode(':', trim($pair));
+                if (count($parts) === 2) {
+                    $scRemoveMap[trim($parts[0])][] = (int) $parts[1];
+                }
+            }
+        }
+
+        // Parse SC/PWD target mode: "resNo:occupantIdx:mode" (air|villa|both|none)
+        $scTargetRaw = $request->get('sc_target', '');
+        $scTargetMap = [];
+        if ($scTargetRaw) {
+            foreach (explode(',', $scTargetRaw) as $pair) {
+                $parts = explode(':', trim($pair));
+                if (count($parts) === 3) {
+                    $scTargetMap[trim($parts[0])][(int) $parts[1]] = strtolower(trim($parts[2]));
+                }
+            }
+        }
         foreach (array_chunk(array_slice($ids, 0, 1000), 50) as $chunk) {
             $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
             if (!$resp->successful()) {
@@ -1579,8 +1771,27 @@ class ReservationController extends Controller
                     $res['roomType'] = $roomType;
                     $totalBillable = $reservationPaxCounts[$resNo] ?? 1;
 
+                    // Apply SC/PWD target mode or override/remove if requested for this occupant
+                    $resForCalc = $res;
+                    $targetMode = $scTargetMap[$resNo][$occupantIndex] ?? null;
+                    if ($targetMode !== null) {
+                        $resForCalc['sc_target_villa'] = in_array($targetMode, ['villa', 'both'], true);
+                        $resForCalc['sc_target_air']   = in_array($targetMode, ['air', 'both'], true);
+                    } else {
+                        if (isset($scOverrideMap[$resNo]) && in_array($occupantIndex, $scOverrideMap[$resNo], true)) {
+                            $resForCalc['privCard'] = 'Senior Citizen';
+                            $resForCalc['sc_target_villa'] = true;
+                            $resForCalc['sc_target_air']   = true;
+                        }
+                        if (isset($scRemoveMap[$resNo]) && in_array($occupantIndex, $scRemoveMap[$resNo], true)) {
+                            $resForCalc['privCard'] = 'N';
+                            $resForCalc['sc_target_villa'] = false;
+                            $resForCalc['sc_target_air']   = false;
+                        }
+                    }
+
                     $res['calculated_rates'] = $calculator->calculatePassengerRates(
-                        $res,
+                        $resForCalc,
                         $paxIndex,
                         $roomType,
                         $totalBillable,
@@ -1601,6 +1812,11 @@ class ReservationController extends Controller
                     if (!$isInfant) {
                         $paxIndices[$resNo]++;
                     }
+
+                    // ── Propagate SC flags back onto $res so span-building can detect mixed-SC groups ──
+                    $res['sc_target_villa'] = $resForCalc['sc_target_villa'] ?? null;
+                    $res['sc_target_air']   = $resForCalc['sc_target_air']   ?? null;
+                    $res['sc_mode']         = $targetMode;
 
                     $res['is_employee'] = $res['calculated_rates']['is_employee'] ?? false;
                     $res['village_name'] = $this->getVillageName($roomType);
@@ -1653,31 +1869,68 @@ class ReservationController extends Controller
 
             $i = 0;
             while ($i < $count) {
-                $startIdx = $i;
+                $startIdx   = $i;
                 $mergeLimit = min($count, $startIdx + $basePax);
-                $span = $mergeLimit - $startIdx;
-                $i = $mergeLimit;
+                $span       = $mergeLimit - $startIdx;
+                $i          = $mergeLimit;
+
+                // ── Detect whether ANY base occupant in this block has a Villa SC/PWD discount ──
+                $hasAnyVillaScInBlock = false;
+                for ($k = $startIdx; $k < $mergeLimit; $k++) {
+                    $isExtra = ($rows[$k]['is_extra_person'] ?? false) || ($k >= $basePax);
+                    if (!$isExtra) {
+                        $hasVillaSc = (bool) ($rows[$k]['sc_target_villa'] ?? false);
+                        if (!$hasVillaSc && isset($rows[$k]['sc_mode'])) {
+                            $hasVillaSc = in_array($rows[$k]['sc_mode'], ['villa', 'both'], true);
+                        }
+                        if ($hasVillaSc) {
+                            $hasAnyVillaScInBlock = true;
+                            break;
+                        }
+                    }
+                }
 
                 for ($k = $startIdx; $k < $mergeLimit; $k++) {
-                    $rows[$k]['acc_group_size'] = $span;
-                    $rows[$k]['acc_group_totals'] = [];
-                    foreach ($dateCols as $d) {
-                        $uv = (float) ($rows[$startIdx]['calculated_rates']['acc_dates'][$d]['val'] ?? 0);
-                        if ($uv == 0 && isset($rows[$startIdx]['rate'])) {
-                            foreach ($rows[$startIdx]['rate'] as $rt) {
-                                if (($rt['date'] ?? '') === $d) {
-                                    $uv = (float) ($rt['val'] ?? 0);
-                                    break;
+                    if ($hasAnyVillaScInBlock) {
+                        // UNSPAN: Give every occupant row its own cell with per-person rate
+                        $rows[$k]['acc_group_size'] = 1;
+                        $rows[$k]['acc_span'] = 1;
+                        $rows[$k]['acc_group_totals'] = [];
+                        foreach ($dateCols as $d) {
+                            $uv = (float) ($rows[$k]['calculated_rates']['acc_dates'][$d]['val'] ?? 0);
+                            if ($uv == 0 && isset($rows[$k]['rate'])) {
+                                foreach ($rows[$k]['rate'] as $rt) {
+                                    if (($rt['date'] ?? '') === $d) {
+                                        $uv = (float) ($rt['val'] ?? 0);
+                                        break;
+                                    }
                                 }
                             }
+                            $rows[$k]['acc_group_totals'][$d] = $uv / $span;
                         }
-                        $rows[$k]['acc_group_totals'][$d] = $uv;
-                    }
-                    if ($k === $startIdx) {
-                        $rows[$k]['acc_span'] = $span;
                     } else {
-                        $rows[$k]['acc_span'] = 0;
+                        // GROUPED: Merge into single cell showing full room rate
+                        $rows[$k]['acc_group_size'] = $span;
+                        $rows[$k]['acc_group_totals'] = [];
+                        foreach ($dateCols as $d) {
+                            $uv = (float) ($rows[$startIdx]['calculated_rates']['acc_dates'][$d]['val'] ?? 0);
+                            if ($uv == 0 && isset($rows[$startIdx]['rate'])) {
+                                foreach ($rows[$startIdx]['rate'] as $rt) {
+                                    if (($rt['date'] ?? '') === $d) {
+                                        $uv = (float) ($rt['val'] ?? 0);
+                                        break;
+                                    }
+                                }
+                            }
+                            $rows[$k]['acc_group_totals'][$d] = $uv;
+                        }
+                        if ($k === $startIdx) {
+                            $rows[$k]['acc_span'] = $span;
+                        } else {
+                            $rows[$k]['acc_span'] = 0;
+                        }
                     }
+
                     $processedReservations[] = $rows[$k];
                 }
             }
