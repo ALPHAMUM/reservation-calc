@@ -133,6 +133,9 @@ class BalesinPinesRateCalculatorService
             $hasPrivCard = true;
         }
 
+        $hasVillaSc = isset($passenger['sc_target_villa']) ? (bool) $passenger['sc_target_villa'] : $hasPrivCard;
+        $hasAirSc   = isset($passenger['sc_target_air'])   ? (bool) $passenger['sc_target_air']   : $hasPrivCard;
+
         $unitType = $this->resolvePinesUnitType($roomType, $passenger['rateCode'] ?? '');
         $isExtraPerson = ($occupantIndex >= 2); // 3rd occupant is index 2
 
@@ -208,7 +211,7 @@ class BalesinPinesRateCalculatorService
             if ($isExtraPerson) {
                 // Extra person charge is 3,700
                 $baseFee = self::EXTRA_PERSON_CHARGE;
-                if ($hasPrivCard) {
+                if ($hasVillaSc) {
                     $vatExemptBase = round($baseFee / 1.12, 2);
                     $discountAmt   = round($vatExemptBase * 0.20, 2);
                     $finalVal      = round($vatExemptBase - $discountAmt, 2);
@@ -220,7 +223,7 @@ class BalesinPinesRateCalculatorService
                 $baseDivisor = max(1, min(2, $totalBillable));
                 $individualShare = round($grossVal / $baseDivisor, 2);
 
-                if ($hasPrivCard) {
+                if ($hasVillaSc) {
                     $vatExemptBase = round($individualShare / 1.12, 2);
                     $discountAmt   = round($vatExemptBase * 0.20, 2);
                     $finalVal      = round($vatExemptBase - $discountAmt, 2);

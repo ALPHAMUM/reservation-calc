@@ -1002,7 +1002,32 @@
                                                             $apiPriv = strtolower(trim((string)($firstPassenger['privCard'] ?? $firstPassenger['privcard'] ?? '')));
                                                             $isApiSc = !in_array($apiPriv, ['', 'n', 'no', 'false', '0', 'none', 'null']) && (str_contains($apiPriv, 'senior') || str_contains($apiPriv, 'pwd'));
 
-                                                            if ($breakdown && !empty($breakdown['gross_share'])) {
+                                                            if ($isBlockExtra) {
+                                                                $extraResNo = trim($firstPassenger['resNo'] ?? $firstPassenger['conf'] ?? 'N/A');
+                                                                $extraOccIdx = $curr;
+                                                                $extraKey = $extraResNo . ':' . $extraOccIdx;
+                                                                $extraTargetMode = $scTargets[$extraKey] ?? null;
+                                                                $extraHasVillaSc = false;
+                                                                if ($extraTargetMode === 'villa' || $extraTargetMode === 'both') {
+                                                                    $extraHasVillaSc = true;
+                                                                } elseif ($extraTargetMode === 'air' || $extraTargetMode === 'none') {
+                                                                    $extraHasVillaSc = false;
+                                                                } else {
+                                                                    if (in_array($extraKey, $scOverrides)) $extraHasVillaSc = true;
+                                                                    elseif (in_array($extraKey, $scRemoves)) $extraHasVillaSc = false;
+                                                                    else $extraHasVillaSc = $isApiSc;
+                                                                }
+
+                                                                if ($extraHasVillaSc || ($breakdown && !empty($breakdown['is_discounted']))) {
+                                                                    if ($rawVal > 0 && $rawVal < 3700 && abs($rawVal - 2907.14) < 10) {
+                                                                        $uv = $rawVal;
+                                                                    } else {
+                                                                        $uv = round((3700 / 1.12) * 0.8 * 1.1, 2);
+                                                                    }
+                                                                } else {
+                                                                    $uv = ($rawVal > 3700 || $rawVal <= 1.0) ? 3700 : $rawVal;
+                                                                }
+                                                            } elseif ($breakdown && !empty($breakdown['gross_share'])) {
                                                                 $uv = (float)$breakdown['gross_share'];
                                                                 if ($uv > 0 && $uv < 3000 && $blockSize > 1 && !$isBlockExtra) {
                                                                     $uv = $uv * $blockSize;
@@ -1148,8 +1173,12 @@
                                                             $uvFrac = round($uv - floor($uv), 2);
                                                             $isUvFvn = in_array($uvFrac, [0.01, 0.02, 0.03, 0.5]) && $uv < 10;
                                                             if (!$isUvFvn) {
-                                                                // If rate is full room rate (e.g. 7857.14), divide by group size to show per-occupant share (1964.29)
-                                                                if ($uv > 100 && $blockSize > 1 && !$isExtraPerson) {
+                                                                if ($isExtraPerson) {
+                                                                    if ($uv > 3700 || $uv <= 1.0) {
+                                                                        $uv = 3700;
+                                                                    }
+                                                                } elseif ($uv > 100 && $blockSize > 1) {
+                                                                    // If rate is full room rate (e.g. 7857.14), divide by group size to show per-occupant share (1964.29)
                                                                     if (abs($uv - ($groupTotals[$d] ?? 0)) < 1.0 || $uv > 3000) {
                                                                         $uv = round($uv / $blockSize, 2);
                                                                     }
@@ -1247,8 +1276,9 @@
 
                                     // Rowspan for RSVN# and Room Type
                                     $rowspan = $isFirstInGroup ? ($resRowCounts[$resNo] ?? 1) : 0;
+                                    $isExtraOccRow = $spanInfo['is_extra_person'] ?? false;
                                 @endphp
-                                <tr class="{{ $isSplit ? 'split-row' : '' }}" data-res-no="{{ $resNo }}" data-split-type="{{ $splitType }}">
+                                <tr class="{{ $isSplit ? 'split-row' : '' }}" data-res-no="{{ $resNo }}" data-split-type="{{ $splitType }}" data-is-extra="{{ $isExtraOccRow ? 'true' : 'false' }}" data-res-idx="{{ $idx }}">
                                     @if($isFirstInGroup)
                                         <td rowspan="{{ $rowspan }}" class="sticky-col-1" style="vertical-align: top; padding-top: 1.5rem;">
                                             <span class="res-no">#{{ $resNo }}</span>
@@ -1814,7 +1844,13 @@
             // 2. Perform group-wide calculation
             if (resNo) {
                 const groupRows = $('tr[data-res-no="' + resNo + '"]');
-                const groupSize = Math.max(1, groupRows.length);
+                let baseCount = 0;
+                groupRows.each(function() {
+                    const r = $(this);
+                    const isExtra = r.attr('data-is-extra') === 'true' || r.data('is-extra') === true;
+                    if (!isExtra) baseCount++;
+                });
+                const baseGroupSize = baseCount > 0 ? baseCount : Math.max(1, groupRows.length);
                 const firstRow  = groupRows.first();
 
                 // Read group accommodation total from DOM (first row cells — unchanged for grouped view)
@@ -1846,8 +1882,10 @@
                     const rowResBtn = currentRow.find('.show-breakdown-btn');
                     const rowResIdx = rowResBtn.length ? parseInt(rowResBtn.data('res-idx'), 10) : -1;
                     const rowRes = (rowResIdx !== -1 && window.__resData) ? window.__resData[rowResIdx] : null;
+
+                    const domIsExtra = currentRow.attr('data-is-extra') === 'true' || currentRow.data('is-extra') === true;
                     const rowSpanInfo = (window.__accSpans && window.__accSpans[rowResIdx]) ? window.__accSpans[rowResIdx] : {};
-                    const rowIsExtra = rowSpanInfo.is_extra_person || currentRow.data('is-extra') === true;
+                    const rowIsExtra = domIsExtra || rowSpanInfo.is_extra_person === true;
 
                     let rowAcc;
 
@@ -1861,7 +1899,7 @@
                             const isFvn = (frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5 || isNaN(val));
                             if (!isFvn) modelSum += val;
                         });
-                        rowAcc = rowIsExtra ? modelSum : (modelSum / groupSize);
+                        rowAcc = rowIsExtra ? modelSum : (modelSum / baseGroupSize);
                     } else if (firstCell.length && spanAttr === 1) {
                         // Unspanned DOM cells: read this row's own cells
                         let sum = 0;
@@ -1879,10 +1917,10 @@
                             const isFvn = (frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5 || isNaN(val));
                             if (!isFvn) sum += val;
                         });
-                        rowAcc = sum > 0 ? sum : (groupAccTotal / groupSize);
+                        rowAcc = sum > 0 ? sum : (rowIsExtra ? 3700 : (groupAccTotal / baseGroupSize));
                     } else {
-                        // Grouped DOM cells: share first-row total divided by group size
-                        rowAcc = groupAccTotal / groupSize;
+                        // Grouped DOM cells: share first-row total divided by base group size
+                        rowAcc = rowIsExtra ? 3700 : (groupAccTotal / baseGroupSize);
                     }
 
                     let currentFees = 0;
@@ -2303,6 +2341,8 @@
                 const resNo = tr.data('res-no');
                 const groupRows = window.__resData.filter(item => (item.resNo || item.conf) === (res.resNo || res.conf));
                 const firstRes  = groupRows[0] || res;
+                const si = (window.__accSpans && window.__accSpans[resIdx]) ? window.__accSpans[resIdx] : {};
+                const isExtraOcc = si.is_extra_person || tr.data('is-extra') === true;
 
                 (res.rate || []).forEach(r => {
                     const val  = parseFloat(r.val || 0);
@@ -2311,11 +2351,14 @@
 
                     if (!isFvn && r.breakdown) {
                         let gross = r.breakdown.gross_share || 0;
-                        if (!gross || gross === val) {
+                        if (isExtraOcc && (gross > 3700 || gross === 0)) {
+                            gross = 3700;
+                        } else if (!gross || gross === val) {
                             gross = r.breakdown.is_discounted ? Math.round((val * 14 / 11) * 100) / 100 : val;
-                            r.breakdown.gross_share = gross;
                         }
-                        if (hasVillaSc && !r.breakdown.is_discounted) {
+                        r.breakdown.gross_share = gross;
+
+                        if (hasVillaSc) {
                             const base = gross / 1.12;
                             const discount = base * 0.20;
                             const netBase = base - discount;
@@ -2328,7 +2371,7 @@
                             r.breakdown.discount = discount;
                             r.breakdown.sc = sc;
                             r.breakdown.vat = 0;
-                        } else if (!hasVillaSc && r.breakdown.is_discounted) {
+                        } else {
                             const base = gross / 1.12;
                             const sc = base * 0.10;
                             const vat = base * 0.12;
@@ -2351,26 +2394,35 @@
             // 5. Unspan / Respan accommodation cells so each occupant sees their own per-person rate
             const resNo     = tr.data('res-no');
             const groupTrs  = $('tr[data-res-no="' + resNo + '"]');
-            const groupSize = groupTrs.length;
+            
+            // Separate base occupant rows from extra occupant rows
+            const baseTrs  = [];
+            const extraTrs = [];
+            groupTrs.each(function() {
+                const row    = $(this);
+                const rowBtn = row.find('.show-breakdown-btn');
+                const rowIdx = rowBtn.length ? parseInt(rowBtn.data('res-idx'), 10) : -1;
+                const si     = (window.__accSpans && window.__accSpans[rowIdx]) ? window.__accSpans[rowIdx] : {};
+                const isExtra = si.is_extra_person || row.data('is-extra') === true;
+                if (isExtra) {
+                    extraTrs.push(row);
+                } else {
+                    baseTrs.push(row);
+                }
+            });
 
-            // Only manage span for groups of 2+ rows
-            if (groupSize > 1) {
+            const baseGroupSize = baseTrs.length;
+
+            if (baseGroupSize > 1) {
                 // Check if ANY base occupant (not extra) currently has villa/both SC mode
                 let anyVillaDiscount = false;
-                groupTrs.each(function() {
-                    const row     = $(this);
-                    const rowBtn  = row.find('.show-breakdown-btn');
-                    const rowIdx  = rowBtn.length ? parseInt(rowBtn.data('res-idx'), 10) : -1;
-                    const si      = (window.__accSpans && window.__accSpans[rowIdx]) ? window.__accSpans[rowIdx] : {};
-                    const isExtra = si.is_extra_person || row.data('is-extra') === true;
-                    if (!isExtra) {
-                        const scBtn = row.find('.open-sc-modal-btn');
-                        const mode = scBtn.attr('data-mode') || scBtn.data('mode') || 'none';
-                        if (mode === 'villa' || mode === 'both') anyVillaDiscount = true;
-                    }
+                baseTrs.forEach(function(row) {
+                    const scBtn = row.find('.open-sc-modal-btn');
+                    const mode = scBtn.attr('data-mode') || scBtn.data('mode') || 'none';
+                    if (mode === 'villa' || mode === 'both') anyVillaDiscount = true;
                 });
 
-                const firstTr   = groupTrs.first();
+                const firstTr   = $(baseTrs[0]);
                 const dateCells = firstTr.find('.rate-cell');
 
                 // ── Helper: per-occupant nightly value from model ──
@@ -2397,26 +2449,25 @@
                     }).length || 1;
                     const perNight = modelSum / nights;
                     let perOccShare = perNight;
-                    if (perNight > 4000 && groupSize > 1 && !isExtra) {
-                        perOccShare = perNight / groupSize;
+                    if (isExtra && (perNight > 3700 || perNight <= 1.0)) {
+                        return 3700;
+                    }
+                    if (perNight > 4000 && baseGroupSize > 1 && !isExtra) {
+                        perOccShare = perNight / baseGroupSize;
                     }
                     return isExtra ? perNight : perOccShare;
                 }
 
                 if (anyVillaDiscount) {
-                    // ── UNSPAN: give each row its own accommodation cell showing per-occupant amount ──
-
-                    // Step A: shrink first row cells to rowspan=1 and update display
+                    // ── UNSPAN base occupants: give each base occupant row its own accommodation cell ──
                     dateCells.each(function() {
                         const cell = $(this);
-                        const date = cell.data('date');
                         const baseRate = parseFloat(cell.data('base-rate') || cell.attr('data-base-rate') || 0);
                         const frac = Math.round((baseRate - Math.floor(baseRate)) * 100) / 100;
                         const isFvn = (frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5);
 
                         cell.attr('rowspan', 1);
                         if (!isFvn) {
-                            // Read per-occupant value from first row's model
                             const perOcc = perOccFromModel(firstTr);
                             if (perOcc !== null) {
                                 cell.find('.rate-display').text(
@@ -2426,10 +2477,8 @@
                         }
                     });
 
-                    // Step B: insert/update cells for all non-first rows
-                    groupTrs.each(function(i) {
+                    baseTrs.forEach(function(rowTr, i) {
                         if (i === 0) return;
-                        const rowTr  = $(this);
                         const perOcc = perOccFromModel(rowTr);
 
                         dateCells.each(function() {
@@ -2461,10 +2510,9 @@
                     });
 
                 } else {
-                    // ── RESPAN: remove non-first row rate cells (Blade-rendered or JS-inserted), restore first row cell ──
-                    groupTrs.each(function(i) {
+                    // ── RESPAN base occupants only: remove non-first base row rate cells, restore first base row cell ──
+                    baseTrs.forEach(function(rowTr, i) {
                         if (i === 0) return;
-                        const rowTr = $(this);
                         dateCells.each(function() {
                             const date = $(this).data('date');
                             rowTr.find('.rate-cell[data-date="' + date + '"]').remove();
@@ -2472,40 +2520,40 @@
                     });
 
                     dateCells.each(function() {
-                        const cell = $(this);
+                        const cell    = $(this);
                         const rawBase = parseFloat(cell.attr('data-base-rate') || cell.data('base-rate') || 0);
 
-                        // ── FVN guard: never touch FVN marker cells (0.01 = 1 FVN, 0.02 = 1.5 FVN, 0.03 split, 0.5 = 0.5 FVN) ──
                         const rawFrac = Math.round((rawBase - Math.floor(rawBase)) * 100) / 100;
-                        const isFvn  = (rawFrac === 0.01 || rawFrac === 0.02 || rawFrac === 0.03 || rawFrac === 0.5);
+                        const isFvn   = (rawFrac === 0.01 || rawFrac === 0.02 || rawFrac === 0.03 || rawFrac === 0.5);
 
-                        cell.attr('rowspan', groupSize);
+                        cell.attr('rowspan', baseGroupSize);
 
                         if (!isFvn) {
-                            // Use cached immutable orig base if available; compute and cache it once
-                            let origBase = parseFloat(cell.attr('data-orig-base-rate') || cell.data('orig-base-rate') || 0);
-                            if (!origBase || isNaN(origBase)) {
-                                origBase = rawBase;
-                                // Scale per-occupant share up to full room rate if needed
-                                if (origBase > 100 && origBase < 3500 && groupSize > 1) {
-                                    origBase = Math.round(origBase * groupSize * 100) / 100;
-                                }
-                                // Convert SC-discounted gross back to regular gross (e.g. 11,785.68 → 15,000)
-                                const calcGross = Math.round((origBase * 14 / 11) * 100) / 100;
-                                const rounded   = Math.round(calcGross);
-                                if (Math.abs(calcGross - rounded) < 0.15 && calcGross > origBase && calcGross <= origBase * 1.3) {
-                                    origBase = rounded;
-                                } else if (calcGross > origBase && calcGross <= origBase * 1.3) {
-                                    origBase = calcGross;
-                                }
-                                cell.attr('data-orig-base-rate', origBase).data('orig-base-rate', origBase);
-                            }
                             cell.find('.rate-display').text(
-                                origBase.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                rawBase.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                             );
                         }
                     });
                 }
+
+                // Ensure extra occupant rows retain their own rate-cells (rowspan=1) and updated displays
+                extraTrs.forEach(function(rowTr) {
+                    const perOcc = perOccFromModel(rowTr);
+                    const cells = rowTr.find('.rate-cell');
+                    cells.each(function() {
+                        const cell = $(this);
+                        const date = cell.data('date');
+                        const baseRate = parseFloat(cell.data('base-rate') || cell.attr('data-base-rate') || 0);
+                        const frac = Math.round((baseRate - Math.floor(baseRate)) * 100) / 100;
+                        const isFvn = (frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5);
+                        cell.attr('rowspan', 1);
+                        if (!isFvn && perOcc !== null) {
+                            cell.find('.rate-display').text(
+                                perOcc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                            );
+                        }
+                    });
+                });
 
                 // Recalculate all rows — model-first logic gives each occupant their own correct total
                 groupTrs.each(function() { recalculateRow(this); });
@@ -2578,12 +2626,30 @@
                 const isRoomFullRate = (rawVal > 3000 || rawBase > 3000);
                 const divisor = (isRoomFullRate && groupSize > 1 && !isExtraPerson) ? groupSize : 1;
 
-                const dailyVal      = isFvn ? r.val : (rawVal / divisor);
-                const baseVal       = rawBase / divisor;
-                const scVal         = parseFloat(b.sc || 0) / divisor;
-                const vatVal        = parseFloat(b.vat || 0) / divisor;
-                const discVal       = parseFloat(b.discount || 0) / divisor;
-                const grossShareVal = parseFloat(b.gross_share || 0) / divisor;
+                let dailyVal      = isFvn ? r.val : (rawVal / divisor);
+                let baseVal       = rawBase / divisor;
+                let scVal         = parseFloat(b.sc || 0) / divisor;
+                let vatVal        = parseFloat(b.vat || 0) / divisor;
+                let discVal       = parseFloat(b.discount || 0) / divisor;
+                let grossShareVal = parseFloat(b.gross_share || 0) / divisor;
+
+                if (isExtraPerson && !isFvn && (rawVal > 3700 || rawBase > 3700 || grossShareVal > 3700)) {
+                    grossShareVal = 3700;
+                    if (b.is_discounted) {
+                        baseVal = Math.round((3700 / 1.12) * 100) / 100;
+                        discVal = Math.round((baseVal * 0.20) * 100) / 100;
+                        const netBase = baseVal - discVal;
+                        scVal = Math.round((netBase * 0.10) * 100) / 100;
+                        vatVal = 0;
+                        dailyVal = Math.round((netBase + scVal) * 100) / 100;
+                    } else {
+                        baseVal = Math.round((3700 / 1.12) * 100) / 100;
+                        discVal = 0;
+                        scVal = Math.round((baseVal * 0.10) * 100) / 100;
+                        vatVal = Math.round((baseVal * 0.12) * 100) / 100;
+                        dailyVal = 3700;
+                    }
+                }
 
                 if (!isFvn) {
                     overallTotal += dailyVal;
@@ -2593,8 +2659,7 @@
                 const dateStr = r.date;
                 let detailHtml = '';
 
-                // Pines: show SC/VAT/Discount breakdown for base occupants and extra person
-                // Island: full breakdown as before
+                // Pines & Island: show SC/VAT/Discount breakdown for base occupants and extra person
                 const showBreakdown = (property === 'island' || property === 'pines');
 
                 if (showBreakdown) {
@@ -2629,7 +2694,7 @@
                             </td>
                         </tr>
                     `;
-                } else if (property === 'pines' && isExtraPerson) {
+                } else if (isExtraPerson) {
                     // Extra person row: show flat 3,700/night rate
                     html += `
                         <tr style="background: rgba(251,191,36,0.05);">
@@ -2638,7 +2703,7 @@
                                 <div style="font-weight: 500; color: #fbbf24;">Extra Person Charge${b.is_discounted ? ' <span style="font-size: 0.65rem; color: #4ade80;">(Senior/PWD)</span>' : ''}</div>
                                 <div style="font-size: 0.65rem; color: var(--text-muted);">Base Rate: ₱3,700.00/night</div>
                             </td>
-                            <td>₱${dailyVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            <td>₱${baseVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                             <td>${showBreakdown ? detailHtml : '-'}</td>
                             <td style="font-weight: bold; text-align: right; color: #fbbf24;">
                                 ₱${dailyVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}

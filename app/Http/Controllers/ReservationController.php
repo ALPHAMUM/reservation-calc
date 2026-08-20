@@ -1226,7 +1226,20 @@ class ReservationController extends Controller
                      }
 
                      for ($k = $startIdx; $k < $mergeLimit; $k++) {
-                         if ($hasAnyVillaScInBlock) {
+                         $isExtra = ($rows[$k]['res']['is_extra_person'] ?? false) || ($k >= $basePax);
+                         if ($isExtra) {
+                             // Extra occupant: always unspanned with its own calculated rate
+                             $rows[$k]['accRowSpan'] = 1;
+                             $rows[$k]['accGroupSize'] = 1;
+                             $rows[$k]['accGroupTotals'] = [];
+                             foreach ($dateCols as $d) {
+                                 $uv = (float) ($rows[$k]['res']['calculated_rates']['acc_dates'][$d]['val'] ?? 0);
+                                 if ($uv == 0 && isset($rows[$k]['rateDates'][$d])) {
+                                     $uv = (float) ($rows[$k]['rateDates'][$d] ?? 0);
+                                 }
+                                 $rows[$k]['accGroupTotals'][$d] = $uv;
+                             }
+                         } elseif ($hasAnyVillaScInBlock) {
                              // UNSPAN: Give every occupant row its own cell with per-person rate
                              $rows[$k]['accRowSpan'] = 1;
                              $rows[$k]['accGroupSize'] = 1;
@@ -1891,7 +1904,25 @@ class ReservationController extends Controller
                 }
 
                 for ($k = $startIdx; $k < $mergeLimit; $k++) {
-                    if ($hasAnyVillaScInBlock) {
+                    $isExtra = ($rows[$k]['is_extra_person'] ?? false) || ($k >= $basePax);
+                    if ($isExtra) {
+                        // Extra occupant: always unspanned with its own calculated rate
+                        $rows[$k]['acc_group_size'] = 1;
+                        $rows[$k]['acc_span'] = 1;
+                        $rows[$k]['acc_group_totals'] = [];
+                        foreach ($dateCols as $d) {
+                            $uv = (float) ($rows[$k]['calculated_rates']['acc_dates'][$d]['val'] ?? 0);
+                            if ($uv == 0 && isset($rows[$k]['rate'])) {
+                                foreach ($rows[$k]['rate'] as $rt) {
+                                    if (($rt['date'] ?? '') === $d) {
+                                        $uv = (float) ($rt['val'] ?? 0);
+                                        break;
+                                    }
+                                }
+                            }
+                            $rows[$k]['acc_group_totals'][$d] = $uv;
+                        }
+                    } elseif ($hasAnyVillaScInBlock) {
                         // UNSPAN: Give every occupant row its own cell with per-person rate
                         $rows[$k]['acc_group_size'] = 1;
                         $rows[$k]['acc_span'] = 1;
