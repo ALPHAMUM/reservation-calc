@@ -434,7 +434,7 @@
                             <td class="num {{ $span > 1 ? 'merged' : '' }}" rowspan="{{ $span }}" style="text-align: center;">
                                 {{ $displayVal }}
                                 @if($isMixedSc && ($res['sc_target_villa'] ?? false))
-                                    <div style="font-size: 9px; color: #7c3aed; font-style: italic;">SC/PWD</div>
+                                    <!-- <div style="font-size: 9px; color: #7c3aed; font-style: italic;">SC/PWD</div> -->
                                 @endif
                             </td>
                         @endforeach
