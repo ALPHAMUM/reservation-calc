@@ -40,13 +40,45 @@ class BalesinCityHandler extends AbstractPropertyHandler
     {
         $calculator = app(BalesinCityRateCalculatorService::class);
         $out        = [];
+        $resOccupantIndex = [];
 
         foreach ($msgs as &$res) {
-            $roomType                = $res['roomtyp'] ?? $res['roomType'] ?? '';
-            $unitType                = $calculator->resolveCityUnitType($roomType, $res['rateCode'] ?? '');
-            $res['calculated_rates'] = $calculator->getPassThroughRates($res);
+            $resNo = trim((string)($res['resNo'] ?? $res['conf'] ?? ''));
+            if (!isset($resOccupantIndex[$resNo])) {
+                $resOccupantIndex[$resNo] = 0;
+            }
+            $occupantIndex = $resOccupantIndex[$resNo]++;
+            $res['occupant_idx'] = $occupantIndex;
+
+            $roomType = $res['roomtyp'] ?? $res['roomType'] ?? '';
+            $unitType = $calculator->resolveCityUnitType($roomType, $res['rateCode'] ?? '');
+
+            $scTargetService = app(\App\Services\ScTargetService::class);
+            $resForCalc = $scTargetService->applyToPassenger(
+                $res,
+                $resNo,
+                $occupantIndex,
+                $this->scTargetMap,
+                $this->scOverrideMap,
+                $this->scRemoveMap,
+                $this->slug
+            );
+            $scTargetService->syncPassengerFlags($res, $resForCalc);
+
+            $res['calculated_rates'] = $calculator->calculatePassengerRates($resForCalc);
             $res['village_name']     = $unitType;
             $res['is_employee']      = false;
+
+            if (isset($res['rate']) && is_array($res['rate'])) {
+                foreach ($res['rate'] as &$r) {
+                    $d = $r['date'] ?? '';
+                    if ($d && isset($res['calculated_rates']['acc_dates'][$d]['breakdown'])) {
+                        $r['val'] = $res['calculated_rates']['acc_dates'][$d]['val'];
+                        $r['breakdown'] = $res['calculated_rates']['acc_dates'][$d]['breakdown'];
+                    }
+                }
+                unset($r);
+            }
 
             $out[] = $res;
         }

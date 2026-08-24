@@ -908,7 +908,7 @@
                             <tr>
                                 <th class="sticky-col-1" style="width: 100px;">RSVN#</th>
                                 <th class="sticky-col-2" style="width: 120px;">Village</th>
-                                @if($property === 'island' || $property === 'pines')
+                                @if($property === 'island' || $property === 'pines' || $property === 'city')
                                 <th style="text-align:center; min-width:72px; font-size:0.75rem; padding: 0.5rem 0.4rem;">
                                     SC / PWD
                                     <div style="font-size:0.6rem;font-weight:normal;opacity:0.65;margin-top:2px">Override</div>
@@ -993,7 +993,7 @@
                                                             // ── FVN guard: 0.01 = 1 FVN, 0.02 = 1.5 FVN, 0.03 = 0.5 FVN split, 0.5 = 0.5 FVN
                                                             // These are rate CODE markers — never do arithmetic on them
                                                             $rawFrac = round($rawVal - floor($rawVal), 2);
-                                                            $isFvnMarker = in_array($rawFrac, [0.01, 0.02, 0.03, 0.5]) && $rawVal < 10;
+                                                            $isFvnMarker = !$isBlockExtra && in_array($rawFrac, [0.01, 0.02, 0.03, 0.5]) && $rawVal < 10;
                                                             if ($isFvnMarker) {
                                                                 $uv = $rawVal; // pass through unchanged
                                                                 break;
@@ -1170,8 +1170,9 @@
                                                                 $uv = $groupTotals[$d] ?? 0;
                                                             }
                                                             // FVN markers (0.01, 0.02, 0.03, 0.5 with val < 10) — pass through unchanged, never divide
+                                                            // Extra person is a paid 3700 charge even when the API still sends FVN markers.
                                                             $uvFrac = round($uv - floor($uv), 2);
-                                                            $isUvFvn = in_array($uvFrac, [0.01, 0.02, 0.03, 0.5]) && $uv < 10;
+                                                            $isUvFvn = !$isExtraPerson && in_array($uvFrac, [0.01, 0.02, 0.03, 0.5]) && $uv < 10;
                                                             if (!$isUvFvn) {
                                                                 if ($isExtraPerson) {
                                                                     if ($uv > 3700 || $uv <= 1.0) {
@@ -1291,7 +1292,7 @@
                                         </td>
                                     @endif
 
-                                    @if($property === 'island' || $property === 'pines')
+                                    @if($property === 'island' || $property === 'pines' || $property === 'city')
                                     @php
                                         $occupantIdx   = $spanInfo['occupant_idx'] ?? 0;
                                         $isExtraOcc    = $spanInfo['is_extra_person'] ?? false;
@@ -1319,15 +1320,23 @@
                                             if (count($p) === 2) $scRemoves[] = trim($p[0]) . ':' . (int)$p[1];
                                         }
 
+                                        $isFvnAccommodation = ($splitType2 === 'fvn');
+                                        if (!$isFvnAccommodation && $property === 'island' && !$isExtraOcc) {
+                                            $isFvnAccommodation = \App\Services\ScTargetService::isFvnAccommodation($spanInfo['totals'] ?? []);
+                                        }
+
                                         $activeMode = $scTargets[$overrideKey] ?? null;
                                         if (!$activeMode) {
                                             if (in_array($overrideKey, $scOverrides)) $activeMode = 'both';
                                             elseif (in_array($overrideKey, $scRemoves)) $activeMode = 'none';
-                                            elseif ($alreadySc) $activeMode = 'both';
+                                            elseif ($alreadySc) $activeMode = in_array($property, ['pines', 'city'], true) ? 'villa' : 'both';
                                             else $activeMode = 'none';
                                         }
 
-                                         $showScCheckbox = ($splitType2 !== 'fvn');
+                                        $scTargetService = app(\App\Services\ScTargetService::class);
+                                        $activeMode = $scTargetService->normalizeMode($activeMode, $property, $isFvnAccommodation, $alreadySc, $isExtraOcc);
+
+                                         $showScCheckbox = true;
                                     @endphp
                                     <td style="text-align:center; vertical-align:middle; padding: 0.4rem;">
                                         @if($showScCheckbox)
@@ -1335,13 +1344,15 @@
                                                     class="btn open-sc-modal-btn" 
                                                     data-override-key="{{ $overrideKey }}"
                                                     data-mode="{{ $activeMode }}"
+                                                    data-is-fvn="{{ $isFvnAccommodation ? 'true' : 'false' }}"
+                                                    data-is-extra="{{ $isExtraOcc ? 'true' : 'false' }}"
                                                     data-guest-name="{{ $res['gstName'] ?? $res['guestName'] ?? 'Occupant' }}"
                                                     data-res-idx="{{ $idx }}"
                                                     style="padding: 2px 7px; font-size: 0.7rem; font-weight: 600; border-radius: 6px; white-space: nowrap; border: 1px solid transparent; transition: all 0.2s;">
                                                 @if($activeMode === 'both')
                                                     <span class="sc-badge-label" style="color: #4ade80; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.4); padding: 2px 6px; border-radius: 4px;">🌟 Both SC</span>
                                                 @elseif($activeMode === 'villa')
-                                                    <span class="sc-badge-label" style="color: #c084fc; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.4); padding: 2px 6px; border-radius: 4px;">🏡 Villa Only</span>
+                                                    <span class="sc-badge-label" style="color: #c084fc; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.4); padding: 2px 6px; border-radius: 4px;">🏡 {{ in_array($property, ['pines', 'city'], true) ? 'Accommodation Only' : 'Villa Only' }}</span>
                                                 @elseif($activeMode === 'air')
                                                     <span class="sc-badge-label" style="color: #60a5fa; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.4); padding: 2px 6px; border-radius: 4px;">✈️ Airfare Only</span>
                                                 @else
@@ -1613,7 +1624,7 @@
                 <p style="font-size: 0.8rem; color: var(--text-muted, #94a3b8); margin-bottom: 1.25rem;">Select which component(s) should receive the Senior Citizen / PWD privilege discount for this occupant:</p>
                 
                 <div class="d-flex flex-column gap-2">
-                    <button type="button" class="btn sc-option-btn text-start p-3" data-mode="air" style="background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.3); border-radius: 8px; color: white; transition: all 0.2s;">
+                    <button type="button" class="btn sc-option-btn text-start p-3" data-mode="air" data-sc-group="airfare" style="background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.3); border-radius: 8px; color: white; transition: all 0.2s;">
                         <div class="d-flex align-items-center justify-content-between">
                             <div>
                                 <div style="font-weight: 700; color: #60a5fa; font-size: 0.95rem;">✈️ Airfare Only</div>
@@ -1623,17 +1634,17 @@
                         </div>
                     </button>
 
-                    <button type="button" class="btn sc-option-btn text-start p-3" data-mode="villa" style="background: rgba(168,85,247,0.1); border: 1px solid rgba(168,85,247,0.3); border-radius: 8px; color: white; transition: all 0.2s;">
+                    <button type="button" class="btn sc-option-btn text-start p-3" data-mode="villa" data-sc-group="accommodation" style="background: rgba(168,85,247,0.1); border: 1px solid rgba(168,85,247,0.3); border-radius: 8px; color: white; transition: all 0.2s;">
                         <div class="d-flex align-items-center justify-content-between">
                             <div>
-                                <div style="font-weight: 700; color: #c084fc; font-size: 0.95rem;">🏡 Villa Only</div>
-                                <div style="font-size: 0.75rem; color: #cbd5e1; margin-top: 2px;">Applies 12% VAT exemption & 20% discount to Villa accommodation.</div>
+                                <div style="font-weight: 700; color: #c084fc; font-size: 0.95rem;">🏡 <span class="sc-villa-label">Villa Only</span></div>
+                                <div style="font-size: 0.75rem; color: #cbd5e1; margin-top: 2px;" class="sc-villa-desc">Applies 12% VAT exemption & 20% discount to Villa accommodation.</div>
                             </div>
                             <span class="badge" style="font-size: 0.7rem; background: #9333ea; color: white;">Villa</span>
                         </div>
                     </button>
 
-                    <button type="button" class="btn sc-option-btn text-start p-3" data-mode="both" style="background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); border-radius: 8px; color: white; transition: all 0.2s;">
+                    <button type="button" class="btn sc-option-btn text-start p-3" data-mode="both" data-sc-group="airfare" style="background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); border-radius: 8px; color: white; transition: all 0.2s;">
                         <div class="d-flex align-items-center justify-content-between">
                             <div>
                                 <div style="font-weight: 700; color: #4ade80; font-size: 0.95rem;">🌟 Both (Airfare & Villa)</div>
@@ -2234,12 +2245,58 @@
         // ── SC / PWD Option Modal Logic ──────────────────────────────────
         let currentScTargetBtn = null;
 
+        function configureScModalOptions(property, isFvn) {
+            const $airfareOptions = $('.sc-option-btn[data-sc-group="airfare"]');
+            const $accommodationOption = $('.sc-option-btn[data-mode="villa"]');
+            const $bothOption = $('.sc-option-btn[data-mode="both"]');
+            const $noneOption = $('.sc-option-btn[data-mode="none"]');
+
+            $airfareOptions.show();
+            $accommodationOption.show();
+            $bothOption.show();
+            $noneOption.show();
+
+            if (property === 'island' && isFvn) {
+                $accommodationOption.hide();
+                $bothOption.hide();
+            } else if (property === 'pines' || property === 'city') {
+                $airfareOptions.hide();
+                $accommodationOption.find('.sc-villa-label').text('Accommodation Only');
+                $accommodationOption.find('.sc-villa-desc').text('Applies 12% VAT exemption & 20% discount to accommodation.');
+            } else {
+                $accommodationOption.find('.sc-villa-label').text('Villa Only');
+                $accommodationOption.find('.sc-villa-desc').text('Applies 12% VAT exemption & 20% discount to Villa accommodation.');
+            }
+        }
+
+        function saveScTargetToDb(property, key, mode) {
+            const parts = String(key).split(':');
+            if (parts.length < 2) return;
+
+            $.ajax({
+                url: '{{ route('sc-targets.store') }}',
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                },
+                data: {
+                    property: property,
+                    res_no: parts[0],
+                    occupant_idx: parts[1],
+                    mode: mode
+                }
+            });
+        }
+
         $(document).on('click', '.open-sc-modal-btn', function() {
             currentScTargetBtn = $(this);
             const guestName   = currentScTargetBtn.data('guest-name') || 'Occupant';
-            const currentMode = currentScTargetBtn.data('mode') || 'none';
+            const property    = window.__property || 'island';
+            const isExtra     = currentScTargetBtn.data('is-extra') === true || currentScTargetBtn.data('is-extra') === 'true';
+            const isFvn       = !isExtra && (currentScTargetBtn.data('is-fvn') === true || currentScTargetBtn.data('is-fvn') === 'true');
 
             $('#scModalOccupantName').text(guestName);
+            configureScModalOptions(property, isFvn);
 
             const scModalEl = document.getElementById('scDiscountModal');
             if (scModalEl) {
@@ -2250,7 +2307,18 @@
 
         $(document).on('click', '.sc-option-btn', function() {
             if (!currentScTargetBtn) return;
-            const selectedMode = $(this).data('mode'); // "air", "villa", "both", "none"
+            let selectedMode = $(this).data('mode'); // "air", "villa", "both", "none"
+            const property = window.__property || 'island';
+            const isExtra = currentScTargetBtn.data('is-extra') === true || currentScTargetBtn.data('is-extra') === 'true';
+            const isFvn = !isExtra && (currentScTargetBtn.data('is-fvn') === true || currentScTargetBtn.data('is-fvn') === 'true');
+
+            if (property === 'island' && isFvn && !['air', 'none'].includes(selectedMode)) {
+                return;
+            }
+            if ((property === 'pines' || property === 'city') && ['air', 'both'].includes(selectedMode)) {
+                return;
+            }
+
             const key = currentScTargetBtn.data('override-key');
             const tr  = currentScTargetBtn.closest('tr');
 
@@ -2285,13 +2353,16 @@
             // Sync Export links
             updateLinks();
 
+            saveScTargetToDb(window.__property || 'island', key, selectedMode);
+
             // 2. Update UI Badge on button
             currentScTargetBtn.data('mode', selectedMode).attr('data-mode', selectedMode);
             let badgeHtml = '';
             if (selectedMode === 'both') {
                 badgeHtml = '<span class="sc-badge-label" style="color: #4ade80; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.4); padding: 2px 6px; border-radius: 4px;">🌟 Both SC</span>';
             } else if (selectedMode === 'villa') {
-                badgeHtml = '<span class="sc-badge-label" style="color: #c084fc; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.4); padding: 2px 6px; border-radius: 4px;">🏡 Villa Only</span>';
+                const villaLabel = (window.__property === 'pines' || window.__property === 'city') ? 'Accommodation Only' : 'Villa Only';
+                badgeHtml = '<span class="sc-badge-label" style="color: #c084fc; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.4); padding: 2px 6px; border-radius: 4px;">🏡 ' + villaLabel + '</span>';
             } else if (selectedMode === 'air') {
                 badgeHtml = '<span class="sc-badge-label" style="color: #60a5fa; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.4); padding: 2px 6px; border-radius: 4px;">✈️ Airfare Only</span>';
             } else {
@@ -2347,11 +2418,12 @@
                 (res.rate || []).forEach(r => {
                     const val  = parseFloat(r.val || 0);
                     const frac = Math.round((val - Math.floor(val)) * 100) / 100;
-                    const isFvn = (frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5);
+                    const isFvn = !isExtraOcc && (frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5);
 
-                    if (!isFvn && r.breakdown) {
+                    if (!isFvn) {
+                        if (!r.breakdown) r.breakdown = {};
                         let gross = r.breakdown.gross_share || 0;
-                        if (isExtraOcc && (gross > 3700 || gross === 0)) {
+                        if (isExtraOcc && (gross > 3700 || gross === 0 || val <= 1.0 || frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5)) {
                             gross = 3700;
                         } else if (!gross || gross === val) {
                             gross = r.breakdown.is_discounted ? Math.round((val * 14 / 11) * 100) / 100 : val;

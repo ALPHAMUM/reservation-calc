@@ -75,12 +75,25 @@ class BalesinPinesHandler extends AbstractPropertyHandler
                 $resOccupantIndex[$resNo] = 0;
             }
             $occupantIndex = $resOccupantIndex[$resNo]++;
+            $res['occupant_idx'] = $occupantIndex;
 
             $roomType = $res['roomtyp'] ?? $res['roomType'] ?? '';
             $unitType = $calculator->resolvePinesUnitType($roomType, $res['rateCode'] ?? '');
 
-            $res['calculated_rates'] = $calculator->calculatePassengerRates(
+            $scTargetService = app(\App\Services\ScTargetService::class);
+            $resForCalc = $scTargetService->applyToPassenger(
                 $res,
+                $resNo,
+                $occupantIndex,
+                $this->scTargetMap,
+                $this->scOverrideMap,
+                $this->scRemoveMap,
+                $this->slug
+            );
+            $scTargetService->syncPassengerFlags($res, $resForCalc);
+
+            $res['calculated_rates'] = $calculator->calculatePassengerRates(
+                $resForCalc,
                 $occupantIndex,
                 $roomType,
                 2,                // base pax = 2 for Pines
@@ -95,7 +108,8 @@ class BalesinPinesHandler extends AbstractPropertyHandler
             if (isset($res['rate']) && is_array($res['rate'])) {
                 foreach ($res['rate'] as &$r) {
                     $d = $r['date'] ?? '';
-                    if ($d && isset($res['calculated_rates']['acc_dates'][$d]['breakdown'])) {
+                    if ($d && isset($res['calculated_rates']['acc_dates'][$d])) {
+                        $r['val'] = $res['calculated_rates']['acc_dates'][$d]['val'];
                         $r['breakdown'] = $res['calculated_rates']['acc_dates'][$d]['breakdown'];
                     }
                 }

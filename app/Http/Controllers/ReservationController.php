@@ -441,41 +441,14 @@ class ReservationController extends Controller
                 $occupantIndices = [];
                 $reservationPaxCounts = [];
 
-                // Parse SC/PWD override: "resNo:occupantIdx" comma-separated pairs
-                $scOverrideRaw = $request->get('sc_override', '');
-                $scOverrideMap = [];
-                if ($scOverrideRaw) {
-                    foreach (explode(',', $scOverrideRaw) as $pair) {
-                        $parts = explode(':', trim($pair));
-                        if (count($parts) === 2) {
-                            $scOverrideMap[trim($parts[0])][] = (int) $parts[1];
-                        }
-                    }
-                }
-
-                // Parse SC/PWD remove: strip discount from API SC/PWD guests
-                $scRemoveRaw = $request->get('sc_remove', '');
-                $scRemoveMap = [];
-                if ($scRemoveRaw) {
-                    foreach (explode(',', $scRemoveRaw) as $pair) {
-                        $parts = explode(':', trim($pair));
-                        if (count($parts) === 2) {
-                            $scRemoveMap[trim($parts[0])][] = (int) $parts[1];
-                        }
-                    }
-                }
-
-                // Parse SC/PWD target mode: "resNo:occupantIdx:mode" (air|villa|both|none)
-                $scTargetRaw = $request->get('sc_target', '');
-                $scTargetMap = [];
-                if ($scTargetRaw) {
-                    foreach (explode(',', $scTargetRaw) as $pair) {
-                        $parts = explode(':', trim($pair));
-                        if (count($parts) === 3) {
-                            $scTargetMap[trim($parts[0])][(int) $parts[1]] = strtolower(trim($parts[2]));
-                        }
-                    }
-                }
+                $scTargetService = app(\App\Services\ScTargetService::class);
+                $scOverrideRaw = (string) $request->get('sc_override', '');
+                $scRemoveRaw   = (string) $request->get('sc_remove', '');
+                $requestScTargetRaw = (string) $request->get('sc_target', '');
+                $scTargetRaw = $scTargetService->resolveRaw($property, $requestScTargetRaw, $allConfIds);
+                $scOverrideMap = $scTargetService->parseOverrideRaw($scOverrideRaw);
+                $scRemoveMap   = $scTargetService->parseRemoveRaw($scRemoveRaw);
+                $scTargetMap   = $scTargetService->parseRaw($scTargetRaw);
                 foreach ($chunks as $chunk) {
                     $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()
                         ->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
@@ -572,30 +545,24 @@ class ReservationController extends Controller
                         $totalBillable = $reservationPaxCounts[$resNo] ?? 1;
                         $res['occupant_idx'] = $occupantIndex;
 
+                        $isExtraPerson = $calculator->isExtraOccupant(
+                            $occupantIndex,
+                            $roomType,
+                            $res['rate_metadata'] ?? ''
+                        );
+
                         // Apply SC/PWD target mode or override/remove if requested for this occupant
-                        $resForCalc = $res;
-                        $targetMode = $scTargetMap[$resNo][$occupantIndex] ?? null;
-                        if ($targetMode !== null) {
-                            $resForCalc['sc_target_villa'] = in_array($targetMode, ['villa', 'both'], true);
-                            $resForCalc['sc_target_air']   = in_array($targetMode, ['air', 'both'], true);
-                            $resForCalc['sc_mode']         = $targetMode;
-                        } else {
-                            if (isset($scOverrideMap[$resNo]) && in_array($occupantIndex, $scOverrideMap[$resNo], true)) {
-                                $resForCalc['privCard'] = 'Senior Citizen';
-                                $resForCalc['sc_target_villa'] = true;
-                                $resForCalc['sc_target_air']   = true;
-                                $resForCalc['sc_mode']         = 'both';
-                            }
-                            if (isset($scRemoveMap[$resNo]) && in_array($occupantIndex, $scRemoveMap[$resNo], true)) {
-                                $resForCalc['privCard'] = 'N';
-                                $resForCalc['sc_target_villa'] = false;
-                                $resForCalc['sc_target_air']   = false;
-                                $resForCalc['sc_mode']         = 'none';
-                            }
-                        }
-                        $res['sc_target_villa'] = $resForCalc['sc_target_villa'] ?? null;
-                        $res['sc_target_air']   = $resForCalc['sc_target_air']   ?? null;
-                        $res['sc_mode']         = $resForCalc['sc_mode']         ?? null;
+                        $resForCalc = $scTargetService->applyToPassenger(
+                            $res,
+                            $resNo,
+                            $occupantIndex,
+                            $scTargetMap,
+                            $scOverrideMap,
+                            $scRemoveMap,
+                            $property,
+                            $isExtraPerson
+                        );
+                        $scTargetService->syncPassengerFlags($res, $resForCalc);
 
                         $res['calculated_rates'] = $calculator->calculatePassengerRates(
                             $resForCalc,
@@ -846,41 +813,15 @@ class ReservationController extends Controller
         $allDates = [];
         $calculator = app(\App\Services\RateCalculatorService::class);
 
-        // Parse SC/PWD override: "resNo:occupantIdx" comma-separated pairs
-        $scOverrideRaw = $request->get('sc_override', '');
-        $scOverrideMap = [];
-        if ($scOverrideRaw) {
-            foreach (explode(',', $scOverrideRaw) as $pair) {
-                $parts = explode(':', trim($pair));
-                if (count($parts) === 2) {
-                    $scOverrideMap[trim($parts[0])][] = (int) $parts[1];
-                }
-            }
-        }
-
-        // Parse SC/PWD remove: strip discount from API SC/PWD guests
-        $scRemoveRaw = $request->get('sc_remove', '');
-        $scRemoveMap = [];
-        if ($scRemoveRaw) {
-            foreach (explode(',', $scRemoveRaw) as $pair) {
-                $parts = explode(':', trim($pair));
-                if (count($parts) === 2) {
-                    $scRemoveMap[trim($parts[0])][] = (int) $parts[1];
-                }
-            }
-        }
-
-        // Parse SC/PWD target mode: "resNo:occupantIdx:mode" (air|villa|both|none)
-        $scTargetRaw = $request->get('sc_target', '');
-        $scTargetMap = [];
-        if ($scTargetRaw) {
-            foreach (explode(',', $scTargetRaw) as $pair) {
-                $parts = explode(':', trim($pair));
-                if (count($parts) === 3) {
-                    $scTargetMap[trim($parts[0])][(int) $parts[1]] = strtolower(trim($parts[2]));
-                }
-            }
-        }
+        $scTargetService = app(\App\Services\ScTargetService::class);
+        $propertyForSc = $request->get('property', 'island');
+        $scOverrideRaw = (string) $request->get('sc_override', '');
+        $scRemoveRaw   = (string) $request->get('sc_remove', '');
+        $requestScTargetRaw = (string) $request->get('sc_target', '');
+        $scTargetRaw = $scTargetService->resolveRaw($propertyForSc, $requestScTargetRaw, array_values($ids));
+        $scOverrideMap = $scTargetService->parseOverrideRaw($scOverrideRaw);
+        $scRemoveMap   = $scTargetService->parseRemoveRaw($scRemoveRaw);
+        $scTargetMap   = $scTargetService->parseRaw($scTargetRaw);
 
         $paxIndices = [];
         $occupantIndices = [];
@@ -971,24 +912,24 @@ class ReservationController extends Controller
                     $occupantIndex = $occupantIndices[$resNo];
                     $totalBillable = $reservationPaxCounts[$resNo] ?? 1;
 
+                    $isExtraPerson = $calculator->isExtraOccupant(
+                        $occupantIndex,
+                        $roomType,
+                        $res['rate_metadata'] ?? ''
+                    );
+
                     // Apply SC/PWD target mode or override/remove if requested for this occupant
-                    $resForCalc = $res;
-                    $targetMode = $scTargetMap[$resNo][$occupantIndex] ?? null;
-                    if ($targetMode !== null) {
-                        $resForCalc['sc_target_villa'] = in_array($targetMode, ['villa', 'both'], true);
-                        $resForCalc['sc_target_air']   = in_array($targetMode, ['air', 'both'], true);
-                    } else {
-                        if (isset($scOverrideMap[$resNo]) && in_array($occupantIndex, $scOverrideMap[$resNo], true)) {
-                            $resForCalc['privCard'] = 'Senior Citizen';
-                            $resForCalc['sc_target_villa'] = true;
-                            $resForCalc['sc_target_air']   = true;
-                        }
-                        if (isset($scRemoveMap[$resNo]) && in_array($occupantIndex, $scRemoveMap[$resNo], true)) {
-                            $resForCalc['privCard'] = 'N';
-                            $resForCalc['sc_target_villa'] = false;
-                            $resForCalc['sc_target_air']   = false;
-                        }
-                    }
+                    $resForCalc = $scTargetService->applyToPassenger(
+                        $res,
+                        $resNo,
+                        $occupantIndex,
+                        $scTargetMap,
+                        $scOverrideMap,
+                        $scRemoveMap,
+                        $propertyForSc,
+                        $isExtraPerson
+                    );
+                    $scTargetService->syncPassengerFlags($res, $resForCalc);
 
                     $calcResult = $calculator->calculatePassengerRates(
                         $resForCalc,
@@ -1662,41 +1603,16 @@ class ReservationController extends Controller
         $memberMap = $memberMap ?? [];
         $listRateMap = $listRateMap ?? [];
 
-        // Parse SC/PWD override: "resNo:occupantIdx" comma-separated pairs
-        $scOverrideRaw = $request->get('sc_override', '');
-        $scOverrideMap = [];
-        if ($scOverrideRaw) {
-            foreach (explode(',', $scOverrideRaw) as $pair) {
-                $parts = explode(':', trim($pair));
-                if (count($parts) === 2) {
-                    $scOverrideMap[trim($parts[0])][] = (int) $parts[1];
-                }
-            }
-        }
+        $scTargetService = app(\App\Services\ScTargetService::class);
+        $propertyForSc = $request->get('property', 'island');
+        $scOverrideRaw = (string) $request->get('sc_override', '');
+        $scRemoveRaw   = (string) $request->get('sc_remove', '');
+        $requestScTargetRaw = (string) $request->get('sc_target', '');
+        $scTargetRaw = $scTargetService->resolveRaw($propertyForSc, $requestScTargetRaw, array_values($ids));
+        $scOverrideMap = $scTargetService->parseOverrideRaw($scOverrideRaw);
+        $scRemoveMap   = $scTargetService->parseRemoveRaw($scRemoveRaw);
+        $scTargetMap   = $scTargetService->parseRaw($scTargetRaw);
 
-        // Parse SC/PWD remove: strip discount from API SC/PWD guests
-        $scRemoveRaw = $request->get('sc_remove', '');
-        $scRemoveMap = [];
-        if ($scRemoveRaw) {
-            foreach (explode(',', $scRemoveRaw) as $pair) {
-                $parts = explode(':', trim($pair));
-                if (count($parts) === 2) {
-                    $scRemoveMap[trim($parts[0])][] = (int) $parts[1];
-                }
-            }
-        }
-
-        // Parse SC/PWD target mode: "resNo:occupantIdx:mode" (air|villa|both|none)
-        $scTargetRaw = $request->get('sc_target', '');
-        $scTargetMap = [];
-        if ($scTargetRaw) {
-            foreach (explode(',', $scTargetRaw) as $pair) {
-                $parts = explode(':', trim($pair));
-                if (count($parts) === 3) {
-                    $scTargetMap[trim($parts[0])][(int) $parts[1]] = strtolower(trim($parts[2]));
-                }
-            }
-        }
         foreach (array_chunk(array_slice($ids, 0, 1000), 50) as $chunk) {
             $resp = Http::withHeaders(['Authorization' => $this->apiKey])->withoutVerifying()->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
             if (!$resp->successful()) {
@@ -1783,25 +1699,25 @@ class ReservationController extends Controller
                     $res['roomtyp'] = $roomType;
                     $res['roomType'] = $roomType;
                     $totalBillable = $reservationPaxCounts[$resNo] ?? 1;
+                    $res['occupant_idx'] = $occupantIndex;
+
+                    $isExtraPerson = $calculator->isExtraOccupant(
+                        $occupantIndex,
+                        $roomType,
+                        $res['rate_metadata'] ?? ''
+                    );
 
                     // Apply SC/PWD target mode or override/remove if requested for this occupant
-                    $resForCalc = $res;
-                    $targetMode = $scTargetMap[$resNo][$occupantIndex] ?? null;
-                    if ($targetMode !== null) {
-                        $resForCalc['sc_target_villa'] = in_array($targetMode, ['villa', 'both'], true);
-                        $resForCalc['sc_target_air']   = in_array($targetMode, ['air', 'both'], true);
-                    } else {
-                        if (isset($scOverrideMap[$resNo]) && in_array($occupantIndex, $scOverrideMap[$resNo], true)) {
-                            $resForCalc['privCard'] = 'Senior Citizen';
-                            $resForCalc['sc_target_villa'] = true;
-                            $resForCalc['sc_target_air']   = true;
-                        }
-                        if (isset($scRemoveMap[$resNo]) && in_array($occupantIndex, $scRemoveMap[$resNo], true)) {
-                            $resForCalc['privCard'] = 'N';
-                            $resForCalc['sc_target_villa'] = false;
-                            $resForCalc['sc_target_air']   = false;
-                        }
-                    }
+                    $resForCalc = $scTargetService->applyToPassenger(
+                        $res,
+                        $resNo,
+                        $occupantIndex,
+                        $scTargetMap,
+                        $scOverrideMap,
+                        $scRemoveMap,
+                        $propertyForSc,
+                        $isExtraPerson
+                    );
 
                     $res['calculated_rates'] = $calculator->calculatePassengerRates(
                         $resForCalc,
@@ -1827,9 +1743,7 @@ class ReservationController extends Controller
                     }
 
                     // ── Propagate SC flags back onto $res so span-building can detect mixed-SC groups ──
-                    $res['sc_target_villa'] = $resForCalc['sc_target_villa'] ?? null;
-                    $res['sc_target_air']   = $resForCalc['sc_target_air']   ?? null;
-                    $res['sc_mode']         = $targetMode;
+                    $scTargetService->syncPassengerFlags($res, $resForCalc);
 
                     $res['is_employee'] = $res['calculated_rates']['is_employee'] ?? false;
                     $res['village_name'] = $this->getVillageName($roomType);
@@ -1880,6 +1794,15 @@ class ReservationController extends Controller
 
             // 2. No padding - only show actual occupant rows
 
+            // Reservation-wide: does ANY occupant have villa SC (for mixed-group unspanning)?
+            $anyVillaScInRes = false;
+            foreach ($rows as $r) {
+                if (!empty($r['sc_target_villa']) || in_array($r['sc_mode'] ?? '', ['villa', 'both'], true)) {
+                    $anyVillaScInRes = true;
+                    break;
+                }
+            }
+
             $i = 0;
             while ($i < $count) {
                 $startIdx   = $i;
@@ -1888,23 +1811,27 @@ class ReservationController extends Controller
                 $i          = $mergeLimit;
 
                 // ── Detect whether ANY base occupant in this block has a Villa SC/PWD discount ──
-                $hasAnyVillaScInBlock = false;
-                for ($k = $startIdx; $k < $mergeLimit; $k++) {
-                    $isExtra = ($rows[$k]['is_extra_person'] ?? false) || ($k >= $basePax);
-                    if (!$isExtra) {
-                        $hasVillaSc = (bool) ($rows[$k]['sc_target_villa'] ?? false);
-                        if (!$hasVillaSc && isset($rows[$k]['sc_mode'])) {
-                            $hasVillaSc = in_array($rows[$k]['sc_mode'], ['villa', 'both'], true);
-                        }
-                        if ($hasVillaSc) {
-                            $hasAnyVillaScInBlock = true;
-                            break;
+                $hasAnyVillaScInBlock = $anyVillaScInRes;
+                if (!$hasAnyVillaScInBlock) {
+                    for ($k = $startIdx; $k < $mergeLimit; $k++) {
+                        $occIdx = (int) ($rows[$k]['occupant_idx'] ?? $k);
+                        $isExtra = ($rows[$k]['is_extra_person'] ?? false) || ($occIdx >= $basePax);
+                        if (!$isExtra) {
+                            $hasVillaSc = (bool) ($rows[$k]['sc_target_villa'] ?? false);
+                            if (!$hasVillaSc && isset($rows[$k]['sc_mode'])) {
+                                $hasVillaSc = in_array($rows[$k]['sc_mode'], ['villa', 'both'], true);
+                            }
+                            if ($hasVillaSc) {
+                                $hasAnyVillaScInBlock = true;
+                                break;
+                            }
                         }
                     }
                 }
 
                 for ($k = $startIdx; $k < $mergeLimit; $k++) {
-                    $isExtra = ($rows[$k]['is_extra_person'] ?? false) || ($k >= $basePax);
+                    $occIdx = (int) ($rows[$k]['occupant_idx'] ?? $k);
+                    $isExtra = ($rows[$k]['is_extra_person'] ?? false) || ($occIdx >= $basePax);
                     if ($isExtra) {
                         // Extra occupant: always unspanned with its own calculated rate
                         $rows[$k]['acc_group_size'] = 1;

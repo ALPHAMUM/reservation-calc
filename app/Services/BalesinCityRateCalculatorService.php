@@ -29,10 +29,20 @@ class BalesinCityRateCalculatorService
     }
 
     /**
-     * Calculate Pass-through Rates for Balesin City (raw rates sum without Island fees)
+     * Calculate City passenger rates with optional Senior/PWD accommodation discount.
      */
-    public function getPassThroughRates(array $passenger): array
+    public function calculatePassengerRates(array $passenger): array
     {
+        $gstType = strtolower($passenger['gstType'] ?? $passenger['gsttype'] ?? '');
+        $privCard = trim((string) ($passenger['privCard'] ?? $passenger['privcard'] ?? ''));
+        $privCardLower = strtolower($privCard);
+        $hasPrivCard = $privCard !== '' && !in_array($privCardLower, ['n', 'no', 'false', '0', 'none', 'null']);
+        if ($privCardLower === 'senior citizen' || $privCardLower === 'pwd' || str_contains($gstType, 'senior') || str_contains($gstType, 'pwd')) {
+            $hasPrivCard = true;
+        }
+
+        $hasVillaSc = isset($passenger['sc_target_villa']) ? (bool) $passenger['sc_target_villa'] : $hasPrivCard;
+
         $acc = 0;
         $accDates = [];
         $air = 0;
@@ -53,23 +63,36 @@ class BalesinCityRateCalculatorService
                 $avi += $val;
             } elseif (str_contains($desc, 'environmental')) {
                 $env += $val;
-            } else {
-                if ($date) {
-                    $acc += $val;
-                    $accDates[$date] = [
-                        'val'       => $val,
-                        'breakdown' => [
-                            'gross_share'   => $val,
-                            'is_discounted' => false,
-                            'is_infant'     => false,
-                            'divisor'       => 1,
-                            'base'          => $val,
-                            'discount'      => 0,
-                            'sc'            => 0,
-                            'vat'           => 0
-                        ]
-                    ];
+            } elseif ($date) {
+                $finalVal = $val;
+                $isDiscounted = false;
+                $base = $val;
+                $discount = 0;
+                $sc = 0;
+                $vat = 0;
+
+                if ($hasVillaSc && $val > 0) {
+                    $vatExemptBase = round($val / 1.12, 2);
+                    $discount = round($vatExemptBase * 0.20, 2);
+                    $finalVal = round($vatExemptBase - $discount, 2);
+                    $base = $vatExemptBase;
+                    $isDiscounted = true;
                 }
+
+                $acc += $finalVal;
+                $accDates[$date] = [
+                    'val'       => $finalVal,
+                    'breakdown' => [
+                        'gross_share'   => $val,
+                        'is_discounted' => $isDiscounted,
+                        'is_infant'     => false,
+                        'divisor'       => 1,
+                        'base'          => $base,
+                        'discount'      => $discount,
+                        'sc'            => $sc,
+                        'vat'           => $vat,
+                    ],
+                ];
             }
         }
 
@@ -83,5 +106,13 @@ class BalesinCityRateCalculatorService
             'total_gross' => $acc + $air + $han + $avi + $env,
             'total_net'   => $acc + $air + $han + $avi + $env,
         ];
+    }
+
+    /**
+     * Calculate Pass-through Rates for Balesin City (raw rates sum without Island fees)
+     */
+    public function getPassThroughRates(array $passenger): array
+    {
+        return $this->calculatePassengerRates($passenger);
     }
 }
