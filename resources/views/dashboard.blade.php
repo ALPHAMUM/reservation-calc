@@ -976,9 +976,9 @@
                                     while ($curr < $count) {
                                         $blockStart = $curr;
                                         $isBlockExtra = ($curr >= $basePax);
-                                        $blockSize = ($property === 'island' || $property === 'pines') ? ($isBlockExtra ? 1 : min($count - $curr, $basePax)) : 1;
+                                        $blockSize = in_array($property, ['island', 'pines', 'city'], true) ? ($isBlockExtra ? 1 : min($count - $curr, $basePax)) : 1;
                                         
-                                        if ($property === 'island' || $property === 'pines') {
+                                        if (in_array($property, ['island', 'pines', 'city'], true)) {
                                             // Build groupTotals from current occupant if extra person, or first occupant in block if base block
                                             $groupTotals = [];
                                             foreach($dateCols as $d) {
@@ -993,7 +993,10 @@
                                                             // ── FVN guard: 0.01 = 1 FVN, 0.02 = 1.5 FVN, 0.03 = 0.5 FVN split, 0.5 = 0.5 FVN
                                                             // These are rate CODE markers — never do arithmetic on them
                                                             $rawFrac = round($rawVal - floor($rawVal), 2);
-                                                            $isFvnMarker = !$isBlockExtra && in_array($rawFrac, [0.01, 0.02, 0.03, 0.5]) && $rawVal < 10;
+                                                            $isFvnMarker = !$isBlockExtra && in_array($rawFrac, [0.01, 0.02, 0.03, 0.5]);
+                                                            if (!$isFvnMarker && $breakdown && !empty($breakdown['is_fvn'])) {
+                                                                $isFvnMarker = true;
+                                                            }
                                                             if ($isFvnMarker) {
                                                                 $uv = $rawVal; // pass through unchanged
                                                                 break;
@@ -1018,14 +1021,15 @@
                                                                     else $extraHasVillaSc = $isApiSc;
                                                                 }
 
+                                                                $extraChargeVal = ($property === 'city') ? 1300 : 3700;
                                                                 if ($extraHasVillaSc || ($breakdown && !empty($breakdown['is_discounted']))) {
-                                                                    if ($rawVal > 0 && $rawVal < 3700 && abs($rawVal - 2907.14) < 10) {
+                                                                    if ($rawVal > 0 && $rawVal < $extraChargeVal && abs($rawVal - round(($extraChargeVal / 1.12) * 0.8 * 1.1, 2)) < 10) {
                                                                         $uv = $rawVal;
                                                                     } else {
-                                                                        $uv = round((3700 / 1.12) * 0.8 * 1.1, 2);
+                                                                        $uv = round(($extraChargeVal / 1.12) * 0.8 * 1.1, 2);
                                                                     }
                                                                 } else {
-                                                                    $uv = ($rawVal > 3700 || $rawVal <= 1.0) ? 3700 : $rawVal;
+                                                                    $uv = ($rawVal > $extraChargeVal || $rawVal <= 1.0) ? $extraChargeVal : $rawVal;
                                                                 }
                                                             } elseif ($breakdown && !empty($breakdown['gross_share'])) {
                                                                 $uv = (float)$breakdown['gross_share'];
@@ -1172,13 +1176,14 @@
                                                             // FVN markers (0.01, 0.02, 0.03, 0.5 with val < 10) — pass through unchanged, never divide
                                                             // Extra person is a paid 3700 charge even when the API still sends FVN markers.
                                                             $uvFrac = round($uv - floor($uv), 2);
-                                                            $isUvFvn = !$isExtraPerson && in_array($uvFrac, [0.01, 0.02, 0.03, 0.5]) && $uv < 10;
+                                                            $isUvFvn = !$isExtraPerson && in_array($uvFrac, [0.01, 0.02, 0.03, 0.5]);
                                                             if (!$isUvFvn) {
                                                                 if ($isExtraPerson) {
-                                                                    if ($uv > 3700 || $uv <= 1.0) {
-                                                                        $uv = 3700;
+                                                                    $extraChargeVal = ($property === 'city') ? 1300 : 3700;
+                                                                    if ($uv > $extraChargeVal || $uv <= 1.0) {
+                                                                        $uv = $extraChargeVal;
                                                                     }
-                                                                } elseif ($uv > 100 && $blockSize > 1) {
+                                                                } elseif ($uv > 100 && $blockSize > 1 && $property !== 'pines') {
                                                                     // If rate is full room rate (e.g. 7857.14), divide by group size to show per-occupant share (1964.29)
                                                                     if (abs($uv - ($groupTotals[$d] ?? 0)) < 1.0 || $uv > 3000) {
                                                                         $uv = round($uv / $blockSize, 2);

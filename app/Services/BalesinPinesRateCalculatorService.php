@@ -34,6 +34,11 @@ class BalesinPinesRateCalculatorService
         
     }
 
+    public function isExtraOccupant(int $occupantIndex, string $roomType = ''): bool
+    {
+        return $occupantIndex >= 2;
+    }
+
     /**
      * Get Base Nightly Rate for Pines Unit Type based on Member vs Guest status and member unit count limit (max 3)
      */

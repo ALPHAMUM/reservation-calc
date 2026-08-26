@@ -21,11 +21,17 @@ class BalesinCityRateCalculatorService
      */
     public function resolveCityUnitType(string $roomType = '', string $rateCode = ''): string
     {
-        $rt = strtolower($roomType . ' ' . $rateCode);
-        if (str_contains($rt, '2') || str_contains($rt, '2-br') || str_contains($rt, '2br') || str_contains($rt, '2-bedroom') || str_contains($rt, 'two bedroom')) {
-            return '2-BEDROOM SUITE';
+        if (str_contains(strtoupper($roomType), '2-BEDROOM') || str_contains(strtoupper($roomType), '2-BR') || str_contains(strtoupper($roomType), 'TWOBED')) {
+            return 'Two-Bedroom Suite';
         }
-        return 'STUDIO-TYPE SUITE';
+        return 'Studio-Type Suite';
+    }
+
+    public function isExtraOccupant(int $occupantIndex, string $roomType = ''): bool
+    {
+        $is2Bed = str_contains(strtoupper($roomType), '2-BEDROOM') || str_contains(strtoupper($roomType), '2-BR') || str_contains(strtoupper($roomType), 'TWOBED');
+        $basePax = $is2Bed ? 6 : 4;
+        return $occupantIndex >= $basePax;
     }
 
     /**
@@ -64,6 +70,37 @@ class BalesinCityRateCalculatorService
             } elseif (str_contains($desc, 'environmental')) {
                 $env += $val;
             } elseif ($date) {
+                // ── Detect FVN magic fractions: .01 = 1FVN, .02 = 1.5FVN, .03 = 0.5FVN
+                $integerPart = (int) floor($val);
+                $fraction    = round($val - $integerPart, 2);
+                $fvnMapping  = [0.01 => 1.0, 0.02 => 1.5, 0.03 => 0.5];
+
+                if (array_key_exists($fraction, $fvnMapping)) {
+                    $fvnRate = $fvnMapping[$fraction];
+                    // Base room is FVN (0 accommodation cost)
+                    // If integer part > 0 (e.g. 1300.01), it means extra person also has 1300 on top
+                    $accDates[$date] = [
+                        'val'       => $fraction,
+                        'breakdown' => [
+                            'gross_share'   => $fraction,
+                            'is_discounted' => false,
+                            'is_infant'     => false,
+                            'divisor'       => 1,
+                            'base'          => $fraction,
+                            'discount'      => 0,
+                            'sc'            => 0,
+                            'vat'           => 0,
+                            'is_fvn'        => true,
+                            'fvn_rate'      => $fvnRate,
+                            'fraction'      => $fraction,
+                            'paid_amount'   => ($integerPart > 0 && $integerPart !== 1300) ? (float)$integerPart : 0,
+                        ],
+                    ];
+                    // Do NOT add to $acc – FVN = ₱0.00 accommodation
+                    continue;
+                }
+
+                // ── Regular accommodation rate
                 $finalVal = $val;
                 $isDiscounted = false;
                 $base = $val;

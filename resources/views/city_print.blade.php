@@ -414,9 +414,29 @@
                             @php
                                 $val = $rates['acc_dates'][$d]['val'] ?? ($groupTotals[$d] ?? 0);
                                 $rv = round($val, 2);
-                                $displayVal = ($val > 0 ? number_format($val, 2) : '');
+                                $breakdown = $rates['acc_dates'][$d]['breakdown'] ?? null;
+                                $isFvnCell = !empty($breakdown['is_fvn']);
+                                // Also detect FVN via fraction if not in acc_dates
+                                if (!$isFvnCell) {
+                                    $rawFrac = round($val - floor($val), 2);
+                                    $isFvnCell = in_array($rawFrac, [0.01, 0.02, 0.03]);
+                                    if ($isFvnCell) {
+                                        $breakdown = $breakdown ?? ['fvn_rate' => [0.01=>1.0,0.02=>1.5,0.03=>0.5][$rawFrac], 'fraction' => $rawFrac];
+                                    }
+                                }
+
+                                if ($isFvnCell) {
+                                    $fvnRate = $breakdown['fvn_rate'] ?? null;
+                                    $fraction = $breakdown['fraction'] ?? $rawFrac ?? null;
+                                    if ($fvnRate == 1.0 || $fraction == 0.01) $fvnLabel = '1 FVN';
+                                    elseif ($fvnRate == 1.5 || $fraction == 0.02) $fvnLabel = '1.5 FVN';
+                                    else $fvnLabel = '.5 FVN';
+                                    $displayVal = $fvnLabel;
+                                } else {
+                                    $displayVal = ($val > 0 ? number_format($val, 2) : '');
+                                }
                             @endphp
-                            <td class="num {{ $span > 1 ? 'merged' : '' }}" rowspan="{{ $span }}" style="text-align: center;">{{ $displayVal }}</td>
+                            <td class="num {{ $span > 1 ? 'merged' : '' }}" rowspan="{{ $span }}" style="text-align: center; {{ $isFvnCell ? 'color: #c0392b; font-weight: bold;' : '' }}">{{ $displayVal }}</td>
                         @endforeach
                     @endif
 
@@ -425,7 +445,9 @@
                             @php
                                 $val = $rates['acc_dates'][$d]['val'] ?? ($groupTotals[$d] ?? 0);
                                 $rv  = round($val, 2);
-                                if ($rv !== 0.01 && $rv !== 0.02 && $rv !== 0.5) {
+                                $bkd = $rates['acc_dates'][$d]['breakdown'] ?? null;
+                                $isFvnTotal = !empty($bkd['is_fvn']) || in_array($rv, [0.01, 0.02, 0.03, 0.5]);
+                                if (!$isFvnTotal) {
                                     $dateTotals[$d] += (float) $val;
                                 }
                             @endphp

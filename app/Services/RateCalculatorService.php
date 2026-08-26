@@ -570,6 +570,13 @@ class RateCalculatorService
         return $this->isVillaUnit($roomType, $rateMetadata, $rateCode, $rateValues) ? 'VILLA' : 'SUITE';
     }
 
+    public function isExtraOccupant(int $occupantIndex, string $roomType = '', string $rateMetadata = '', string $rateCode = '', array $rateValues = []): bool
+    {
+        $isVilla = $this->isVillaUnit($roomType, $rateMetadata, $rateCode, $rateValues);
+        $basePax = $isVilla ? 4 : 8;
+        return $occupantIndex >= $basePax;
+    }
+
     /**
      * Extra occupant gross rate: any API accommodation value → flat 3700 or custom settings (not FVN).
      * Villa 5th+ / suite 9th+ must never use 0.01 / 0.02 FVN markers from the API.
