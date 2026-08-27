@@ -176,8 +176,9 @@ class BalesinPinesRateCalculatorService
                         // For .03: divide the paid portion among base occupants
                         $finalVal = round($paidAmount / $baseDivisor, 2);
                     } else {
-                        // For .01/.02: divide the FVN value (display only)
-                        $finalVal = round($val / $baseDivisor, 2);
+                        // For .01/.02: these are magic FVN code markers — DO NOT divide or alter them
+                        // They must remain 0.01 / 0.02 so the display logic can map to "1 FVN" / "1.5 FVN"
+                        $finalVal = $fraction;
                     }
                     $divisor = $baseDivisor;
                 }
@@ -201,7 +202,12 @@ class BalesinPinesRateCalculatorService
                         'fraction'      => $fraction,
                     ]
                 ];
-                $totalAcc += $finalVal;
+                // Only add real money to totalAcc — FVN fraction markers (0.01/0.02) are ₱0.00
+                // For 0.03: add the integer paid portion divided by base occupants
+                if ($fraction == 0.03 && !$isExtraPerson) {
+                    $baseDivisor = max(1, min(2, $totalBillable));
+                    $totalAcc += round($paidAmount / $baseDivisor, 2);
+                }
                 continue; // Skip the rest of the loop for FVN
             }
 

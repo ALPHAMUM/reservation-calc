@@ -421,7 +421,13 @@
             $rv = round($val, 2);
             $frac = round($rv - floor($rv), 2);
             $integerPart = floor($rv);
-            if ($frac == 0.01)      $displayVal = '1 FVN';
+            if ($isExtraPerson) {
+                // Extra person always shows numeric charge, never FVN label
+                $extraVal = (in_array($frac, [0.01, 0.02, 0.03]) || $rv <= 1.0)
+                    ? \App\Services\BalesinPinesRateCalculatorService::EXTRA_PERSON_CHARGE
+                    : $rv;
+                $displayVal = number_format($extraVal, 2);
+            } elseif ($frac == 0.01)      $displayVal = '1 FVN';
             elseif ($frac == 0.02)  $displayVal = '1.5 FVN';
             elseif ($frac == 0.03)  $displayVal = ($integerPart > 0) ? number_format($integerPart, 2) . '<br><span style="font-size: 8px;">.5 FVN</span>' : '.5 FVN';
             else                    $displayVal = ($val > 0 ? number_format($val, 2) : '');
@@ -440,7 +446,14 @@
                                 $val = $groupTotals[$d] ?? ($rates['acc_dates'][$d]['val'] ?? 0);
                                 $rv  = round($val, 2);
                                 $frac = round($rv - floor($rv), 2);
-                                if (!in_array($frac, [0.01, 0.02, 0.03])) {
+                                if ($isExtraPerson) {
+                                    // Extra person: FVN markers replaced by 3700 in groupTotals already
+                                    // But add safety net in case groupTotals still has FVN marker
+                                    $addVal = (in_array($frac, [0.01, 0.02, 0.03]) || $rv <= 1.0)
+                                        ? \App\Services\BalesinPinesRateCalculatorService::EXTRA_PERSON_CHARGE
+                                        : $rv;
+                                    $dateTotals[$d] += (float) $addVal;
+                                } elseif (!in_array($frac, [0.01, 0.02, 0.03])) {
                                     $dateTotals[$d] += (float) $val;
                                 } else {
                                     if ($frac == 0.03) {
@@ -450,10 +463,29 @@
                             @endphp
                         @endforeach
                     @endif
-                    @php $accGrandTotal += $perOccupantAcc; @endphp
+                    @php
+                        // Determine if this passenger is a pure FVN (all date values are .01 or .02)
+                        $isFvnPassenger = false;
+                        if (!$isExtraPerson) {
+                            $fvnCheck = array_filter($groupTotals, function($v) {
+                                $f = round($v - floor($v), 2);
+                                return in_array($f, [0.01, 0.02]);
+                            });
+                            $isFvnPassenger = count($fvnCheck) > 0 && count($fvnCheck) === count($groupTotals);
+                        }
+                        if ($isExtraPerson && $perOccupantAcc <= 1.0) {
+                            // Extra person's rate was an FVN marker in the API — show the correct charge
+                            $displayTotal = \App\Services\BalesinPinesRateCalculatorService::EXTRA_PERSON_CHARGE;
+                        } elseif ($isFvnPassenger) {
+                            $displayTotal = 0.00;
+                        } else {
+                            $displayTotal = $perOccupantAcc;
+                        }
+                        $accGrandTotal += $displayTotal;
+                    @endphp
 
                     <td style="text-align: center; font-weight: bold;">
-                         {{ number_format($perOccupantAcc, 2) }}
+                         {{ number_format($displayTotal, 2) }}
                     </td>
                 </tr>
             @endforeach

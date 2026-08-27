@@ -211,6 +211,11 @@ class BalesinPinesController extends Controller
                                     if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
                                 }
                             }
+                            // Extra person is NEVER FVN — if raw rate is an FVN marker, use 3700
+                            $uvFrac = round($uv - floor($uv), 2);
+                            if (in_array($uvFrac, [0.01, 0.02, 0.03]) || $uv <= 1.0) {
+                                $uv = \App\Services\BalesinPinesRateCalculatorService::EXTRA_PERSON_CHARGE;
+                            }
                             $extraTotals[$d] = $uv;
                         }
                         $accSpans[] = ['span' => 1, 'totals' => $extraTotals, 'group_size' => 1, 'is_extra_person' => true];
