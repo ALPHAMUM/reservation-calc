@@ -46,10 +46,18 @@ class BalesinPinesController extends Controller
 
         $reservations = [];
         $ids = [];
+        $listData = [];
 
         try {
             if ($resNoList) {
                 $ids = array_filter(explode(',', $resNoList));
+                if ($fromDate && $toDate) {
+                    $resp = Http::withHeaders(['Authorization' => $apiKey])
+                        ->withoutVerifying()
+                        ->timeout(30)
+                        ->get($listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
+                    $listData = $resp->successful() ? ($resp->json()['msg'] ?? []) : [];
+                }
             } elseif ($fromDate && $toDate) {
                 $resp = Http::withHeaders(['Authorization' => $apiKey])
                     ->withoutVerifying()
@@ -129,6 +137,11 @@ class BalesinPinesController extends Controller
                 if (empty($res['bookDate'])) $res['bookDate'] = $lr['bookDate'] ?? '';
                 if (empty($res['conactNo'])) $res['conactNo'] = $lr['conactNo'] ?? $lr['contactNo'] ?? '';
 
+                // Preserve list rate label (GRATE / MRATE) for fixed Pines published rates
+                if (is_string($lr['rate'] ?? null) && trim($lr['rate']) !== '') {
+                    $res['list_rate'] = strtoupper(trim($lr['rate']));
+                }
+
                 if (!isset($resOccupantIndex[$resNo])) {
                     $resOccupantIndex[$resNo] = 0;
                 }
@@ -150,8 +163,10 @@ class BalesinPinesController extends Controller
                 if (isset($res['rate']) && is_array($res['rate'])) {
                     foreach ($res['rate'] as &$r) {
                         $d = $r['date'] ?? '';
-                        if ($d && isset($res['calculated_rates']['acc_dates'][$d]['breakdown'])) {
-                            $r['breakdown'] = $res['calculated_rates']['acc_dates'][$d]['breakdown'];
+                        if ($d && isset($res['calculated_rates']['acc_dates'][$d])) {
+                            // Keep calculated per-occupant val + breakdown (composite split applied)
+                            $r['val'] = $res['calculated_rates']['acc_dates'][$d]['val'];
+                            $r['breakdown'] = $res['calculated_rates']['acc_dates'][$d]['breakdown'] ?? null;
                         }
                     }
                     unset($r);
@@ -194,8 +209,26 @@ class BalesinPinesController extends Controller
                 $groupTotals = [];
                 foreach ($dateCols as $d) {
                     $uv = 0;
-                    foreach ($rows[$blockStart]['rate'] ?? [] as $rt) {
-                        if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                    $first = $rows[$blockStart] ?? null;
+                    if ($first) {
+                        // Prefer calculator gross_share (room rate after composite split, e.g. 21500 not 25500)
+                        $bd = $first['calculated_rates']['acc_dates'][$d]['breakdown'] ?? null;
+                        if ($bd && isset($bd['gross_share']) && empty($bd['is_fvn'])) {
+                            $uv = (float) $bd['gross_share'];
+                        } else {
+                            foreach ($first['rate'] ?? [] as $rt) {
+                                if (($rt['date'] ?? '') === $d) {
+                                    $uv = (float)($rt['breakdown']['gross_share'] ?? $rt['val'] ?? 0);
+                                    // If still a composite amount, strip extra person portion for base block
+                                    $split = app(\App\Services\BalesinPinesRateCalculatorService::class)
+                                        ->resolveCompositeFromPassenger($first, $uv);
+                                    if ($split) {
+                                        $uv = $split['base'];
+                                    }
+                                    break;
+                                }
+                            }
+                        }
                     }
                     $groupTotals[$d] = $uv;
                 }
@@ -211,9 +244,9 @@ class BalesinPinesController extends Controller
                                     if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
                                 }
                             }
-                            // Extra person is NEVER FVN — if raw rate is an FVN marker, use 3700
+                            // Extra person is NEVER FVN — if raw rate is an FVN marker or composite, use 3700
                             $uvFrac = round($uv - floor($uv), 2);
-                            if (in_array($uvFrac, [0.01, 0.02, 0.03]) || $uv <= 1.0) {
+                            if (in_array($uvFrac, [0.01, 0.02, 0.03]) || $uv <= 1.0 || $uv > \App\Services\BalesinPinesRateCalculatorService::EXTRA_PERSON_CHARGE) {
                                 $uv = \App\Services\BalesinPinesRateCalculatorService::EXTRA_PERSON_CHARGE;
                             }
                             $extraTotals[$d] = $uv;
@@ -260,8 +293,17 @@ class BalesinPinesController extends Controller
         $apiKey       = config('services.balesin_pines.api_key');
 
         $ids = [];
+        $listData = [];
         if ($resNoList) {
             $ids = array_filter(explode(',', $resNoList));
+            // Still pull list labels when date range is available (GRATE / MRATE)
+            if ($fromDate && $toDate) {
+                $resp = Http::withHeaders(['Authorization' => $apiKey])
+                    ->withoutVerifying()
+                    ->timeout(30)
+                    ->get($listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
+                $listData = $resp->successful() ? ($resp->json()['msg'] ?? []) : [];
+            }
         } elseif ($fromDate && $toDate) {
             $resp = Http::withHeaders(['Authorization' => $apiKey])
                 ->withoutVerifying()
@@ -278,6 +320,14 @@ class BalesinPinesController extends Controller
 
         if (empty($ids)) {
             return back()->with('error', 'No Balesin Pines data to export.');
+        }
+
+        $listRateMap = [];
+        foreach ($listData as $lr) {
+            $k = trim((string)($lr['resNo'] ?? $lr['conf'] ?? ''));
+            if ($k !== '' && is_string($lr['rate'] ?? null) && trim($lr['rate']) !== '') {
+                $listRateMap[$k] = strtoupper(trim($lr['rate']));
+            }
         }
 
         $chunks    = array_chunk($ids, 25);
@@ -305,11 +355,27 @@ class BalesinPinesController extends Controller
             }
             $occupantIndex = $resOccupantIndex[$resNo]++;
 
+            if (!empty($listRateMap[$resNo])) {
+                $res['list_rate'] = $listRateMap[$resNo];
+            }
+
             $roomType                = $res['roomtyp'] ?? $res['roomType'] ?? '';
             $unitType                = $calculator->resolvePinesUnitType($roomType, $res['rateCode'] ?? '');
             $res['calculated_rates'] = $calculator->calculatePassengerRates($res, $occupantIndex, $roomType, 2, $occupantIndex);
             $res['village_name']     = $unitType;
             $res['is_employee']      = false;
+
+            if (isset($res['rate']) && is_array($res['rate'])) {
+                foreach ($res['rate'] as &$r) {
+                    $d = $r['date'] ?? '';
+                    if ($d && isset($res['calculated_rates']['acc_dates'][$d])) {
+                        $r['val'] = $res['calculated_rates']['acc_dates'][$d]['val'];
+                        $r['breakdown'] = $res['calculated_rates']['acc_dates'][$d]['breakdown'] ?? null;
+                    }
+                }
+                unset($r);
+            }
+
             $reservations[]          = $res;
         }
 
@@ -344,8 +410,23 @@ class BalesinPinesController extends Controller
                 $groupTotals = [];
                 foreach ($dateCols as $d) {
                     $uv = 0;
-                    foreach ($rows[$blockStart]['rate'] ?? [] as $rt) {
-                        if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                    $first = $rows[$blockStart] ?? null;
+                    if ($first) {
+                        $bd = $first['calculated_rates']['acc_dates'][$d]['breakdown'] ?? null;
+                        if ($bd && isset($bd['gross_share']) && empty($bd['is_fvn'])) {
+                            $uv = (float) $bd['gross_share'];
+                        } else {
+                            foreach ($first['rate'] ?? [] as $rt) {
+                                if (($rt['date'] ?? '') === $d) {
+                                    $uv = (float)($rt['breakdown']['gross_share'] ?? $rt['val'] ?? 0);
+                                    $split = $calculator->resolveCompositeFromPassenger($first, $uv);
+                                    if ($split) {
+                                        $uv = $split['base'];
+                                    }
+                                    break;
+                                }
+                            }
+                        }
                     }
                     $groupTotals[$d] = $uv;
                 }
@@ -360,6 +441,10 @@ class BalesinPinesController extends Controller
                                 foreach ($rows[$curr + $i]['rate'] ?? [] as $rt) {
                                     if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
                                 }
+                            }
+                            $uvFrac = round($uv - floor($uv), 2);
+                            if (in_array($uvFrac, [0.01, 0.02, 0.03]) || $uv <= 1.0 || $uv > \App\Services\BalesinPinesRateCalculatorService::EXTRA_PERSON_CHARGE) {
+                                $uv = \App\Services\BalesinPinesRateCalculatorService::EXTRA_PERSON_CHARGE;
                             }
                             $extraTotals[$d] = $uv;
                         }

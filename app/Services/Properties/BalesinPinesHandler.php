@@ -51,6 +51,19 @@ class BalesinPinesHandler extends AbstractPropertyHandler
         $calculator = app(BalesinPinesRateCalculatorService::class);
         $out        = [];
 
+        // Preserve list API rate label (GRATE / MRATE / 1FVN / …) — detail overwrites rate with daily vals
+        $listRateMap = [];
+        foreach ($listData as $lr) {
+            $key = trim((string)($lr['resNo'] ?? $lr['conf'] ?? ''));
+            if ($key === '') {
+                continue;
+            }
+            $label = is_string($lr['rate'] ?? null) ? strtoupper(trim($lr['rate'])) : '';
+            if ($label !== '') {
+                $listRateMap[$key] = $label;
+            }
+        }
+
         // Track member unit count per member for 3-unit Member Rate limit rule
         $memberUnitCounts = [];
 
@@ -76,6 +89,10 @@ class BalesinPinesHandler extends AbstractPropertyHandler
             }
             $occupantIndex = $resOccupantIndex[$resNo]++;
             $res['occupant_idx'] = $occupantIndex;
+
+            if (!empty($listRateMap[$resNo])) {
+                $res['list_rate'] = $listRateMap[$resNo];
+            }
 
             $roomType = $res['roomtyp'] ?? $res['roomType'] ?? '';
             $unitType = $calculator->resolvePinesUnitType($roomType, $res['rateCode'] ?? '');

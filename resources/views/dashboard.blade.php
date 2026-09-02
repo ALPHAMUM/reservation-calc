@@ -1036,6 +1036,14 @@
                                                                 if ($uv > 0 && $uv < 3000 && $blockSize > 1 && !$isBlockExtra) {
                                                                     $uv = $uv * $blockSize;
                                                                 }
+                                                                // Pines: composite rate (e.g. 25500 = 21500 + 3700) → show room base only
+                                                                if ($property === 'pines' && !$isBlockExtra) {
+                                                                    $pinesCalc = app(\App\Services\BalesinPinesRateCalculatorService::class);
+                                                                    $split = $pinesCalc->resolveCompositeFromPassenger($firstPassenger, $uv);
+                                                                    if ($split) {
+                                                                        $uv = $split['base'];
+                                                                    }
+                                                                }
                                                             } elseif ($isApiSc || ($breakdown && !empty($breakdown['is_discounted']))) {
                                                                 $fullGross = round(($rawVal * 14 / 11), 2);
                                                                 if (abs($fullGross - round($fullGross)) < 0.15) {
@@ -1047,6 +1055,13 @@
                                                                 $uv = $fullGross;
                                                             } else {
                                                                 $uv = $rawVal;
+                                                                if ($property === 'pines' && !$isBlockExtra) {
+                                                                    $pinesCalc = app(\App\Services\BalesinPinesRateCalculatorService::class);
+                                                                    $split = $pinesCalc->resolveCompositeFromPassenger($firstPassenger, $uv);
+                                                                    if ($split) {
+                                                                        $uv = $split['base'];
+                                                                    }
+                                                                }
                                                             }
                                                             break;
                                                         }
@@ -1441,17 +1456,37 @@
                                         // Compute the total accommodation for this group (non-FVN only)
                                         $groupTotals = $spanInfo['totals'] ?? [];
                                         $groupAccSum = 0;
+                                        $isExtraOccForTotal = $spanInfo['is_extra_person'] ?? false;
+                                        $extraNightCount = 0;
                                         foreach ($groupTotals as $gv) {
                                             $grv = round((float)$gv, 2);
-                                            if ($grv !== 0.01 && $grv !== 0.02 && $grv !== 0.5) {
+                                            $gFrac = round($grv - floor($grv), 2);
+                                            if ($isExtraOccForTotal && $property === 'pines') {
+                                                // Extra person: FVN/0 markers still count as one billable night at 3700
+                                                if ($grv <= 1.0 || in_array($gFrac, [0.01, 0.02, 0.03, 0.5], true) || $grv > 3700) {
+                                                    $groupAccSum += 3700;
+                                                } else {
+                                                    $groupAccSum += (float)$gv;
+                                                }
+                                                $extraNightCount++;
+                                            } elseif ($grv !== 0.01 && $grv !== 0.02 && $grv !== 0.5) {
                                                 $groupAccSum += (float)$gv;
+                                            }
+                                        }
+                                        // Prefer calculator acc for Pines extra person when day cells were empty/zero
+                                        if ($isExtraOccForTotal && $property === 'pines') {
+                                            $calcAcc = (float)(($res['calculated_rates']['acc'] ?? 0));
+                                            if ($groupAccSum <= 0 && $calcAcc > 0) {
+                                                $groupAccSum = $calcAcc;
+                                            } elseif ($groupAccSum <= 0 && $extraNightCount === 0 && !empty($dateCols)) {
+                                                $groupAccSum = 3700 * count($dateCols);
                                             }
                                         }
                                         $groupSize = max(1, (int) ($spanInfo['group_size'] ?? 1));
                                         $span = $spanInfo['span'] ?? 1;
                                         $hasDiscount = $spanInfo['has_discount'] ?? false;
-                                        if ($span === 1 && $hasDiscount) {
-                                            // Per-occupant discounted totals — already the correct individual amount
+                                        if ($isExtraOccForTotal || ($span === 1 && $hasDiscount)) {
+                                            // Extra person / per-occupant discounted totals — already the correct individual amount
                                             $perOccupantAcc = $groupAccSum;
                                         } else {
                                             // Regular span (span>1 = first row, span=0 = non-first row) — full room rate, divide by group size
@@ -1816,6 +1851,7 @@
             const resBtn = tr.find('.show-breakdown-btn');
             const resIdx = resBtn.length ? parseInt(resBtn.data('res-idx'), 10) : -1;
             const res = (resIdx !== -1 && window.__resData) ? window.__resData[resIdx] : null;
+            const property = window.__property || 'island';
 
             // 1. Sync target row's edited cell rate into model
             tr.find('.rate-cell').each(function() {
@@ -1909,12 +1945,27 @@
                     // This ensures per-occupant SC discounts are isolated (e.g., occupant 2 SC ≠ occupant 1)
                     if (rowRes && rowRes.rate && rowRes.rate.length > 0 && rowRes.rate[0].breakdown) {
                         let modelSum = 0;
+                        let nightCount = 0;
                         rowRes.rate.forEach(function(r) {
                             const val = parseFloat(r.val || 0);
                             const frac = Math.round((val - Math.floor(val)) * 100) / 100;
                             const isFvn = (frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5 || isNaN(val));
-                            if (!isFvn) modelSum += val;
+                            nightCount++;
+                            if (rowIsExtra && property === 'pines') {
+                                // Extra person: FVN/0/composite → 3700 per night
+                                if (isFvn || val <= 1.0 || val > 3700) {
+                                    modelSum += 3700;
+                                } else {
+                                    modelSum += val;
+                                }
+                            } else if (!isFvn) {
+                                modelSum += val;
+                            }
                         });
+                        if (rowIsExtra && property === 'pines' && modelSum <= 0) {
+                            const calcAcc = parseFloat((rowRes.calculated_rates && rowRes.calculated_rates.acc) || 0);
+                            modelSum = calcAcc > 0 ? calcAcc : (3700 * Math.max(1, nightCount));
+                        }
                         rowAcc = rowIsExtra ? modelSum : (modelSum / baseGroupSize);
                     } else if (firstCell.length && spanAttr === 1) {
                         // Unspanned DOM cells: read this row's own cells
@@ -2701,7 +2752,9 @@
                 const rawVal = parseFloat(r.val || 0);
                 const rawBase = parseFloat(b.base || 0);
                 const isRoomFullRate = (rawVal > 3000 || rawBase > 3000);
-                const divisor = (isRoomFullRate && groupSize > 1 && !isExtraPerson) ? groupSize : 1;
+                const divisor = (property === 'pines' && !isExtraPerson)
+                    ? 1
+                    : ((isRoomFullRate && groupSize > 1 && !isExtraPerson) ? groupSize : 1);
 
                 let dailyVal      = isFvn ? r.val : (rawVal / divisor);
                 let baseVal       = rawBase / divisor;
@@ -2709,6 +2762,19 @@
                 let vatVal        = parseFloat(b.vat || 0) / divisor;
                 let discVal       = parseFloat(b.discount || 0) / divisor;
                 let grossShareVal = parseFloat(b.gross_share || 0) / divisor;
+
+                // Pines base occupants: show full room rate as reference; daily/total use per-occupant share
+                if (property === 'pines' && !isExtraPerson && !isFvn) {
+                    grossShareVal = parseFloat(b.gross_share || 0);
+                    const occShare = rawVal;
+                    baseVal       = parseFloat(b.base || 0) / (groupSize > 1 ? groupSize : 1);
+                    scVal         = parseFloat(b.sc || 0) / (groupSize > 1 ? groupSize : 1);
+                    vatVal        = parseFloat(b.vat || 0) / (groupSize > 1 ? groupSize : 1);
+                    discVal       = parseFloat(b.discount || 0) / (groupSize > 1 ? groupSize : 1);
+                    dailyVal      = b.is_discounted
+                        ? Math.round((baseVal + scVal) * 100) / 100
+                        : occShare;
+                }
 
                 if (isExtraPerson && !isFvn && (rawVal > 3700 || rawBase > 3700 || grossShareVal > 3700)) {
                     grossShareVal = 3700;
@@ -2729,7 +2795,11 @@
                 }
 
                 if (!isFvn) {
-                    overallTotal += dailyVal;
+                    if (property === 'pines' && !isExtraPerson) {
+                        overallTotal += rawVal;
+                    } else {
+                        overallTotal += dailyVal;
+                    }
                 }
                 if (b.is_discounted) hasDiscount = true;
 
@@ -2792,8 +2862,8 @@
                         <tr>
                             <td style="white-space: nowrap; font-weight: 600;">${dateStr}</td>
                             <td>
-                                <div style="font-weight: 500;">${b.is_discounted ? (isValidCard ? privCard : 'Senior/PWD') : 'Regular'} ${groupSize > 1 ? '<span style="font-size: 0.7rem; color: var(--primary);">(' + groupSize + '-Pax Share)</span>' : ''}</div>
-                                <div style="font-size: 0.65rem; color: var(--text-muted);">Gross Share: ₱${grossShareVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+                                <div style="font-weight: 500;">${b.is_discounted ? (isValidCard ? privCard : 'Senior/PWD') : 'Regular'} ${(property === 'pines') ? '<span style="font-size: 0.7rem; color: var(--primary);">(Per Occupant)</span>' : (groupSize > 1 ? '<span style="font-size: 0.7rem; color: var(--primary);">(' + groupSize + '-Pax Share)</span>' : '')}</div>
+                                <div style="font-size: 0.65rem; color: var(--text-muted);">Room Rate: ₱${grossShareVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}/night</div>
                             </td>
                             <td>₱${baseVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                             <td>${showBreakdown ? detailHtml : '-'}</td>
