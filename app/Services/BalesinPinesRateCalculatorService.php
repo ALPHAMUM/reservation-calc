@@ -21,6 +21,13 @@ class BalesinPinesRateCalculatorService
         $this->settings = $settingsService->getSettings();
     }
 
+    private function getScDiscountPercent(): float
+    {
+        $scSettings = $this->settings['discounts']['sc_pwd'] ?? [];
+        $applyDisc  = $scSettings['apply_discount'] ?? true;
+        return $applyDisc ? (float) ($scSettings['additional_discount_percent'] ?? 20) : 0.0;
+    }
+
     /**
      * Resolve whether unit is Deluxe Room or Junior Suite from roomType/rate desc
      */
@@ -291,8 +298,11 @@ class BalesinPinesRateCalculatorService
                     // Extra person NEVER gets FVN — always charge ₱3,700
                     $baseFee = self::EXTRA_PERSON_CHARGE;
                     if ($hasVillaSc) {
-                        $vatExemptBase = round($baseFee / 1.12, 2);
-                        $discountAmt   = round($vatExemptBase * 0.20, 2);
+                        $scDisc        = $this->getScDiscountPercent();
+                        $vatRate       = (float) ($this->settings['discounts']['vat_rate'] ?? 12);
+                        $removeVat     = $this->settings['discounts']['sc_pwd']['remove_vat'] ?? true;
+                        $vatExemptBase = $removeVat ? round($baseFee / (1 + ($vatRate / 100)), 2) : $baseFee;
+                        $discountAmt   = round($vatExemptBase * ($scDisc / 100), 2);
                         $finalVal      = round($vatExemptBase - $discountAmt, 2);
                         $displaySc     = round(($vatExemptBase - $discountAmt) * 0.10, 2);
                         $displayVat    = 0;
@@ -387,11 +397,15 @@ class BalesinPinesRateCalculatorService
             $baseFee = self::EXTRA_PERSON_CHARGE;
             $individualShare = 0.0;
 
+            $scDisc    = $this->getScDiscountPercent();
+            $vatRate   = (float) ($this->settings['discounts']['vat_rate'] ?? 12);
+            $removeVat = $this->settings['discounts']['sc_pwd']['remove_vat'] ?? true;
+
             if ($isExtraPerson) {
                 // Extra person charge is 3,700 (same for GRATE and MRATE)
                 if ($hasVillaSc) {
-                    $vatExemptBase = round($baseFee / 1.12, 2);
-                    $discountAmt   = round($vatExemptBase * 0.20, 2);
+                    $vatExemptBase = $removeVat ? round($baseFee / (1 + ($vatRate / 100)), 2) : $baseFee;
+                    $discountAmt   = round($vatExemptBase * ($scDisc / 100), 2);
                     $finalVal      = round($vatExemptBase - $discountAmt, 2);
                 } else {
                     $finalVal = $baseFee;
@@ -402,8 +416,8 @@ class BalesinPinesRateCalculatorService
                 $individualShare = round($grossVal / $baseDivisor, 2);
 
                 if ($hasVillaSc) {
-                    $vatExemptBase = round($individualShare / 1.12, 2);
-                    $discountAmt   = round($vatExemptBase * 0.20, 2);
+                    $vatExemptBase = $removeVat ? round($individualShare / (1 + ($vatRate / 100)), 2) : $individualShare;
+                    $discountAmt   = round($vatExemptBase * ($scDisc / 100), 2);
                     $finalVal      = round($vatExemptBase - $discountAmt, 2);
                 } else {
                     $finalVal = $individualShare;
@@ -416,8 +430,8 @@ class BalesinPinesRateCalculatorService
             if ($isExtraPerson) {
                 $displayGross = $baseFee;
                 if ($hasVillaSc) {
-                    $displayVatExempt = round($baseFee / 1.12, 2);
-                    $displayDiscount  = round($displayVatExempt * 0.20, 2);
+                    $displayVatExempt = $removeVat ? round($baseFee / (1 + ($vatRate / 100)), 2) : $baseFee;
+                    $displayDiscount  = round($displayVatExempt * ($scDisc / 100), 2);
                     $displaySc        = round(($displayVatExempt - $displayDiscount) * 0.10, 2);
                     $displayVat       = 0;
                 } else {
@@ -429,16 +443,16 @@ class BalesinPinesRateCalculatorService
                 $displayGross = $grossVal;
                 if ($hasVillaSc) {
                     // Breakdown modal shows full room rate (not per-occupant share)
-                    $displayVatExempt = round($grossVal / 1.12, 2);
-                    $displayDiscount  = round($displayVatExempt * 0.20, 2);
+                    $displayVatExempt = $removeVat ? round($grossVal / (1 + ($vatRate / 100)), 2) : $grossVal;
+                    $displayDiscount  = round($displayVatExempt * ($scDisc / 100), 2);
                     $displaySc        = round(($displayVatExempt - $displayDiscount) * 0.10, 2);
                     $displayVat       = 0;
                     $displayBase      = round($displayVatExempt - $displayDiscount, 2);
                 } else {
                     $displayDiscount  = 0;
-                    $displayBase      = round($grossVal / 1.12, 2);
+                    $displayBase      = round($grossVal / (1 + ($vatRate / 100)), 2);
                     $displaySc        = round($displayBase * 0.10, 2);
-                    $displayVat       = round($displayBase * 0.12, 2);
+                    $displayVat       = round($displayBase * ($vatRate / 100), 2);
                 }
             }
 

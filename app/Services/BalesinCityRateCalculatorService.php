@@ -73,10 +73,11 @@ class BalesinCityRateCalculatorService
                 // ── Detect FVN magic fractions: .01 = 1FVN, .02 = 1.5FVN, .03 = 0.5FVN
                 $integerPart = (int) floor($val);
                 $fraction    = round($val - $integerPart, 2);
-                $fvnMapping  = [0.01 => 1.0, 0.02 => 1.5, 0.03 => 0.5];
+                $fracKey     = number_format($fraction, 2, '.', '');
+                $fvnMapping  = ['0.01' => 1.0, '0.02' => 1.5, '0.03' => 0.5];
 
-                if (array_key_exists($fraction, $fvnMapping)) {
-                    $fvnRate = $fvnMapping[$fraction];
+                if (array_key_exists($fracKey, $fvnMapping)) {
+                    $fvnRate = $fvnMapping[$fracKey];
                     // Base room is FVN (0 accommodation cost)
                     // If integer part > 0 (e.g. 1300.01), it means extra person also has 1300 on top
                     $accDates[$date] = [
@@ -109,11 +110,17 @@ class BalesinCityRateCalculatorService
                 $vat = 0;
 
                 if ($hasVillaSc && $val > 0) {
-                    $vatExemptBase = round($val / 1.12, 2);
-                    $discount = round($vatExemptBase * 0.20, 2);
-                    $finalVal = round($vatExemptBase - $discount, 2);
-                    $base = $vatExemptBase;
-                    $isDiscounted = true;
+                    $scSettings  = $this->settings['discounts']['sc_pwd'] ?? [];
+                    $removeVat   = $scSettings['remove_vat'] ?? true;
+                    $applyDisc   = $scSettings['apply_discount'] ?? true;
+                    $discPercent = $applyDisc ? (float) ($scSettings['additional_discount_percent'] ?? 20) : 0.0;
+                    $vatRate     = (float) ($this->settings['discounts']['vat_rate'] ?? 12);
+
+                    $vatExemptBase = $removeVat ? round($val / (1 + ($vatRate / 100)), 2) : $val;
+                    $discount      = round($vatExemptBase * ($discPercent / 100), 2);
+                    $finalVal      = round($vatExemptBase - $discount, 2);
+                    $base          = $vatExemptBase;
+                    $isDiscounted  = true;
                 }
 
                 $acc += $finalVal;

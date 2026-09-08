@@ -326,7 +326,9 @@
             <div id="help-discounts" class="help-box">
                 <span class="help-close" onclick="toggleHelp('help-discounts')">&times;</span>
                 <strong>Discounts & VAT</strong>
-                <div>Manage tax rules. For Senior Citizens (SC) and PWDs, standard policy usually involves removing the 12% VAT first. The "Additional Discount" is applied after VAT removal if applicable.</div>
+                <div>Manage tax and discount rules for Senior Citizens (SC) and Persons with Disabilities (PWDs). 
+                <br>• <strong>Remove VAT:</strong> Standard policy removes 12% VAT.
+                <br>• <strong>Percentage Discount:</strong> Toggle whether to apply the percentage discount (default 20%) in accommodation/rate calculations. Uncheck if no 20% discount should be computed.</div>
             </div>
             <div class="grid-2">
                 <div class="form-group">
@@ -334,13 +336,17 @@
                     <input type="number" step="0.1" name="discounts[vat_rate]" class="form-control" value="{{ $settings['discounts']['vat_rate'] ?? 12 }}">
                 </div>
             </div>
-            <div class="checkbox-wrap">
+            <div class="checkbox-wrap" style="margin-bottom: 0.75rem;">
                 <input type="checkbox" id="remove_vat" name="discounts[sc_pwd][remove_vat]" {{ !empty($settings['discounts']['sc_pwd']['remove_vat']) ? 'checked' : '' }}>
                 <label for="remove_vat" class="form-label" style="margin:0">Remove VAT for Senior Citizens / PWDs</label>
             </div>
-            <div class="form-group" style="margin-top: 1rem; max-width: 50%;">
-                <label class="form-label">Additional SC/PWD Discount (%) [Default: 0 if rates already discounted]</label>
-                <input type="number" step="0.1" name="discounts[sc_pwd][additional_discount_percent]" class="form-control" value="{{ $settings['discounts']['sc_pwd']['additional_discount_percent'] ?? 0 }}">
+            <div class="checkbox-wrap" style="margin-bottom: 0.75rem;">
+                <input type="checkbox" id="apply_sc_pwd_discount" name="discounts[sc_pwd][apply_discount]" {{ !isset($settings['discounts']['sc_pwd']['apply_discount']) || !empty($settings['discounts']['sc_pwd']['apply_discount']) ? 'checked' : '' }}>
+                <label for="apply_sc_pwd_discount" class="form-label" style="margin:0">Apply Senior Citizen / PWD Percentage Discount in Computation</label>
+            </div>
+            <div class="form-group" style="margin-top: 0.75rem; max-width: 50%;">
+                <label class="form-label">Senior / PWD Discount Percentage (%) [Default: 20%]</label>
+                <input type="number" step="0.1" name="discounts[sc_pwd][additional_discount_percent]" class="form-control" value="{{ $settings['discounts']['sc_pwd']['additional_discount_percent'] ?? 20 }}">
             </div>
         </div>
 

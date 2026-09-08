@@ -50,6 +50,7 @@ class SettingsService
                 'vat_rate' => 12,
                 'sc_pwd' => [
                     'remove_vat' => true,
+                    'apply_discount' => true,
                     'additional_discount_percent' => 20,
                 ],
             ],

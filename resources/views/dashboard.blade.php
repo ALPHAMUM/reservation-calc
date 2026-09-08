@@ -2486,9 +2486,15 @@
                         }
                         r.breakdown.gross_share = gross;
 
+                        const scApplyDiscount = @json(!isset($settings['discounts']['sc_pwd']['apply_discount']) || !empty($settings['discounts']['sc_pwd']['apply_discount']));
+                        const scDiscountPercent = @json((float)($settings['discounts']['sc_pwd']['additional_discount_percent'] ?? 20));
+                        const scRemoveVat = @json(!empty($settings['discounts']['sc_pwd']['remove_vat']));
+                        const vatRateVal = @json((float)($settings['discounts']['vat_rate'] ?? 12));
+
                         if (hasVillaSc) {
-                            const base = gross / 1.12;
-                            const discount = base * 0.20;
+                            const base = scRemoveVat ? (gross / (1 + (vatRateVal / 100))) : gross;
+                            const discFrac = scApplyDiscount ? (scDiscountPercent / 100) : 0;
+                            const discount = base * discFrac;
                             const netBase = base - discount;
                             const sc = netBase * 0.10;
                             const newDailyVal = Math.round((netBase + sc) * 100) / 100;
@@ -2500,9 +2506,9 @@
                             r.breakdown.sc = sc;
                             r.breakdown.vat = 0;
                         } else {
-                            const base = gross / 1.12;
+                            const base = gross / (1 + (vatRateVal / 100));
                             const sc = base * 0.10;
-                            const vat = base * 0.12;
+                            const vat = base * (vatRateVal / 100);
 
                             r.val = Math.round(gross * 100) / 100;
                             r.breakdown.is_discounted = false;
@@ -2779,8 +2785,13 @@
                 if (isExtraPerson && !isFvn && (rawVal > 3700 || rawBase > 3700 || grossShareVal > 3700)) {
                     grossShareVal = 3700;
                     if (b.is_discounted) {
-                        baseVal = Math.round((3700 / 1.12) * 100) / 100;
-                        discVal = Math.round((baseVal * 0.20) * 100) / 100;
+                        const scApplyDiscount = @json(!isset($settings['discounts']['sc_pwd']['apply_discount']) || !empty($settings['discounts']['sc_pwd']['apply_discount']));
+                        const scDiscountPercent = @json((float)($settings['discounts']['sc_pwd']['additional_discount_percent'] ?? 20));
+                        const scRemoveVat = @json(!empty($settings['discounts']['sc_pwd']['remove_vat']));
+                        const vatRateVal = @json((float)($settings['discounts']['vat_rate'] ?? 12));
+
+                        baseVal = scRemoveVat ? Math.round((3700 / (1 + (vatRateVal / 100))) * 100) / 100 : 3700;
+                        discVal = (scApplyDiscount && scDiscountPercent > 0) ? Math.round((baseVal * (scDiscountPercent / 100)) * 100) / 100 : 0;
                         const netBase = baseVal - discVal;
                         scVal = Math.round((netBase * 0.10) * 100) / 100;
                         vatVal = 0;
@@ -2810,11 +2821,20 @@
                 const showBreakdown = (property === 'island' || property === 'pines');
 
                 if (showBreakdown) {
+                    const scApplyDiscount = @json(!isset($settings['discounts']['sc_pwd']['apply_discount']) || !empty($settings['discounts']['sc_pwd']['apply_discount']));
+                    const scDiscountPercent = @json((float)($settings['discounts']['sc_pwd']['additional_discount_percent'] ?? 20));
+                    const scRemoveVat = @json(!empty($settings['discounts']['sc_pwd']['remove_vat']));
+
                     if (b.is_discounted) {
+                        const discLine = (scApplyDiscount && discVal > 0)
+                            ? `<div style="font-size: 0.7rem; color: #4ade80;">- ${scDiscountPercent}% Disc: ₱${discVal.toFixed(2)}</div>`
+                            : '';
+                        const vatLine = scRemoveVat ? `<div style="font-size: 0.7rem; color: #f87171;">VAT EXEMPT</div>` : '';
+
                         detailHtml = `
-                            <div style="font-size: 0.7rem; color: #4ade80;">- 20% Disc: ₱${discVal.toFixed(2)}</div>
+                            ${discLine}
                             <div style="font-size: 0.7rem; color: var(--text-muted);">+ 10% SC: ₱${scVal.toFixed(2)}</div>
-                            <div style="font-size: 0.7rem; color: #f87171;">VAT EXEMPT</div>
+                            ${vatLine}
                         `;
                     } else {
                         detailHtml = `

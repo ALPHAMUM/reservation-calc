@@ -88,7 +88,8 @@ class SettingsController extends Controller
         // Discounts
         $settings['discounts']['vat_rate'] = (float)($input['discounts']['vat_rate'] ?? $settings['discounts']['vat_rate']);
         $settings['discounts']['sc_pwd']['remove_vat'] = isset($input['discounts']['sc_pwd']['remove_vat']);
-        $settings['discounts']['sc_pwd']['additional_discount_percent'] = (float)($input['discounts']['sc_pwd']['additional_discount_percent'] ?? 0);
+        $settings['discounts']['sc_pwd']['apply_discount'] = isset($input['discounts']['sc_pwd']['apply_discount']);
+        $settings['discounts']['sc_pwd']['additional_discount_percent'] = (float)($input['discounts']['sc_pwd']['additional_discount_percent'] ?? 20);
 
         // Infants
         $settings['infants']['airfare_free'] = isset($input['infants']['airfare_free']);

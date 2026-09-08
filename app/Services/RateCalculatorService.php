@@ -299,20 +299,27 @@ class RateCalculatorService
                         $breakdown['gross_share'] = $grossAmount;
 
                         if ($hasVillaSc) {
-                            $breakdown['is_discounted'] = true;
-                            $baseForDisc = $grossAmount / 1.12;
-                            $discount = $baseForDisc * 0.2;
-                            $netBase = $baseForDisc - $discount;
-                            $sc = $netBase * 0.1;
+                            $scSettings  = $this->settings['discounts']['sc_pwd'] ?? [];
+                            $removeVat   = $scSettings['remove_vat'] ?? true;
+                            $applyDisc   = $scSettings['apply_discount'] ?? true;
+                            $discPercent = $applyDisc ? (float) ($scSettings['additional_discount_percent'] ?? 20) : 0.0;
+                            $vatRate     = (float) ($this->settings['discounts']['vat_rate'] ?? 12);
 
-                            $breakdown['base'] = $baseForDisc;
+                            $breakdown['is_discounted'] = true;
+                            $baseForDisc = $removeVat ? ($grossAmount / (1 + ($vatRate / 100))) : $grossAmount;
+                            $discount    = $baseForDisc * ($discPercent / 100);
+                            $netBase     = $baseForDisc - $discount;
+                            $sc          = $netBase * 0.1;
+
+                            $breakdown['base']     = $baseForDisc;
                             $breakdown['discount'] = $discount;
-                            $breakdown['sc'] = $sc;
-                            $dateRate = $netBase + $sc;
+                            $breakdown['sc']       = $sc;
+                            $dateRate              = $netBase + $sc;
                         } else {
-                            $base = $grossAmount / 1.12;
-                            $sc = $base * 0.1;
-                            $vat = $base * 0.12;
+                            $vatRate = (float) ($this->settings['discounts']['vat_rate'] ?? 12);
+                            $base    = $grossAmount / (1 + ($vatRate / 100));
+                            $sc      = $base * 0.1;
+                            $vat     = $base * ($vatRate / 100);
 
                             $breakdown['base'] = $base;
                             $breakdown['sc'] = $sc;
@@ -397,10 +404,17 @@ class RateCalculatorService
             }
 
             if ($hasAirSc && !$isEmployee) {
-                $vatRate = (float) ($this->settings['discounts']['vat_rate'] ?? 12);
-                $airfare = $airfare / (1 + ($vatRate / 100));
-                if ($passengerClass === 'guest' && $isPeak) {
-                    $airfare = $airfare * 0.8;
+                $scSettings  = $this->settings['discounts']['sc_pwd'] ?? [];
+                $removeVat   = $scSettings['remove_vat'] ?? true;
+                $applyDisc   = $scSettings['apply_discount'] ?? true;
+                $discPercent = $applyDisc ? (float) ($scSettings['additional_discount_percent'] ?? 20) : 0.0;
+                $vatRate     = (float) ($this->settings['discounts']['vat_rate'] ?? 12);
+
+                if ($removeVat) {
+                    $airfare = $airfare / (1 + ($vatRate / 100));
+                }
+                if ($discPercent > 0 && $passengerClass === 'guest' && $isPeak) {
+                    $airfare = $airfare * (1 - ($discPercent / 100));
                 }
             }
         }
