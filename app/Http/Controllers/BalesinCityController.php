@@ -43,10 +43,18 @@ class BalesinCityController extends Controller
 
         $reservations = [];
         $ids = [];
+        $listData = [];
 
         try {
             if ($resNoList) {
-                $ids = array_filter(explode(',', $resNoList));
+                $ids = array_filter(array_map('trim', explode(',', $resNoList)));
+                if ($fromDate && $toDate) {
+                    $resp = Http::withHeaders(['Authorization' => $apiKey])
+                        ->withoutVerifying()
+                        ->timeout(30)
+                        ->get($listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
+                    $listData = $resp->successful() ? ($resp->json()['msg'] ?? []) : [];
+                }
             } elseif ($fromDate && $toDate) {
                 $resp = Http::withHeaders(['Authorization' => $apiKey])
                     ->withoutVerifying()
@@ -71,6 +79,10 @@ class BalesinCityController extends Controller
                 }
 
                 $ids = collect($all)->map(fn($i) => $i['conf'] ?? $i['resNo'] ?? null)->filter()->unique()->toArray();
+            }
+
+            if (empty($ids)) {
+                return back()->with('error', 'No Balesin City data to print.');
             }
 
             if (!empty($ids)) {

@@ -50,7 +50,7 @@ class BalesinPinesController extends Controller
 
         try {
             if ($resNoList) {
-                $ids = array_filter(explode(',', $resNoList));
+                $ids = array_filter(array_map('trim', explode(',', $resNoList)));
                 if ($fromDate && $toDate) {
                     $resp = Http::withHeaders(['Authorization' => $apiKey])
                         ->withoutVerifying()
