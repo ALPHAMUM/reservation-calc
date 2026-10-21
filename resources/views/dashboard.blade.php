@@ -1304,7 +1304,7 @@
                                         <td rowspan="{{ $rowspan }}" class="sticky-col-1" style="vertical-align: top; padding-top: 1.5rem;">
                                             <span class="res-no">#{{ $resNo }}</span>
                                         </td>
-                                        <td rowspan="{{ $rowspan }}" class="sticky-col-2" style="vertical-align: top; padding-top: 1.5rem; font-weight: 600;">
+                                        <td rowspan="{{ $rowspan }}" class="sticky-col-2" style="vertical-align: top; padding-top: 1.5rem; font-weight: 600; white-space: normal; overflow-wrap: break-word; word-break: break-word;">
                                             <div>{{ strtoupper($res['village_name'] ?? 'N/A') }}</div>
                                             @if(!empty($res['unit_type_label']))
                                                 <div>{{ strtoupper($res['unit_type_label']) }}</div>
