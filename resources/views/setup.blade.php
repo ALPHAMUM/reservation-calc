@@ -33,11 +33,17 @@
         font-family: inherit;
     }
 
-    .property-nav-tab:hover {
+    .property-nav-tab:hover:not(:disabled) {
         color: #ffffff;
         background: rgba(255, 255, 255, 0.04);
         border-color: rgba(255, 255, 255, 0.08);
         transform: translateY(-1px);
+    }
+
+    .property-nav-tab:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        pointer-events: none;
     }
 
     .property-nav-tab.active {
@@ -312,14 +318,14 @@
                 <span class="tab-subtitle">Airfare, Fees &amp; Villa Rules</span>
             </div>
         </button>
-        <button type="button" id="tab-btn-city" class="property-nav-tab {{ ($activeTab ?? 'island') === 'city' ? 'active' : '' }}" onclick="switchTab('city')">
+        <button type="button" id="tab-btn-city" class="property-nav-tab {{ ($activeTab ?? 'island') === 'city' ? 'active' : '' }}" onclick="switchTab('city')" disabled>
             <span class="tab-icon">🏙️</span>
             <div class="tab-meta">
                 <span class="tab-title">Balesin City</span>
                 <span class="tab-subtitle">Studio, 2-BR &amp; Occupancy</span>
             </div>
         </button>
-        <button type="button" id="tab-btn-pines" class="property-nav-tab {{ ($activeTab ?? 'island') === 'pines' ? 'active' : '' }}" onclick="switchTab('pines')">
+        <button type="button" id="tab-btn-pines" class="property-nav-tab {{ ($activeTab ?? 'island') === 'pines' ? 'active' : '' }}" onclick="switchTab('pines')" disabled>
             <span class="tab-icon">🌲</span>
             <div class="tab-meta">
                 <span class="tab-title">Balesin Pines</span>

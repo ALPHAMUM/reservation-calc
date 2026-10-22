@@ -298,9 +298,9 @@
             </tr>
             <tr>
                 <td style="font-weight: bold; background-color: #10206d; color: #ffffff; border: 1px solid #3a4fa3; padding: 5px; text-align: center;">MEMBERSHIP NUMBER:</td>
-                <td colspan="5" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;">
+                <td colspan="5" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;" >
                     @if($hasValidMemberNo)
-                        <a href="{{ route('member.search', ['member_no' => $firstMemberNo]) }}" target="_blank" title="View Member Reservation Filter for {{ $firstMemberNo }}" style="color: #ffffff; text-decoration: underline;">
+                        <a href="{{ route('member.search', ['member_no' => $firstMemberNo]) }}" target="_blank" title="View Member Reservation Filter for {{ $firstMemberNo }}" style="color: #0c0c0cff">
                             {{ $firstMemberNo }}
                         </a>
                     @else
@@ -455,7 +455,7 @@
                     @endif
                     @php $accGrandTotal += $perOccupantAcc; @endphp
 
-                    <td style="text-align: center; font-weight: bold;">{{ $perOccupantAcc > 0 ? number_format($perOccupantAcc, 2) : '' }}</td>
+                    <td style="text-align: center; font-weight: bold;">{{ $perOccupantAcc > 0 ? number_format($perOccupantAcc, 2) : '0.00' }}</td>
                 </tr>
             @endforeach
 
