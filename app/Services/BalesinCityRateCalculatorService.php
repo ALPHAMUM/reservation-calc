@@ -16,6 +16,31 @@ class BalesinCityRateCalculatorService
         $this->settings = $settingsService->getSettings();
     }
 
+    public function getStudioMemberRate(): float
+    {
+        return (float) ($this->settings['city']['rates']['studio_member'] ?? self::STUDIO_MEMBER_RATE);
+    }
+
+    public function getStudioGuestRate(): float
+    {
+        return (float) ($this->settings['city']['rates']['studio_guest'] ?? 8000);
+    }
+
+    public function getTwoBedMemberRate(): float
+    {
+        return (float) ($this->settings['city']['rates']['twobed_member'] ?? self::TWOBED_MEMBER_RATE);
+    }
+
+    public function getTwoBedGuestRate(): float
+    {
+        return (float) ($this->settings['city']['rates']['twobed_guest'] ?? 12500);
+    }
+
+    public function getExtraPersonRate(): float
+    {
+        return (float) ($this->settings['city']['extra_person']['rate'] ?? self::EXTRA_PERSON_RATE);
+    }
+
     /**
      * Resolve whether unit is Studio-Type Suite or 2-Bedroom Suite
      */
@@ -30,7 +55,9 @@ class BalesinCityRateCalculatorService
     public function isExtraOccupant(int $occupantIndex, string $roomType = ''): bool
     {
         $is2Bed = str_contains(strtoupper($roomType), '2-BEDROOM') || str_contains(strtoupper($roomType), '2-BR') || str_contains(strtoupper($roomType), 'TWOBED');
-        $basePax = $is2Bed ? 6 : 4;
+        $studioBase = (int) ($this->settings['city']['extra_person']['studio_base_pax'] ?? 4);
+        $twoBedBase = (int) ($this->settings['city']['extra_person']['twobed_base_pax'] ?? 6);
+        $basePax = $is2Bed ? $twoBedBase : $studioBase;
         return $occupantIndex >= $basePax;
     }
 
@@ -110,11 +137,11 @@ class BalesinCityRateCalculatorService
                 $vat = 0;
 
                 if ($hasVillaSc && $val > 0) {
-                    $scSettings  = $this->settings['discounts']['sc_pwd'] ?? [];
+                    $scSettings  = $this->settings['city']['discounts']['sc_pwd'] ?? $this->settings['discounts']['sc_pwd'] ?? [];
                     $removeVat   = $scSettings['remove_vat'] ?? true;
                     $applyDisc   = $scSettings['apply_discount'] ?? true;
                     $discPercent = $applyDisc ? (float) ($scSettings['additional_discount_percent'] ?? 20) : 0.0;
-                    $vatRate     = (float) ($this->settings['discounts']['vat_rate'] ?? 12);
+                    $vatRate     = (float) ($this->settings['city']['discounts']['vat_rate'] ?? $this->settings['discounts']['vat_rate'] ?? 12);
 
                     $vatExemptBase = $removeVat ? round($val / (1 + ($vatRate / 100)), 2) : $val;
                     $discount      = round($vatExemptBase * ($discPercent / 100), 2);

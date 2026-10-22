@@ -23,9 +23,25 @@ class BalesinPinesRateCalculatorService
 
     private function getScDiscountPercent(): float
     {
-        $scSettings = $this->settings['discounts']['sc_pwd'] ?? [];
+        $scSettings = $this->settings['pines']['discounts']['sc_pwd'] ?? $this->settings['discounts']['sc_pwd'] ?? [];
         $applyDisc  = $scSettings['apply_discount'] ?? true;
         return $applyDisc ? (float) ($scSettings['additional_discount_percent'] ?? 20) : 0.0;
+    }
+
+    private function getVatRate(): float
+    {
+        return (float) ($this->settings['pines']['discounts']['vat_rate'] ?? $this->settings['discounts']['vat_rate'] ?? 12);
+    }
+
+    private function getRemoveVat(): bool
+    {
+        $scSettings = $this->settings['pines']['discounts']['sc_pwd'] ?? $this->settings['discounts']['sc_pwd'] ?? [];
+        return (bool) ($scSettings['remove_vat'] ?? true);
+    }
+
+    public function getExtraPersonCharge(): float
+    {
+        return (float) ($this->settings['pines']['extra_person']['charge'] ?? self::EXTRA_PERSON_CHARGE);
     }
 
     /**
@@ -73,7 +89,8 @@ class BalesinPinesRateCalculatorService
 
     public function isExtraOccupant(int $occupantIndex, string $roomType = ''): bool
     {
-        return $occupantIndex >= 2;
+        $basePax = (int) ($this->settings['pines']['extra_person']['base_pax'] ?? 2);
+        return $occupantIndex >= $basePax;
     }
 
     /**
@@ -81,15 +98,19 @@ class BalesinPinesRateCalculatorService
      */
     public function getBasePinesRate(string $unitType, bool $isMember = true, int $memberUnitCount = 1, bool $fvnUtilized = true): float
     {
-        // Member rate is only applicable once member has utilized all Free Villa Nights (FVN).
-        // Max 3 rooms/suites at member rate per member (with direct relative present). Exceeding units get guest rate.
-        $eligibleForMemberRate = $isMember && $fvnUtilized && ($memberUnitCount <= 3);
+        $maxUnits = (int) ($this->settings['pines']['rules']['max_member_units'] ?? 3);
+        $eligibleForMemberRate = $isMember && $fvnUtilized && ($memberUnitCount <= $maxUnits);
+
+        $suiteMember  = (float) ($this->settings['pines']['rates']['suite_member'] ?? self::SUITE_MEMBER_RATE);
+        $suiteGuest   = (float) ($this->settings['pines']['rates']['suite_guest'] ?? self::SUITE_GUEST_RATE);
+        $deluxeMember = (float) ($this->settings['pines']['rates']['deluxe_member'] ?? self::DELUXE_MEMBER_RATE);
+        $deluxeGuest  = (float) ($this->settings['pines']['rates']['deluxe_guest'] ?? self::DELUXE_GUEST_RATE);
 
         if ($unitType === 'JUNIOR SUITE') {
-            return $eligibleForMemberRate ? self::SUITE_MEMBER_RATE : self::SUITE_GUEST_RATE;
+            return $eligibleForMemberRate ? $suiteMember : $suiteGuest;
         }
 
-        return $eligibleForMemberRate ? self::DELUXE_MEMBER_RATE : self::DELUXE_GUEST_RATE;
+        return $eligibleForMemberRate ? $deluxeMember : $deluxeGuest;
     }
 
     /**
@@ -97,11 +118,16 @@ class BalesinPinesRateCalculatorService
      */
     public function publishedRoomBases(): array
     {
+        $deluxeMember = (float) ($this->settings['pines']['rates']['deluxe_member'] ?? self::DELUXE_MEMBER_RATE);
+        $deluxeGuest  = (float) ($this->settings['pines']['rates']['deluxe_guest'] ?? self::DELUXE_GUEST_RATE);
+        $suiteMember  = (float) ($this->settings['pines']['rates']['suite_member'] ?? self::SUITE_MEMBER_RATE);
+        $suiteGuest   = (float) ($this->settings['pines']['rates']['suite_guest'] ?? self::SUITE_GUEST_RATE);
+
         return [
-            self::DELUXE_MEMBER_RATE,
-            self::DELUXE_GUEST_RATE,
-            self::SUITE_MEMBER_RATE,
-            self::SUITE_GUEST_RATE,
+            $deluxeMember,
+            $deluxeGuest,
+            $suiteMember,
+            $suiteGuest,
         ];
     }
 
@@ -112,35 +138,41 @@ class BalesinPinesRateCalculatorService
      */
     public function splitCompositeRoomRate(float $amount): ?array
     {
-        if ($amount <= self::EXTRA_PERSON_CHARGE) {
+        $extraPersonCharge = $this->getExtraPersonCharge();
+        if ($amount <= $extraPersonCharge) {
             return null;
         }
+
+        $suiteGuest   = (float) ($this->settings['pines']['rates']['suite_guest'] ?? self::SUITE_GUEST_RATE);
+        $deluxeGuest  = (float) ($this->settings['pines']['rates']['deluxe_guest'] ?? self::DELUXE_GUEST_RATE);
+        $suiteMember  = (float) ($this->settings['pines']['rates']['suite_member'] ?? self::SUITE_MEMBER_RATE);
+        $deluxeMember = (float) ($this->settings['pines']['rates']['deluxe_member'] ?? self::DELUXE_MEMBER_RATE);
 
         // Explicit API composite codes (business mapping; may not equal base+extra arithmetically)
         $knownComposites = [
             // Junior Suite GRATE + extra person
-            25500.0 => self::SUITE_GUEST_RATE,
+            25500.0 => $suiteGuest,
             // Exact base+extra variants
-            (float) (self::SUITE_GUEST_RATE + self::EXTRA_PERSON_CHARGE)   => self::SUITE_GUEST_RATE,
-            (float) (self::DELUXE_GUEST_RATE + self::EXTRA_PERSON_CHARGE)  => self::DELUXE_GUEST_RATE,
-            (float) (self::SUITE_MEMBER_RATE + self::EXTRA_PERSON_CHARGE)  => self::SUITE_MEMBER_RATE,
-            (float) (self::DELUXE_MEMBER_RATE + self::EXTRA_PERSON_CHARGE) => self::DELUXE_MEMBER_RATE,
+            (float) ($suiteGuest + $extraPersonCharge)   => $suiteGuest,
+            (float) ($deluxeGuest + $extraPersonCharge)  => $deluxeGuest,
+            (float) ($suiteMember + $extraPersonCharge)  => $suiteMember,
+            (float) ($deluxeMember + $extraPersonCharge) => $deluxeMember,
         ];
 
         foreach ($knownComposites as $composite => $base) {
-            if (abs($amount - $composite) < 0.05) {
+            if ($amount > 0 && abs($amount - $composite) < 0.05) {
                 return [
                     'base'  => (float) $base,
-                    'extra' => (float) self::EXTRA_PERSON_CHARGE,
+                    'extra' => (float) $extraPersonCharge,
                 ];
             }
         }
 
         foreach ($this->publishedRoomBases() as $base) {
-            if (abs($amount - ($base + self::EXTRA_PERSON_CHARGE)) < 0.05) {
+            if ($amount > 0 && abs($amount - ($base + $extraPersonCharge)) < 0.05) {
                 return [
                     'base'  => (float) $base,
-                    'extra' => (float) self::EXTRA_PERSON_CHARGE,
+                    'extra' => (float) $extraPersonCharge,
                 ];
             }
         }
@@ -296,11 +328,11 @@ class BalesinPinesRateCalculatorService
 
                 if ($isExtraPerson) {
                     // Extra person NEVER gets FVN — always charge ₱3,700
-                    $baseFee = self::EXTRA_PERSON_CHARGE;
+                    $baseFee = $this->getExtraPersonCharge();
                     if ($hasVillaSc) {
                         $scDisc        = $this->getScDiscountPercent();
-                        $vatRate       = (float) ($this->settings['discounts']['vat_rate'] ?? 12);
-                        $removeVat     = $this->settings['discounts']['sc_pwd']['remove_vat'] ?? true;
+                        $vatRate       = $this->getVatRate();
+                        $removeVat     = $this->getRemoveVat();
                         $vatExemptBase = $removeVat ? round($baseFee / (1 + ($vatRate / 100)), 2) : $baseFee;
                         $discountAmt   = round($vatExemptBase * ($scDisc / 100), 2);
                         $finalVal      = round($vatExemptBase - $discountAmt, 2);
@@ -391,15 +423,19 @@ class BalesinPinesRateCalculatorService
 
             // Suite fallback rule (only for non-FVN rates)
             if ($unitType === 'JUNIOR SUITE' && $isMember && ($remainingFvn == 0.5 || $remainingFvn == 1.0) && $grossVal > 0) {
-                $grossVal = self::DELUXE_MEMBER_RATE;
+                $suiteFallbackEnabled = $this->settings['pines']['rules']['suite_fvn_fallback'] ?? true;
+                if ($suiteFallbackEnabled) {
+                    $deluxeMember = (float) ($this->settings['pines']['rates']['deluxe_member'] ?? self::DELUXE_MEMBER_RATE);
+                    $grossVal = $deluxeMember;
+                }
             }
 
-            $baseFee = self::EXTRA_PERSON_CHARGE;
+            $baseFee = $this->getExtraPersonCharge();
             $individualShare = 0.0;
 
             $scDisc    = $this->getScDiscountPercent();
-            $vatRate   = (float) ($this->settings['discounts']['vat_rate'] ?? 12);
-            $removeVat = $this->settings['discounts']['sc_pwd']['remove_vat'] ?? true;
+            $vatRate   = $this->getVatRate();
+            $removeVat = $this->getRemoveVat();
 
             if ($isExtraPerson) {
                 // Extra person charge is 3,700 (same for GRATE and MRATE)
