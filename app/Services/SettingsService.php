@@ -16,6 +16,25 @@ class SettingsService
                 'guest' => 12320,
                 'employee' => 2800,
             ],
+            'sectoral_destinations' => [
+                'Manila - Balesin',
+                'Balesin - Manila',
+                'Clark - Balesin',
+                'Balesin - Clark',
+                'Sangley - Balesin',
+                'Balesin - Sangley',
+            ],
+            'sectoral_rates' => [
+                [
+                    'destination' => 'Manila - Balesin',
+                    'member_base_rate' => 5600,
+                    'member_weekday_discount' => 0,
+                    'member_weekend_discount' => 0,
+                    'guest_base_rate' => 12320,
+                    'guest_weekday_discount' => 0,
+                    'guest_weekend_discount' => 0,
+                ],
+            ],
             'promo_rates' => [
                 'active' => true,
                 'member' => 4200,
@@ -157,6 +176,14 @@ class SettingsService
                         // Clear the default so the stored one wins completely
                         unset($defaults['fees'][$fee]['apply_to']);
                     }
+                }
+
+                if (isset($stored['sectoral_destinations'])) {
+                    unset($defaults['sectoral_destinations']);
+                }
+
+                if (isset($stored['sectoral_rates'])) {
+                    unset($defaults['sectoral_rates']);
                 }
 
                 return array_replace_recursive($defaults, $stored);

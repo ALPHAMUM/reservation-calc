@@ -140,6 +140,30 @@ class SettingsController extends Controller
         $settings['base_rates']['guest'] = (float)($input['base_rates']['guest'] ?? $settings['base_rates']['guest']);
         $settings['base_rates']['employee'] = (float)($input['base_rates']['employee'] ?? $settings['base_rates']['employee'] ?? 2800);
 
+        // Update Sectoral Destinations (Dropdown Presets)
+        if (isset($input['sectoral_destinations']) && is_array($input['sectoral_destinations'])) {
+            $settings['sectoral_destinations'] = array_values(array_filter(array_map('trim', $input['sectoral_destinations'])));
+        }
+
+        // Update Sectoral Rates
+        $sectoralRates = [];
+        if (isset($input['sectoral_rates']['destination']) && is_array($input['sectoral_rates']['destination'])) {
+            foreach ($input['sectoral_rates']['destination'] as $index => $destination) {
+                if (!empty(trim($destination))) {
+                    $sectoralRates[] = [
+                        'destination' => trim($destination),
+                        'member_base_rate' => (float)($input['sectoral_rates']['member_base_rate'][$index] ?? 0),
+                        'member_weekday_discount' => (float)($input['sectoral_rates']['member_weekday_discount'][$index] ?? 0),
+                        'member_weekend_discount' => (float)($input['sectoral_rates']['member_weekend_discount'][$index] ?? 0),
+                        'guest_base_rate' => (float)($input['sectoral_rates']['guest_base_rate'][$index] ?? 0),
+                        'guest_weekday_discount' => (float)($input['sectoral_rates']['guest_weekday_discount'][$index] ?? 0),
+                        'guest_weekend_discount' => (float)($input['sectoral_rates']['guest_weekend_discount'][$index] ?? 0),
+                    ];
+                }
+            }
+        }
+        $settings['sectoral_rates'] = $sectoralRates;
+
         // Update Promo Rates
         $settings['promo_rates']['active'] = isset($input['promo_rates']['active']);
         $settings['promo_rates']['description'] = $input['promo_rates']['description'] ?? '';

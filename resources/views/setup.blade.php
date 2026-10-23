@@ -373,6 +373,198 @@
                 </div>
             </div>
 
+
+            <!-- Sectoral Rates -->
+            <div class="setup-section">
+                <div class="info-btn" onclick="toggleHelp('help-sector')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                </div>
+                <h3 class="setup-title">Sectoral Price Rates</h3>
+                <div id="help-sector" class="help-box">
+                    <span class="help-close" onclick="toggleHelp('help-sector')">&times;</span>
+                    <strong>Sectoral Price Rates</strong>
+                    <div>Configure destination-specific sectoral rates with base prices and customizable Weekday/Weekend discounts for Members and Guests. You can also manage which routes appear in the destination dropdown.</div>
+                </div>
+
+                @php
+                    $standardDestinations = $settings['sectoral_destinations'] ?? [
+                        'Manila - Balesin',
+                        'Balesin - Manila',
+                        'Clark - Balesin',
+                        'Balesin - Clark',
+                        'Sangley - Balesin',
+                        'Balesin - Sangley',
+                    ];
+                @endphp
+
+                <!-- Dropdown Presets Manager -->
+                <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); border-radius: 0.75rem; padding: 1rem 1.25rem; margin-bottom: 1.25rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+                        <div style="font-size: 0.875rem; font-weight: 600; color: #c7d2fe; display: flex; align-items: center; gap: 0.5rem;">
+                            <span>📍 Dropdown Destination Options</span>
+                            <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal;">(Routes available in dropdown)</span>
+                        </div>
+                        <button type="button" class="btn btn-sm" onclick="toggleAddRouteInput()" style="background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.4); color: #c7d2fe; padding: 0.35rem 0.75rem; border-radius: 0.5rem; font-size: 0.8rem;">
+                            + Add Option to Dropdown
+                        </button>
+                    </div>
+
+                    <!-- Inline Add Route Form -->
+                    <div id="add-route-form" style="display: none; margin-bottom: 0.75rem; gap: 0.5rem; align-items: center;">
+                        <input type="text" id="new-route-name-input" class="form-control" placeholder="Enter route name (e.g. Cebu - Balesin)" style="max-width: 320px; padding: 0.45rem 0.75rem; font-size: 0.85rem;" onkeydown="if(event.key === 'Enter'){ event.preventDefault(); addRouteToPresets(); }">
+                        <button type="button" class="btn btn-primary btn-sm" onclick="addRouteToPresets()" style="padding: 0.45rem 0.85rem; font-size: 0.85rem;">Add</button>
+                        <button type="button" class="btn btn-sm" onclick="toggleAddRouteInput()" style="background: transparent; color: var(--text-muted); border: none; font-size: 0.85rem;">Cancel</button>
+                    </div>
+
+                    <!-- Route Pills Container -->
+                    <div id="route-pills-container" style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
+                        @foreach($standardDestinations as $dest)
+                            <div class="route-pill" style="display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.35rem 0.65rem; font-size: 0.825rem; color: #f8fafc;">
+                                <span>{{ $dest }}</span>
+                                <input type="hidden" name="sectoral_destinations[]" value="{{ $dest }}">
+                                <button type="button" onclick="removeRouteFromPresets(this, '{{ addslashes($dest) }}')" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #ef4444; border-radius: 0.35rem; cursor: pointer; padding: 3px 5px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; transition: all 0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'; this.style.color='#ef4444';" title="Remove from dropdown">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                                    </svg>
+                                </button>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+
+                <div style="overflow-x: auto; margin-bottom: 1rem;">
+                    <table style="width: 100%; min-width: 960px; border-collapse: separate; border-spacing: 0 0.5rem;">
+                        <thead style="color: var(--text-muted); font-size: 0.825rem;">
+                            <tr style="border-bottom: 1px solid var(--border);">
+                                <th rowspan="2" style="padding: 0.6rem 0.5rem; font-weight: 600; vertical-align: bottom; min-width: 170px;">Destination / Route</th>
+                                <th colspan="3" style="padding: 0.5rem; font-weight: 600; text-align: center; border-left: 1px solid var(--border); border-right: 1px solid var(--border); background: rgba(99, 102, 241, 0.12); color: #c7d2fe;">Members</th>
+                                <th colspan="3" style="padding: 0.5rem; font-weight: 600; text-align: center; border-right: 1px solid var(--border); background: rgba(168, 85, 247, 0.12); color: #e9d5ff;">Guests</th>
+                                <th rowspan="2" style="padding: 0.6rem 0.5rem; width: 50px; text-align: center; vertical-align: bottom;">Action</th>
+                            </tr>
+                            <tr style="font-size: 0.775rem;">
+                                <th style="padding: 0.4rem 0.5rem; font-weight: 500; text-align: center; border-left: 1px solid var(--border);">Base Rate (₱)</th>
+                                <th style="padding: 0.4rem 0.5rem; font-weight: 500; text-align: center;">Weekday Disc. (%)</th>
+                                <th style="padding: 0.4rem 0.5rem; font-weight: 500; text-align: center; border-right: 1px solid var(--border);">Weekend Disc. (%)</th>
+                                <th style="padding: 0.4rem 0.5rem; font-weight: 500; text-align: center;">Base Rate (₱)</th>
+                                <th style="padding: 0.4rem 0.5rem; font-weight: 500; text-align: center;">Weekday Disc. (%)</th>
+                                <th style="padding: 0.4rem 0.5rem; font-weight: 500; text-align: center; border-right: 1px solid var(--border);">Weekend Disc. (%)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sectoral-rates-container">
+                            @forelse($settings['sectoral_rates'] ?? [] as $rate)
+                                @php
+                                    $currDest = $rate['destination'] ?? 'Manila - Balesin';
+                                    $isCustom = !empty($currDest) && !in_array($currDest, $standardDestinations);
+                                @endphp
+                                <tr>
+                                    <td style="padding: 0.25rem 0.4rem; min-width: 195px;">
+                                        <div class="dest-field-wrap">
+                                            <div class="dest-select-view" style="{{ $isCustom ? 'display: none;' : 'display: flex;' }}">
+                                                <select class="form-control" onchange="handleDestSelectChange(this)">
+                                                    @foreach($standardDestinations as $dest)
+                                                        <option value="{{ $dest }}" {{ $currDest === $dest ? 'selected' : '' }}>{{ $dest }}</option>
+                                                    @endforeach
+                                                    <option value="__custom__">✏️ Custom...</option>
+                                                </select>
+                                            </div>
+                                            <div class="dest-custom-view" style="{{ $isCustom ? 'display: flex;' : 'display: none;' }} gap: 0.35rem; align-items: center;">
+                                                <input type="text" class="form-control dest-custom-input" placeholder="Custom destination" value="{{ $currDest }}" oninput="handleDestCustomInput(this)">
+                                                <button type="button" class="btn btn-sm" onclick="switchToDestSelect(this)" title="Choose from preset dropdown" style="background: rgba(255,255,255,0.08); border: 1px solid var(--border); color: var(--text-muted); padding: 0.45rem 0.6rem; font-size: 0.75rem; white-space: nowrap; border-radius: 0.5rem;">
+                                                    Presets ▾
+                                                </button>
+                                            </div>
+                                            <input type="hidden" name="sectoral_rates[destination][]" class="dest-final-input" value="{{ $currDest }}">
+                                        </div>
+                                    </td>
+                                    <td style="padding: 0.25rem 0.4rem;">
+                                        <input type="number" step="0.01" name="sectoral_rates[member_base_rate][]" class="form-control" placeholder="0.00" value="{{ $rate['member_base_rate'] ?? $rate['member_weekday'] ?? $rate['member'] ?? '' }}">
+                                    </td>
+                                    <td style="padding: 0.25rem 0.4rem;">
+                                        <input type="number" step="0.01" name="sectoral_rates[member_weekday_discount][]" class="form-control" placeholder="0%" value="{{ $rate['member_weekday_discount'] ?? '' }}">
+                                    </td>
+                                    <td style="padding: 0.25rem 0.4rem;">
+                                        <input type="number" step="0.01" name="sectoral_rates[member_weekend_discount][]" class="form-control" placeholder="0%" value="{{ $rate['member_weekend_discount'] ?? '' }}">
+                                    </td>
+                                    <td style="padding: 0.25rem 0.4rem;">
+                                        <input type="number" step="0.01" name="sectoral_rates[guest_base_rate][]" class="form-control" placeholder="0.00" value="{{ $rate['guest_base_rate'] ?? $rate['guest_weekday_discount'] ?? $rate['guest'] ?? '' }}">
+                                    </td>
+                                    <td style="padding: 0.25rem 0.4rem;">
+                                        <input type="number" step="0.01" name="sectoral_rates[guest_weekday_discount][]" class="form-control" placeholder="0%" value="{{ $rate['guest_weekday_discount'] ?? '' }}">
+                                    </td>
+                                    <td style="padding: 0.25rem 0.4rem;">
+                                        <input type="number" step="0.01" name="sectoral_rates[guest_weekend_discount][]" class="form-control" placeholder="0%" value="{{ $rate['guest_weekend_discount'] ?? '' }}">
+                                    </td>
+                                    <td style="padding: 0.25rem 0.4rem; text-align: center; vertical-align: middle;">
+                                        <button type="button" class="btn btn-sm btn-trash-sectoral" onclick="removeSectoralRow(this)" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #ef4444; padding: 0.45rem 0.6rem; border-radius: 0.5rem; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'; this.style.color='#ef4444';" title="Remove Destination">
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        <line x1="10" y1="11" x2="10" y2="17"></line>
+        <line x1="14" y1="11" x2="14" y2="17"></line>
+    </svg>
+</button>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td style="padding: 0.25rem 0.4rem; min-width: 195px;">
+                                        <div class="dest-field-wrap">
+                                            <div class="dest-select-view" style="display: flex;">
+                                                <select class="form-control" onchange="handleDestSelectChange(this)">
+                                                    @foreach($standardDestinations as $dest)
+                                                        <option value="{{ $dest }}">{{ $dest }}</option>
+                                                    @endforeach
+                                                    <option value="__custom__">✏️ Custom...</option>
+                                                </select>
+                                            </div>
+                                            <div class="dest-custom-view" style="display: none; gap: 0.35rem; align-items: center;">
+                                                <input type="text" class="form-control dest-custom-input" placeholder="Custom destination" oninput="handleDestCustomInput(this)">
+                                                <button type="button" class="btn btn-sm" onclick="switchToDestSelect(this)" title="Choose from preset dropdown" style="background: rgba(255,255,255,0.08); border: 1px solid var(--border); color: var(--text-muted); padding: 0.45rem 0.6rem; font-size: 0.75rem; white-space: nowrap; border-radius: 0.5rem;">
+                                                    Presets ▾
+                                                </button>
+                                            </div>
+                                            <input type="hidden" name="sectoral_rates[destination][]" class="dest-final-input" value="Manila - Balesin">
+                                        </div>
+                                    </td>
+                                    <td style="padding: 0.25rem 0.4rem;">
+                                        <input type="number" step="0.01" name="sectoral_rates[member_base_rate][]" class="form-control" placeholder="0.00" value="{{ $settings['base_rates']['member'] ?? 5600 }}">
+                                    </td>
+                                    <td style="padding: 0.25rem 0.4rem;">
+                                        <input type="number" step="0.01" name="sectoral_rates[member_weekday_discount][]" class="form-control" placeholder="0%" value="">
+                                    </td>
+                                    <td style="padding: 0.25rem 0.4rem;">
+                                        <input type="number" step="0.01" name="sectoral_rates[member_weekend_discount][]" class="form-control" placeholder="0%" value="">
+                                    </td>
+                                    <td style="padding: 0.25rem 0.4rem;">
+                                        <input type="number" step="0.01" name="sectoral_rates[guest_base_rate][]" class="form-control" placeholder="0.00" value="{{ $settings['base_rates']['guest'] ?? 12320 }}">
+                                    </td>
+                                    <td style="padding: 0.25rem 0.4rem;">
+                                        <input type="number" step="0.01" name="sectoral_rates[guest_weekday_discount][]" class="form-control" placeholder="0%" value="">
+                                    </td>
+                                    <td style="padding: 0.25rem 0.4rem;">
+                                        <input type="number" step="0.01" name="sectoral_rates[guest_weekend_discount][]" class="form-control" placeholder="0%" value="">
+                                    </td>
+                                    <td style="padding: 0.25rem 0.4rem; text-align: center; vertical-align: middle;">
+                                        <button type="button" class="btn btn-sm btn-trash-sectoral" onclick="removeSectoralRow(this)" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #ef4444; padding: 0.45rem 0.6rem; border-radius: 0.5rem; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'; this.style.color='#ef4444';" title="Remove Destination">
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        <line x1="10" y1="11" x2="10" y2="17"></line>
+        <line x1="14" y1="11" x2="14" y2="17"></line>
+    </svg>
+</button>
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" onclick="addSectoralRate()" style="background: rgba(255,255,255,0.1); border: 1px solid var(--border);">+ Add Destination</button>
+            </div>
+
             <!-- Promo Rates -->
             <div class="setup-section">
                 <div class="info-btn" onclick="toggleHelp('help-promo')">
@@ -1220,6 +1412,229 @@
             <button type="button" class="btn btn-primary btn-sm" onclick="this.parentElement.remove()" style="background: #ef4444; height: 42px;">Remove</button>
         `;
         container.appendChild(row);
+    }
+
+    function getPresetDestinations() {
+        const inputs = document.querySelectorAll('#route-pills-container input[name="sectoral_destinations[]"]');
+        const list = [];
+        inputs.forEach(input => {
+            if (input.value.trim()) list.push(input.value.trim());
+        });
+        return list;
+    }
+
+    function refreshAllDropdowns() {
+        const presets = getPresetDestinations();
+        document.querySelectorAll('.dest-field-wrap').forEach(wrap => {
+            const select = wrap.querySelector('select');
+            const customInput = wrap.querySelector('.dest-custom-input');
+            const finalInput = wrap.querySelector('.dest-final-input');
+            const currentVal = finalInput ? finalInput.value : '';
+
+            if (!select) return;
+
+            // Rebuild select options
+            select.innerHTML = '';
+            presets.forEach(dest => {
+                const opt = document.createElement('option');
+                opt.value = dest;
+                opt.textContent = dest;
+                if (dest === currentVal) opt.selected = true;
+                select.appendChild(opt);
+            });
+            const customOpt = document.createElement('option');
+            customOpt.value = '__custom__';
+            customOpt.textContent = '✏️ Custom...';
+            if (!presets.includes(currentVal) && currentVal) {
+                customOpt.selected = true;
+            }
+            select.appendChild(customOpt);
+
+            if (presets.includes(currentVal)) {
+                select.value = currentVal;
+            }
+        });
+    }
+
+    function removeRouteFromPresets(btn, routeName) {
+        if (confirm(`Remove "${routeName}" from dropdown destinations?`)) {
+            btn.closest('.route-pill').remove();
+            refreshAllDropdowns();
+        }
+    }
+
+    function toggleAddRouteInput() {
+        const form = document.getElementById('add-route-form');
+        const input = document.getElementById('new-route-name-input');
+        if (form.style.display === 'none' || !form.style.display) {
+            form.style.display = 'flex';
+            input.focus();
+        } else {
+            form.style.display = 'none';
+            input.value = '';
+        }
+    }
+
+    function addRouteToPresets() {
+        const input = document.getElementById('new-route-name-input');
+        const val = input.value.trim();
+        if (!val) return;
+
+        const existing = getPresetDestinations();
+        if (existing.includes(val)) {
+            alert('This route is already in the dropdown list.');
+            input.focus();
+            return;
+        }
+
+        const container = document.getElementById('route-pills-container');
+        const pill = document.createElement('div');
+        pill.className = 'route-pill';
+        pill.style.cssText = 'display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.35rem 0.65rem; font-size: 0.825rem; color: #f8fafc;';
+        
+        const escapedVal = val.replace(/"/g, '&quot;').replace(/'/g, "\\'");
+        pill.innerHTML = `
+            <span>${val}</span>
+            <input type="hidden" name="sectoral_destinations[]" value="${escapedVal}">
+            <button type="button" onclick="removeRouteFromPresets(this, '${escapedVal}')" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #ef4444; border-radius: 0.35rem; cursor: pointer; padding: 3px 5px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; transition: all 0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'; this.style.color='#ef4444';" title="Remove from dropdown">
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                </svg>
+            </button>
+        `;
+        container.appendChild(pill);
+
+        input.value = '';
+        toggleAddRouteInput();
+        refreshAllDropdowns();
+    }
+
+    function handleDestSelectChange(select) {
+        const wrap = select.closest('.dest-field-wrap');
+        const selectView = wrap.querySelector('.dest-select-view');
+        const customView = wrap.querySelector('.dest-custom-view');
+        const customInput = wrap.querySelector('.dest-custom-input');
+        const finalInput = wrap.querySelector('.dest-final-input');
+
+        if (select.value === '__custom__') {
+            selectView.style.display = 'none';
+            customView.style.display = 'flex';
+            customInput.value = '';
+            customInput.focus();
+            finalInput.value = '';
+        } else {
+            customInput.value = select.value;
+            finalInput.value = select.value;
+        }
+    }
+
+    function handleDestCustomInput(input) {
+        const wrap = input.closest('.dest-field-wrap');
+        const finalInput = wrap.querySelector('.dest-final-input');
+        finalInput.value = input.value;
+    }
+
+    function switchToDestSelect(button) {
+        const wrap = button.closest('.dest-field-wrap');
+        const selectView = wrap.querySelector('.dest-select-view');
+        const customView = wrap.querySelector('.dest-custom-view');
+        const select = wrap.querySelector('select');
+        const customInput = wrap.querySelector('.dest-custom-input');
+        const finalInput = wrap.querySelector('.dest-final-input');
+
+        customView.style.display = 'none';
+        selectView.style.display = 'flex';
+
+        let matched = false;
+        for (let opt of select.options) {
+            if (opt.value === customInput.value) {
+                select.value = opt.value;
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) {
+            select.selectedIndex = 0;
+        }
+        finalInput.value = select.value;
+    }
+
+    function addSectoralRate() {
+        const presets = getPresetDestinations();
+        let optionsHtml = '';
+        presets.forEach(dest => {
+            const escaped = dest.replace(/"/g, '&quot;');
+            optionsHtml += `<option value="${escaped}">${dest}</option>`;
+        });
+        optionsHtml += `<option value="__custom__">✏️ Custom...</option>`;
+        const defaultVal = presets.length > 0 ? presets[0] : 'Manila - Balesin';
+
+        const container = document.getElementById('sectoral-rates-container');
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="padding: 0.25rem 0.4rem; min-width: 195px;">
+                <div class="dest-field-wrap">
+                    <div class="dest-select-view" style="display: flex;">
+                        <select class="form-control" onchange="handleDestSelectChange(this)">
+                            ${optionsHtml}
+                        </select>
+                    </div>
+                    <div class="dest-custom-view" style="display: none; gap: 0.35rem; align-items: center;">
+                        <input type="text" class="form-control dest-custom-input" placeholder="Custom destination" oninput="handleDestCustomInput(this)">
+                        <button type="button" class="btn btn-sm" onclick="switchToDestSelect(this)" title="Choose from preset dropdown" style="background: rgba(255,255,255,0.08); border: 1px solid var(--border); color: var(--text-muted); padding: 0.45rem 0.6rem; font-size: 0.75rem; white-space: nowrap; border-radius: 0.5rem;">
+                            Presets ▾
+                        </button>
+                    </div>
+                    <input type="hidden" name="sectoral_rates[destination][]" class="dest-final-input" value="${defaultVal.replace(/"/g, '&quot;')}">
+                </div>
+            </td>
+            <td style="padding: 0.25rem 0.4rem;">
+                <input type="number" step="0.01" name="sectoral_rates[member_base_rate][]" class="form-control" placeholder="0.00">
+            </td>
+            <td style="padding: 0.25rem 0.4rem;">
+                <input type="number" step="0.01" name="sectoral_rates[member_weekday_discount][]" class="form-control" placeholder="0%">
+            </td>
+            <td style="padding: 0.25rem 0.4rem;">
+                <input type="number" step="0.01" name="sectoral_rates[member_weekend_discount][]" class="form-control" placeholder="0%">
+            </td>
+            <td style="padding: 0.25rem 0.4rem;">
+                <input type="number" step="0.01" name="sectoral_rates[guest_base_rate][]" class="form-control" placeholder="0.00">
+            </td>
+            <td style="padding: 0.25rem 0.4rem;">
+                <input type="number" step="0.01" name="sectoral_rates[guest_weekday_discount][]" class="form-control" placeholder="0%">
+            </td>
+            <td style="padding: 0.25rem 0.4rem;">
+                <input type="number" step="0.01" name="sectoral_rates[guest_weekend_discount][]" class="form-control" placeholder="0%">
+            </td>
+            <td style="padding: 0.25rem 0.4rem; text-align: center; vertical-align: middle;">
+                <button type="button" class="btn btn-sm btn-trash-sectoral" onclick="removeSectoralRow(this)" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #ef4444; padding: 0.45rem 0.6rem; border-radius: 0.5rem; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'; this.style.color='#ef4444';" title="Remove Destination">
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        <line x1="10" y1="11" x2="10" y2="17"></line>
+        <line x1="14" y1="11" x2="14" y2="17"></line>
+    </svg>
+</button>
+            </td>
+        `;
+        container.appendChild(tr);
+    }
+
+    function removeSectoralRow(btn) {
+        const tbody = document.getElementById('sectoral-rates-container');
+        if (tbody.querySelectorAll('tr').length > 1) {
+            btn.closest('tr').remove();
+        } else {
+            const tr = btn.closest('tr');
+            tr.querySelectorAll('input').forEach(input => input.value = '');
+            const select = tr.querySelector('select');
+            if (select) select.selectedIndex = 0;
+            const finalInput = tr.querySelector('.dest-final-input');
+            if (finalInput && select) finalInput.value = select.value;
+        }
     }
 
     function toggleHelp(id) {
