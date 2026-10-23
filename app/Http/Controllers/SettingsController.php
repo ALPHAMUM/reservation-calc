@@ -141,9 +141,9 @@ class SettingsController extends Controller
         $settings['base_rates']['employee'] = (float)($input['base_rates']['employee'] ?? $settings['base_rates']['employee'] ?? 2800);
 
         // Update Sectoral Destinations (Dropdown Presets)
-        if (isset($input['sectoral_destinations']) && is_array($input['sectoral_destinations'])) {
-            $settings['sectoral_destinations'] = array_values(array_filter(array_map('trim', $input['sectoral_destinations'])));
-        }
+        $settings['sectoral_destinations'] = isset($input['sectoral_destinations']) && is_array($input['sectoral_destinations'])
+            ? array_values(array_filter(array_map('trim', $input['sectoral_destinations'])))
+            : [];
 
         // Update Sectoral Rates
         $sectoralRates = [];
@@ -235,6 +235,25 @@ class SettingsController extends Controller
         $this->settingsService->saveSettings($settings);
 
         return redirect()->to(url('/setup?property=island'))->with('success', 'Balesin Island settings successfully updated.');
+    }
+
+    public function saveSectoralDestinations(Request $request)
+    {
+        $destinations = $request->input('destinations', []);
+        if (is_array($destinations)) {
+            $destinations = array_values(array_filter(array_map('trim', $destinations)));
+            $settings = $this->settingsService->getSettings();
+            $settings['sectoral_destinations'] = $destinations;
+            $this->settingsService->saveSettings($settings);
+
+            return response()->json([
+                'success' => true,
+                'destinations' => $destinations,
+                'message' => 'Dropdown destination options saved permanently.'
+            ]);
+        }
+
+        return response()->json(['success' => false, 'message' => 'Invalid data.'], 400);
     }
 
     public function exportRates()

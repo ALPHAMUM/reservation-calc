@@ -402,7 +402,7 @@
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
                         <div style="font-size: 0.875rem; font-weight: 600; color: #c7d2fe; display: flex; align-items: center; gap: 0.5rem;">
                             <span>📍 Dropdown Destination Options</span>
-                            <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal;">(Routes available in dropdown)</span>
+                            <span id="dest-save-status" style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal; transition: all 0.3s;">(Auto-saved permanently)</span>
                         </div>
                         <button type="button" class="btn btn-sm" onclick="toggleAddRouteInput()" style="background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.4); color: #c7d2fe; padding: 0.35rem 0.75rem; border-radius: 0.5rem; font-size: 0.8rem;">
                             + Add Option to Dropdown
@@ -1456,10 +1456,48 @@
         });
     }
 
+    function saveDestinationsToBackend(destinations) {
+        const statusEl = document.getElementById('dest-save-status');
+        if (statusEl) {
+            statusEl.innerHTML = '<span style="color:#f59e0b">● Saving changes...</span>';
+        }
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') 
+            || document.querySelector('input[name="_token"]')?.value;
+
+        fetch('{{ url("/setup/sectoral-destinations") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({ destinations: destinations })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                if (statusEl) {
+                    statusEl.innerHTML = '<span style="color:#10b981; font-weight: 600;">✓ Saved permanently</span>';
+                    setTimeout(() => {
+                        statusEl.innerHTML = '<span style="color:var(--text-muted); font-size:0.75rem;">(Auto-saved permanently)</span>';
+                    }, 2500);
+                }
+            }
+        })
+        .catch(err => {
+            console.error('Error auto-saving destinations:', err);
+            if (statusEl) {
+                statusEl.innerHTML = '<span style="color:#ef4444">Failed to auto-save. Please click Save Configuration below.</span>';
+            }
+        });
+    }
+
     function removeRouteFromPresets(btn, routeName) {
         if (confirm(`Remove "${routeName}" from dropdown destinations?`)) {
             btn.closest('.route-pill').remove();
             refreshAllDropdowns();
+            saveDestinationsToBackend(getPresetDestinations());
         }
     }
 
@@ -1510,6 +1548,7 @@
         input.value = '';
         toggleAddRouteInput();
         refreshAllDropdowns();
+        saveDestinationsToBackend(getPresetDestinations());
     }
 
     function handleDestSelectChange(select) {
