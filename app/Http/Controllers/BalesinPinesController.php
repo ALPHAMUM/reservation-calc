@@ -103,6 +103,16 @@ class BalesinPinesController extends Controller
                 }
             }
 
+            // Resolve SC/PWD target settings for Balesin Pines
+            $scTargetService = app(\App\Services\ScTargetService::class);
+            $scOverrideRaw = (string) $request->get('sc_override', '');
+            $scRemoveRaw   = (string) $request->get('sc_remove', '');
+            $requestScTargetRaw = (string) $request->get('sc_target', '');
+            $scTargetRaw = $scTargetService->resolveRaw('pines', $requestScTargetRaw, array_values($ids));
+            $scOverrideMap = $scTargetService->parseOverrideRaw($scOverrideRaw);
+            $scRemoveMap   = $scTargetService->parseRemoveRaw($scRemoveRaw);
+            $scTargetMap   = $scTargetService->parseRaw($scTargetRaw);
+
             // Apply Pines rate calculator logic
             $calculator = app(\App\Services\BalesinPinesRateCalculatorService::class);
             $reservations = [];
@@ -114,6 +124,15 @@ class BalesinPinesController extends Controller
                 foreach ($listData as $lr) {
                     $k = trim($lr['resNo'] ?? $lr['conf'] ?? '');
                     if ($k !== '') $listMap[$k] = $lr;
+                }
+            }
+
+            // Track member unit count
+            $memberUnitCounts = [];
+            foreach ($rawDetail as $res) {
+                $mNo = trim((string)($res['memNo'] ?? $res['memberNo'] ?? ''));
+                if ($mNo !== '') {
+                    $memberUnitCounts[$mNo] = ($memberUnitCounts[$mNo] ?? 0) + 1;
                 }
             }
 
@@ -146,16 +165,33 @@ class BalesinPinesController extends Controller
                     $resOccupantIndex[$resNo] = 0;
                 }
                 $occupantIndex = $resOccupantIndex[$resNo]++;
+                $res['occupant_idx'] = $occupantIndex;
 
                 $roomType = $res['roomtyp'] ?? $res['roomType'] ?? '';
                 $unitType = $calculator->resolvePinesUnitType($roomType, $res['rateCode'] ?? '');
+                $isExtraPerson = ($occupantIndex >= 2);
+                $unitCount = $memberUnitCounts[$mNo] ?? 1;
+
+                $resForCalc = $scTargetService->applyToPassenger(
+                    $res,
+                    $resNo,
+                    $occupantIndex,
+                    $scTargetMap,
+                    $scOverrideMap,
+                    $scRemoveMap,
+                    'pines',
+                    $isExtraPerson
+                );
+                $scTargetService->syncPassengerFlags($res, $resForCalc);
 
                 $res['calculated_rates'] = $calculator->calculatePassengerRates(
-                    $res,
+                    $resForCalc,
                     $occupantIndex,
                     $roomType,
                     2,
-                    $occupantIndex
+                    $occupantIndex,
+                    0.0,
+                    $unitCount
                 );
                 $res['village_name'] = $unitType;
                 $res['is_employee']  = false;
@@ -206,6 +242,23 @@ class BalesinPinesController extends Controller
             while ($curr < $count) {
                 $blockStart = $curr;
                 $blockSize = min($count - $curr, $basePax);
+                // Detect whether ANY base occupant in this block has a Villa SC/PWD discount
+                $hasAnyVillaScInBlock = false;
+                for ($k = $blockStart; $k < $blockStart + $blockSize; $k++) {
+                    $occIdx = (int) ($rows[$k]['occupant_idx'] ?? $k);
+                    $isExtra = ($rows[$k]['is_extra_person'] ?? false) || ($occIdx >= 2);
+                    if (!$isExtra) {
+                        $hasVillaSc = (bool) ($rows[$k]['sc_target_villa'] ?? false);
+                        if (!$hasVillaSc && isset($rows[$k]['sc_mode'])) {
+                            $hasVillaSc = in_array($rows[$k]['sc_mode'], ['villa', 'both'], true);
+                        }
+                        if ($hasVillaSc) {
+                            $hasAnyVillaScInBlock = true;
+                            break;
+                        }
+                    }
+                }
+
                 $groupTotals = [];
                 foreach ($dateCols as $d) {
                     $uv = 0;
@@ -244,7 +297,7 @@ class BalesinPinesController extends Controller
                                     if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
                                 }
                             }
-                            // Extra person is NEVER FVN — if raw rate is an FVN marker or composite, use 3700
+                            // Extra person is NEVER FVN — if raw rate is an FVN marker or composite, use 3700 (unless discounted)
                             $uvFrac = round($uv - floor($uv), 2);
                             if (in_array($uvFrac, [0.01, 0.02, 0.03]) || $uv <= 1.0 || $uv > \App\Services\BalesinPinesRateCalculatorService::EXTRA_PERSON_CHARGE) {
                                 $uv = \App\Services\BalesinPinesRateCalculatorService::EXTRA_PERSON_CHARGE;
@@ -252,6 +305,13 @@ class BalesinPinesController extends Controller
                             $extraTotals[$d] = $uv;
                         }
                         $accSpans[] = ['span' => 1, 'totals' => $extraTotals, 'group_size' => 1, 'is_extra_person' => true];
+                    } elseif ($hasAnyVillaScInBlock) {
+                        // UNSPAN: Give each base occupant their own row with individual rate
+                        $occTotals = [];
+                        foreach ($dateCols as $d) {
+                            $occTotals[$d] = (float)($rows[$curr + $i]['calculated_rates']['acc_dates'][$d]['val'] ?? 0);
+                        }
+                        $accSpans[] = ['span' => 1, 'totals' => $occTotals, 'group_size' => 1, 'is_extra_person' => false];
                     } else {
                         $accSpans[] = ['span' => $span, 'totals' => $groupTotals, 'group_size' => $blockSize, 'is_extra_person' => false];
                     }
@@ -344,9 +404,28 @@ class BalesinPinesController extends Controller
             }
         }
 
+        // Resolve SC/PWD target settings for Balesin Pines Export
+        $scTargetService = app(\App\Services\ScTargetService::class);
+        $scOverrideRaw = (string) $request->get('sc_override', '');
+        $scRemoveRaw   = (string) $request->get('sc_remove', '');
+        $requestScTargetRaw = (string) $request->get('sc_target', '');
+        $scTargetRaw = $scTargetService->resolveRaw('pines', $requestScTargetRaw, array_values($ids));
+        $scOverrideMap = $scTargetService->parseOverrideRaw($scOverrideRaw);
+        $scRemoveMap   = $scTargetService->parseRemoveRaw($scRemoveRaw);
+        $scTargetMap   = $scTargetService->parseRaw($scTargetRaw);
+
         $calculator   = app(\App\Services\BalesinPinesRateCalculatorService::class);
         $reservations = [];
         $resOccupantIndex = [];
+
+        // Track member unit count
+        $memberUnitCounts = [];
+        foreach ($rawDetail as $res) {
+            $mNo = trim((string)($res['memNo'] ?? $res['memberNo'] ?? ''));
+            if ($mNo !== '') {
+                $memberUnitCounts[$mNo] = ($memberUnitCounts[$mNo] ?? 0) + 1;
+            }
+        }
 
         foreach ($rawDetail as $res) {
             $resNo = trim((string)($res['resNo'] ?? $res['conf'] ?? ''));
@@ -354,14 +433,39 @@ class BalesinPinesController extends Controller
                 $resOccupantIndex[$resNo] = 0;
             }
             $occupantIndex = $resOccupantIndex[$resNo]++;
+            $res['occupant_idx'] = $occupantIndex;
 
             if (!empty($listRateMap[$resNo])) {
                 $res['list_rate'] = $listRateMap[$resNo];
             }
 
+            $mNo = trim((string)($res['memNo'] ?? $res['memberNo'] ?? ''));
             $roomType                = $res['roomtyp'] ?? $res['roomType'] ?? '';
             $unitType                = $calculator->resolvePinesUnitType($roomType, $res['rateCode'] ?? '');
-            $res['calculated_rates'] = $calculator->calculatePassengerRates($res, $occupantIndex, $roomType, 2, $occupantIndex);
+            $isExtraPerson           = ($occupantIndex >= 2);
+            $unitCount               = $memberUnitCounts[$mNo] ?? 1;
+
+            $resForCalc = $scTargetService->applyToPassenger(
+                $res,
+                $resNo,
+                $occupantIndex,
+                $scTargetMap,
+                $scOverrideMap,
+                $scRemoveMap,
+                'pines',
+                $isExtraPerson
+            );
+            $scTargetService->syncPassengerFlags($res, $resForCalc);
+
+            $res['calculated_rates'] = $calculator->calculatePassengerRates(
+                $resForCalc,
+                $occupantIndex,
+                $roomType,
+                2,
+                $occupantIndex,
+                0.0,
+                $unitCount
+            );
             $res['village_name']     = $unitType;
             $res['is_employee']      = false;
 
@@ -407,6 +511,24 @@ class BalesinPinesController extends Controller
             while ($curr < $count) {
                 $blockStart = $curr;
                 $blockSize = min($count - $curr, $basePax);
+
+                // Detect whether ANY base occupant in this block has a Villa SC/PWD discount
+                $hasAnyVillaScInBlock = false;
+                for ($k = $blockStart; $k < $blockStart + $blockSize; $k++) {
+                    $occIdx = (int) ($rows[$k]['occupant_idx'] ?? $k);
+                    $isExtra = ($rows[$k]['is_extra_person'] ?? false) || ($occIdx >= 2);
+                    if (!$isExtra) {
+                        $hasVillaSc = (bool) ($rows[$k]['sc_target_villa'] ?? false);
+                        if (!$hasVillaSc && isset($rows[$k]['sc_mode'])) {
+                            $hasVillaSc = in_array($rows[$k]['sc_mode'], ['villa', 'both'], true);
+                        }
+                        if ($hasVillaSc) {
+                            $hasAnyVillaScInBlock = true;
+                            break;
+                        }
+                    }
+                }
+
                 $groupTotals = [];
                 foreach ($dateCols as $d) {
                     $uv = 0;
@@ -449,6 +571,13 @@ class BalesinPinesController extends Controller
                             $extraTotals[$d] = $uv;
                         }
                         $accSpans[] = ['span' => 1, 'totals' => $extraTotals, 'group_size' => 1, 'is_extra_person' => true];
+                    } elseif ($hasAnyVillaScInBlock) {
+                        // UNSPAN: Give each base occupant their own row with individual rate
+                        $occTotals = [];
+                        foreach ($dateCols as $d) {
+                            $occTotals[$d] = (float)($rows[$curr + $i]['calculated_rates']['acc_dates'][$d]['val'] ?? 0);
+                        }
+                        $accSpans[] = ['span' => 1, 'totals' => $occTotals, 'group_size' => 1, 'is_extra_person' => false];
                     } else {
                         $accSpans[] = ['span' => $span, 'totals' => $groupTotals, 'group_size' => $blockSize, 'is_extra_person' => false];
                     }
@@ -648,8 +777,8 @@ class BalesinPinesController extends Controller
 
                 $arrDt = $res['arrdt'] ?? $res['arrDt'] ?? '';
                 $depDt = $res['depdt'] ?? $res['depDt'] ?? '';
-                echo '<td style=\'mso-number-format:"\\@"; text-align:center;\'>' . ($arrDt ? date('m/d/Y', strtotime($arrDt)) : '') . '</td>';
-                echo '<td style=\'mso-number-format:"\\@"; text-align:center;\'>' . ($depDt ? date('m/d/Y', strtotime($depDt)) : '') . '</td>';
+                echo '<td style=\'mso-number-format:"\\@"; text-align:center;\'>' . ($arrDt ? (strtotime($arrDt) ? strtoupper(date('d/M/Y', strtotime($arrDt))) : $arrDt) : '') . '</td>';
+                echo '<td style=\'mso-number-format:"\\@"; text-align:center;\'>' . ($depDt ? (strtotime($depDt) ? strtoupper(date('d/M/Y', strtotime($depDt))) : $depDt) : '') . '</td>';
 
                 // Accommodation cells – merged using rowspan
                 if ($span > 0) {

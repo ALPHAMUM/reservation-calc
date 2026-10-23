@@ -172,6 +172,11 @@ class ScTargetService
         $res['sc_target_villa'] = $resForCalc['sc_target_villa'] ?? null;
         $res['sc_target_air']   = $resForCalc['sc_target_air'] ?? null;
         $res['sc_mode']         = $resForCalc['sc_mode'] ?? null;
+        if (!empty($resForCalc['sc_target_villa']) || !empty($resForCalc['sc_target_air'])) {
+            $res['privCard'] = 'Senior Citizen';
+        } elseif (($resForCalc['sc_mode'] ?? '') === 'none') {
+            $res['privCard'] = 'N';
+        }
     }
 
     public static function isFvnAccommodation(array $totals): bool

@@ -1991,11 +1991,13 @@
                     }
 
                     let currentFees = 0;
-                    if (rowRes && rowRes.calculated_rates) {
-                        const cr = rowRes.calculated_rates;
-                        currentFees = (parseFloat(cr.air) || 0) + (parseFloat(cr.han) || 0) + (parseFloat(cr.avi) || 0) + (parseFloat(cr.env) || 0);
-                    } else {
-                        currentFees = parseFloat(totalSpan.data('base-fees')) || 0;
+                    if (property === 'island') {
+                        if (rowRes && rowRes.calculated_rates) {
+                            const cr = rowRes.calculated_rates;
+                            currentFees = (parseFloat(cr.air) || 0) + (parseFloat(cr.han) || 0) + (parseFloat(cr.avi) || 0) + (parseFloat(cr.env) || 0);
+                        } else {
+                            currentFees = parseFloat(totalSpan.data('base-fees')) || 0;
+                        }
                     }
 
                     const passengerTotal = rowAcc + currentFees;
@@ -2021,7 +2023,7 @@
                     }
                 });
                 const totalSpan = tr.find('.total-val');
-                const baseFees = parseFloat(totalSpan.data('base-fees')) || 0;
+                const baseFees = (property === 'island') ? (parseFloat(totalSpan.data('base-fees')) || 0) : 0;
                 const grandTotal = accTotal + baseFees;
                 
                 totalSpan.text(grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
@@ -2439,30 +2441,35 @@
                 res.sc_mode = selectedMode;
                 res.privCard = hasVillaSc ? 'Senior Citizen' : 'N';
 
-                // Recalculate Airfare rate in res.calculated_rates
-                let currentAir = parseFloat(res.calculated_rates.air || 0);
-                const isEmployee = !!res.is_employee;
-                const isMember   = ['member', 'spouse', 'dependent', 'authorized'].some(t => (res.gstType || '').toLowerCase().includes(t));
-                const defaultRegular = isEmployee ? 0 : (isMember ? 4200 : 8400);
+                // Recalculate Airfare rate in res.calculated_rates (only for Island — Pines and City have no flights)
+                if (property === 'island') {
+                    let currentAir = parseFloat(res.calculated_rates.air || 0);
+                    const isEmployee = !!res.is_employee;
+                    const isMember   = ['member', 'spouse', 'dependent', 'authorized'].some(t => (res.gstType || '').toLowerCase().includes(t));
+                    const defaultRegular = isEmployee ? 0 : (isMember ? 4200 : 8400);
 
-                let baseAir = 0;
-                if (res.calculated_rates.air_base !== undefined) {
-                    baseAir = res.calculated_rates.air_base;
-                } else {
-                    if (currentAir > 0 && Math.abs(currentAir - Math.round(defaultRegular / 1.12)) < 50) {
-                        baseAir = defaultRegular;
-                    } else if (currentAir > 0) {
-                        baseAir = currentAir;
+                    let baseAir = 0;
+                    if (res.calculated_rates.air_base !== undefined) {
+                        baseAir = res.calculated_rates.air_base;
                     } else {
-                        baseAir = defaultRegular;
+                        if (currentAir > 0 && Math.abs(currentAir - Math.round(defaultRegular / 1.12)) < 50) {
+                            baseAir = defaultRegular;
+                        } else if (currentAir > 0) {
+                            baseAir = currentAir;
+                        } else {
+                            baseAir = defaultRegular;
+                        }
+                        res.calculated_rates.air_base = baseAir;
                     }
-                    res.calculated_rates.air_base = baseAir;
-                }
 
-                if (hasAirSc && !isEmployee) {
-                    res.calculated_rates.air = Math.round((baseAir / 1.12) * 100) / 100;
+                    if (hasAirSc && !isEmployee) {
+                        res.calculated_rates.air = Math.round((baseAir / 1.12) * 100) / 100;
+                    } else {
+                        res.calculated_rates.air = baseAir;
+                    }
                 } else {
-                    res.calculated_rates.air = baseAir;
+                    res.calculated_rates.air = 0;
+                    res.calculated_rates.air_base = 0;
                 }
 
                 // Update Villa daily rate calculations for reservation group

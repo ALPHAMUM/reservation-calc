@@ -1276,8 +1276,8 @@ class ReservationController extends Controller
                 echo '<td style="text-align:center">' . strtoupper(htmlspecialchars($res['nationality_name'] ?? $res['nationality'] ?? '')) . '</td>';
                 $arrDt = $res['arrdt'] ?? $res['arrDt'] ?? '';
                 $depDt = $res['depdt'] ?? $res['depDt'] ?? '';
-                echo '<td style=\'mso-number-format:"\@"; text-align:center;\'>' . ($arrDt ? date('m/d/Y', strtotime($arrDt)) : '') . '</td>';
-                echo '<td style=\'mso-number-format:"\@"; text-align:center;\'>' . ($depDt ? date('m/d/Y', strtotime($depDt)) : '') . '</td>';
+                echo '<td style=\'mso-number-format:"\@"; text-align:center;\'>' . ($arrDt ? (strtotime($arrDt) ? strtoupper(date('d/M/Y', strtotime($arrDt))) : $arrDt) : '') . '</td>';
+                echo '<td style=\'mso-number-format:"\@"; text-align:center;\'>' . ($depDt ? (strtotime($depDt) ? strtoupper(date('d/M/Y', strtotime($depDt))) : $depDt) : '') . '</td>';
 
                 if ($accRowSpan > 0) {
                     foreach ($dateCols as $d) {

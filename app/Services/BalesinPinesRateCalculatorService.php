@@ -333,12 +333,14 @@ class BalesinPinesRateCalculatorService
                         $scDisc        = $this->getScDiscountPercent();
                         $vatRate       = $this->getVatRate();
                         $removeVat     = $this->getRemoveVat();
-                        $vatExemptBase = $removeVat ? round($baseFee / (1 + ($vatRate / 100)), 2) : $baseFee;
-                        $discountAmt   = round($vatExemptBase * ($scDisc / 100), 2);
-                        $finalVal      = round($vatExemptBase - $discountAmt, 2);
-                        $displaySc     = round(($vatExemptBase - $discountAmt) * 0.10, 2);
+                        $vatExemptBase = $removeVat ? ($baseFee / (1 + ($vatRate / 100))) : $baseFee;
+                        $discountAmt   = $vatExemptBase * ($scDisc / 100);
+                        $netBase       = $vatExemptBase - $discountAmt;
+                        $scAmt         = $netBase * 0.10;
+                        $finalVal      = round($netBase + $scAmt, 2);
+                        $displaySc     = round($scAmt, 2);
                         $displayVat    = 0;
-                        $displayDisc   = $discountAmt;
+                        $displayDisc   = round($discountAmt, 2);
                     } else {
                         $finalVal    = $baseFee;
                         $displaySc   = round(($baseFee / 1.22) * 0.10, 2);
@@ -353,7 +355,7 @@ class BalesinPinesRateCalculatorService
                             'is_discounted' => $hasVillaSc,
                             'is_infant'     => false,
                             'divisor'       => 1,
-                            'base'          => $finalVal,
+                            'base'          => $hasVillaSc ? round($netBase, 2) : $finalVal,
                             'discount'      => $displayDisc,
                             'sc'            => $displaySc,
                             'vat'           => $displayVat,
@@ -440,9 +442,13 @@ class BalesinPinesRateCalculatorService
             if ($isExtraPerson) {
                 // Extra person charge is 3,700 (same for GRATE and MRATE)
                 if ($hasVillaSc) {
-                    $vatExemptBase = $removeVat ? round($baseFee / (1 + ($vatRate / 100)), 2) : $baseFee;
-                    $discountAmt   = round($vatExemptBase * ($scDisc / 100), 2);
-                    $finalVal      = round($vatExemptBase - $discountAmt, 2);
+                    $vatExemptBase = $removeVat ? ($baseFee / (1 + ($vatRate / 100))) : $baseFee;
+                    $discountAmt   = $vatExemptBase * ($scDisc / 100);
+                    $netBase       = $vatExemptBase - $discountAmt;
+                    $scAmt         = $netBase * 0.10;
+                    $finalVal      = round($netBase + $scAmt, 2);
+                    $displaySc     = round($scAmt, 2);
+                    $displayDiscount = round($discountAmt, 2);
                 } else {
                     $finalVal = $baseFee;
                 }
@@ -452,9 +458,13 @@ class BalesinPinesRateCalculatorService
                 $individualShare = round($grossVal / $baseDivisor, 2);
 
                 if ($hasVillaSc) {
-                    $vatExemptBase = $removeVat ? round($individualShare / (1 + ($vatRate / 100)), 2) : $individualShare;
-                    $discountAmt   = round($vatExemptBase * ($scDisc / 100), 2);
-                    $finalVal      = round($vatExemptBase - $discountAmt, 2);
+                    $vatExemptBase = $removeVat ? ($individualShare / (1 + ($vatRate / 100))) : $individualShare;
+                    $discountAmt   = $vatExemptBase * ($scDisc / 100);
+                    $netBase       = $vatExemptBase - $discountAmt;
+                    $scAmt         = $netBase * 0.10;
+                    $finalVal      = round($netBase + $scAmt, 2);
+                    $displaySc     = round($scAmt, 2);
+                    $displayDiscount = round($discountAmt, 2);
                 } else {
                     $finalVal = $individualShare;
                 }
@@ -499,7 +509,7 @@ class BalesinPinesRateCalculatorService
                     'is_discounted' => $hasVillaSc,
                     'is_infant'     => false,
                     'divisor'       => $isExtraPerson ? 1 : max(1, min(2, $totalBillable)),
-                    'base'          => $isExtraPerson ? $finalVal : ($displayBase ?? $finalVal),
+                    'base'          => $isExtraPerson ? ($hasVillaSc ? round($vatExemptBase - $discountAmt, 2) : $finalVal) : ($displayBase ?? $finalVal),
                     'discount'      => $hasVillaSc
                         ? ($isExtraPerson ? round(round($baseFee / 1.12, 2) * 0.20, 2) : $displayDiscount)
                         : 0,

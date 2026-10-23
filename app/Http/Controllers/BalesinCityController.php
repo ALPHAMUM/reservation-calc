@@ -100,7 +100,17 @@ class BalesinCityController extends Controller
                     }
                 }
 
+                $scTargetService = app(\App\Services\ScTargetService::class);
+                $scOverrideRaw = (string) $request->get('sc_override', '');
+                $scRemoveRaw   = (string) $request->get('sc_remove', '');
+                $requestScTargetRaw = (string) $request->get('sc_target', '');
+                $scTargetRaw = $scTargetService->resolveRaw('city', $requestScTargetRaw, array_values($ids));
+                $scOverrideMap = $scTargetService->parseOverrideRaw($scOverrideRaw);
+                $scRemoveMap   = $scTargetService->parseRemoveRaw($scRemoveRaw);
+                $scTargetMap   = $scTargetService->parseRaw($scTargetRaw);
+
                 $calculator = app(\App\Services\BalesinCityRateCalculatorService::class);
+                $resOccupantIndex = [];
                 
                 // Build list lookup map if listData is available
                 $listMap = [];
@@ -131,11 +141,43 @@ class BalesinCityController extends Controller
                     if (empty($res['bookDate'])) $res['bookDate'] = $lr['bookDate'] ?? '';
                     if (empty($res['conactNo'])) $res['conactNo'] = $lr['conactNo'] ?? $lr['contactNo'] ?? '';
 
+                    if (!isset($resOccupantIndex[$resNo])) {
+                        $resOccupantIndex[$resNo] = 0;
+                    }
+                    $occupantIndex = $resOccupantIndex[$resNo]++;
+                    $res['occupant_idx'] = $occupantIndex;
+
                     $roomType                = $res['roomtyp'] ?? $res['roomType'] ?? '';
                     $unitType                = $calculator->resolveCityUnitType($roomType, $res['rateCode'] ?? '');
-                    $res['calculated_rates'] = $calculator->getPassThroughRates($res);
+                    $isExtraPerson           = $calculator->isExtraOccupant($occupantIndex, $roomType);
+
+                    $resForCalc = $scTargetService->applyToPassenger(
+                        $res,
+                        $resNo,
+                        $occupantIndex,
+                        $scTargetMap,
+                        $scOverrideMap,
+                        $scRemoveMap,
+                        'city',
+                        $isExtraPerson
+                    );
+                    $scTargetService->syncPassengerFlags($res, $resForCalc);
+
+                    $res['calculated_rates'] = $calculator->calculatePassengerRates($resForCalc);
                     $res['village_name']     = $unitType;
                     $res['is_employee']      = false;
+
+                    if (isset($res['rate']) && is_array($res['rate'])) {
+                        foreach ($res['rate'] as &$r) {
+                            $d = $r['date'] ?? '';
+                            if ($d && isset($res['calculated_rates']['acc_dates'][$d])) {
+                                $r['val'] = $res['calculated_rates']['acc_dates'][$d]['val'];
+                                $r['breakdown'] = $res['calculated_rates']['acc_dates'][$d]['breakdown'] ?? null;
+                            }
+                        }
+                        unset($r);
+                    }
+
                     $reservations[]          = $res;
                 }
             }
@@ -177,6 +219,24 @@ class BalesinCityController extends Controller
                 $blockStart = $curr;
                 $isBlockExtra = ($curr >= $basePax);
                 $blockSize = $isBlockExtra ? 1 : min($count - $curr, $basePax);
+
+                // Detect whether ANY base occupant in this block has a Villa SC/PWD discount
+                $hasAnyVillaScInBlock = false;
+                for ($k = $blockStart; $k < $blockStart + $blockSize; $k++) {
+                    $occIdx = (int) ($rows[$k]['occupant_idx'] ?? $k);
+                    $isExtra = ($rows[$k]['is_extra_person'] ?? false) || ($occIdx >= $basePax);
+                    if (!$isExtra) {
+                        $hasVillaSc = (bool) ($rows[$k]['sc_target_villa'] ?? false);
+                        if (!$hasVillaSc && isset($rows[$k]['sc_mode'])) {
+                            $hasVillaSc = in_array($rows[$k]['sc_mode'], ['villa', 'both'], true);
+                        }
+                        if ($hasVillaSc) {
+                            $hasAnyVillaScInBlock = true;
+                            break;
+                        }
+                    }
+                }
+
                 $groupTotals = [];
                 foreach ($dateCols as $d) {
                     $uv = 0;
@@ -191,16 +251,47 @@ class BalesinCityController extends Controller
                     if ($isExtraPerson) {
                         $extraTotals = [];
                         foreach ($dateCols as $d) {
-                            $uv = 0;
-                            foreach ($rows[$curr + $i]['rate'] ?? [] as $rt) {
-                                if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                            $uv = (float)($rows[$curr + $i]['calculated_rates']['acc_dates'][$d]['val'] ?? 0);
+                            if ($uv == 0) {
+                                foreach ($rows[$curr + $i]['rate'] ?? [] as $rt) {
+                                    if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                                }
                             }
-                            if ($uv > 1300 || $uv <= 1.0) $uv = 1300;
+                            $bd = $rows[$curr + $i]['calculated_rates']['acc_dates'][$d]['breakdown'] ?? null;
+                            if (!$bd || empty($bd['is_discounted'])) {
+                                if ($uv > 1300 || $uv <= 1.0) $uv = 1300;
+                            }
                             $extraTotals[$d] = $uv;
                         }
-                        $accSpans[] = ['span' => 1, 'totals' => $extraTotals, 'group_size' => 1, 'is_extra_person' => true];
+                        $accSpans[] = ['span' => 1, 'totals' => $extraTotals, 'group_size' => 1, 'is_extra_person' => true, 'has_discount' => false];
+                    } elseif ($hasAnyVillaScInBlock) {
+                        // UNSPAN: Give each base occupant their own row with individual rate
+                        $occTotals = [];
+                        foreach ($dateCols as $d) {
+                            $uv = 0;
+                            foreach ($rows[$curr + $i]['rate'] ?? [] as $rt) {
+                                if (($rt['date'] ?? '') === $d) {
+                                    $uv = (float)($rt['val'] ?? 0);
+                                    break;
+                                }
+                            }
+                            if ($uv == 0) {
+                                $uv = $groupTotals[$d] ?? 0;
+                            }
+                            $uvFrac = round($uv - floor($uv), 2);
+                            $isUvFvn = in_array($uvFrac, [0.01, 0.02, 0.03, 0.5]);
+                            if (!$isUvFvn) {
+                                if ($uv > 100 && $blockSize > 1) {
+                                    if (abs($uv - ($groupTotals[$d] ?? 0)) < 1.0 || $uv > 3000) {
+                                        $uv = round($uv / $blockSize, 2);
+                                    }
+                                }
+                            }
+                            $occTotals[$d] = $uv;
+                        }
+                        $accSpans[] = ['span' => 1, 'totals' => $occTotals, 'group_size' => 1, 'is_extra_person' => false, 'has_discount' => true];
                     } else {
-                        $accSpans[] = ['span' => $span, 'totals' => $groupTotals, 'group_size' => $blockSize, 'is_extra_person' => false];
+                        $accSpans[] = ['span' => $span, 'totals' => $groupTotals, 'group_size' => $blockSize, 'is_extra_person' => false, 'has_discount' => false];
                     }
                 }
                 $curr += $blockSize;
@@ -209,11 +300,12 @@ class BalesinCityController extends Controller
 
         // Attach to each reservation
         foreach ($reservations as $idx => &$res) {
-            $spanInfo = $accSpans[$idx] ?? ['span' => 1, 'totals' => [], 'group_size' => 1, 'is_extra_person' => false];
+            $spanInfo = $accSpans[$idx] ?? ['span' => 1, 'totals' => [], 'group_size' => 1, 'is_extra_person' => false, 'has_discount' => false];
             $res['acc_span']          = $spanInfo['span'];
             $res['acc_group_size']    = $spanInfo['group_size'];
             $res['acc_group_totals']  = $spanInfo['totals'];
             $res['is_extra_person']   = $spanInfo['is_extra_person'] ?? false;
+            $res['acc_has_discount']  = $spanInfo['has_discount'] ?? false;
         }
         unset($res);
 
@@ -271,14 +363,57 @@ class BalesinCityController extends Controller
             }
         }
 
+        $scTargetService = app(\App\Services\ScTargetService::class);
+        $scOverrideRaw = (string) $request->get('sc_override', '');
+        $scRemoveRaw   = (string) $request->get('sc_remove', '');
+        $requestScTargetRaw = (string) $request->get('sc_target', '');
+        $scTargetRaw = $scTargetService->resolveRaw('city', $requestScTargetRaw, array_values($ids));
+        $scOverrideMap = $scTargetService->parseOverrideRaw($scOverrideRaw);
+        $scRemoveMap   = $scTargetService->parseRemoveRaw($scRemoveRaw);
+        $scTargetMap   = $scTargetService->parseRaw($scTargetRaw);
+
         $calculator   = app(\App\Services\BalesinCityRateCalculatorService::class);
         $reservations = [];
+        $resOccupantIndex = [];
         foreach ($rawDetail as $res) {
+            $resNo = trim((string)($res['resNo'] ?? $res['conf'] ?? ''));
+            if (!isset($resOccupantIndex[$resNo])) {
+                $resOccupantIndex[$resNo] = 0;
+            }
+            $occupantIndex = $resOccupantIndex[$resNo]++;
+            $res['occupant_idx'] = $occupantIndex;
+
             $roomType                = $res['roomtyp'] ?? $res['roomType'] ?? '';
             $unitType                = $calculator->resolveCityUnitType($roomType, $res['rateCode'] ?? '');
-            $res['calculated_rates'] = $calculator->getPassThroughRates($res);
+            $isExtraPerson           = $calculator->isExtraOccupant($occupantIndex, $roomType);
+
+            $resForCalc = $scTargetService->applyToPassenger(
+                $res,
+                $resNo,
+                $occupantIndex,
+                $scTargetMap,
+                $scOverrideMap,
+                $scRemoveMap,
+                'city',
+                $isExtraPerson
+            );
+            $scTargetService->syncPassengerFlags($res, $resForCalc);
+
+            $res['calculated_rates'] = $calculator->calculatePassengerRates($resForCalc);
             $res['village_name']     = $unitType;
             $res['is_employee']      = false;
+
+            if (isset($res['rate']) && is_array($res['rate'])) {
+                foreach ($res['rate'] as &$r) {
+                    $d = $r['date'] ?? '';
+                    if ($d && isset($res['calculated_rates']['acc_dates'][$d])) {
+                        $r['val'] = $res['calculated_rates']['acc_dates'][$d]['val'];
+                        $r['breakdown'] = $res['calculated_rates']['acc_dates'][$d]['breakdown'] ?? null;
+                    }
+                }
+                unset($r);
+            }
+
             $reservations[]          = $res;
         }
 
@@ -360,6 +495,24 @@ class BalesinCityController extends Controller
                 $blockStart = $curr;
                 $isBlockExtra = ($curr >= $basePax);
                 $blockSize = $isBlockExtra ? 1 : min($count - $curr, $basePax);
+
+                // Detect whether ANY base occupant in this block has a Villa SC/PWD discount
+                $hasAnyVillaScInBlock = false;
+                for ($k = $blockStart; $k < $blockStart + $blockSize; $k++) {
+                    $occIdx = (int) ($rows[$k]['occupant_idx'] ?? $k);
+                    $isExtra = ($rows[$k]['is_extra_person'] ?? false) || ($occIdx >= $basePax);
+                    if (!$isExtra) {
+                        $hasVillaSc = (bool) ($rows[$k]['sc_target_villa'] ?? false);
+                        if (!$hasVillaSc && isset($rows[$k]['sc_mode'])) {
+                            $hasVillaSc = in_array($rows[$k]['sc_mode'], ['villa', 'both'], true);
+                        }
+                        if ($hasVillaSc) {
+                            $hasAnyVillaScInBlock = true;
+                            break;
+                        }
+                    }
+                }
+
                 $groupTotals = [];
                 foreach ($dateCols as $d) {
                     $uv = 0;
@@ -374,16 +527,47 @@ class BalesinCityController extends Controller
                     if ($isExtraPerson) {
                         $extraTotals = [];
                         foreach ($dateCols as $d) {
-                            $uv = 0;
-                            foreach ($rows[$curr + $i]['rate'] ?? [] as $rt) {
-                                if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                            $uv = (float)($rows[$curr + $i]['calculated_rates']['acc_dates'][$d]['val'] ?? 0);
+                            if ($uv == 0) {
+                                foreach ($rows[$curr + $i]['rate'] ?? [] as $rt) {
+                                    if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                                }
                             }
-                            if ($uv > 1300 || $uv <= 1.0) $uv = 1300;
+                            $bd = $rows[$curr + $i]['calculated_rates']['acc_dates'][$d]['breakdown'] ?? null;
+                            if (!$bd || empty($bd['is_discounted'])) {
+                                if ($uv > 1300 || $uv <= 1.0) $uv = 1300;
+                            }
                             $extraTotals[$d] = $uv;
                         }
-                        $accSpans[] = ['span' => 1, 'totals' => $extraTotals, 'group_size' => 1, 'is_extra_person' => true];
+                        $accSpans[] = ['span' => 1, 'totals' => $extraTotals, 'group_size' => 1, 'is_extra_person' => true, 'has_discount' => false];
+                    } elseif ($hasAnyVillaScInBlock) {
+                        // UNSPAN: Give each base occupant their own row with individual rate
+                        $occTotals = [];
+                        foreach ($dateCols as $d) {
+                            $uv = 0;
+                            foreach ($rows[$curr + $i]['rate'] ?? [] as $rt) {
+                                if (($rt['date'] ?? '') === $d) {
+                                    $uv = (float)($rt['val'] ?? 0);
+                                    break;
+                                }
+                            }
+                            if ($uv == 0) {
+                                $uv = $groupTotals[$d] ?? 0;
+                            }
+                            $uvFrac = round($uv - floor($uv), 2);
+                            $isUvFvn = in_array($uvFrac, [0.01, 0.02, 0.03, 0.5]);
+                            if (!$isUvFvn) {
+                                if ($uv > 100 && $blockSize > 1) {
+                                    if (abs($uv - ($groupTotals[$d] ?? 0)) < 1.0 || $uv > 3000) {
+                                        $uv = round($uv / $blockSize, 2);
+                                    }
+                                }
+                            }
+                            $occTotals[$d] = $uv;
+                        }
+                        $accSpans[] = ['span' => 1, 'totals' => $occTotals, 'group_size' => 1, 'is_extra_person' => false, 'has_discount' => true];
                     } else {
-                        $accSpans[] = ['span' => $span, 'totals' => $groupTotals, 'group_size' => $blockSize, 'is_extra_person' => false];
+                        $accSpans[] = ['span' => $span, 'totals' => $groupTotals, 'group_size' => $blockSize, 'is_extra_person' => false, 'has_discount' => false];
                     }
                 }
                 $curr += $blockSize;
@@ -392,11 +576,12 @@ class BalesinCityController extends Controller
 
         // Attach to each reservation
         foreach ($reservations as $idx => &$res) {
-            $spanInfo = $accSpans[$idx] ?? ['span' => 1, 'totals' => [], 'group_size' => 1, 'is_extra_person' => false];
+            $spanInfo = $accSpans[$idx] ?? ['span' => 1, 'totals' => [], 'group_size' => 1, 'is_extra_person' => false, 'has_discount' => false];
             $res['acc_span']          = $spanInfo['span'];
             $res['acc_group_size']    = $spanInfo['group_size'];
             $res['acc_group_totals']  = $spanInfo['totals'];
             $res['is_extra_person']   = $spanInfo['is_extra_person'] ?? false;
+            $res['acc_has_discount']  = $spanInfo['has_discount'] ?? false;
         }
         unset($res);
 
@@ -514,7 +699,13 @@ class BalesinCityController extends Controller
                 }
                 $span           = $res['acc_span'] ?? 1;
                 $groupSize      = max(1, (int) ($res['acc_group_size'] ?? $span ?? 1));
-                $perOccupantAcc = $rates['acc'] ?? ($groupAccSum / $groupSize);
+                $isExtraOcc     = $res['is_extra_person'] ?? false;
+                $hasDiscount    = $res['acc_has_discount'] ?? false;
+                if ($isExtraOcc || ($span === 1 && $hasDiscount)) {
+                    $perOccupantAcc = $groupAccSum;
+                } else {
+                    $perOccupantAcc = $groupAccSum / $groupSize;
+                }
                 $accGrandTotal += $perOccupantAcc;
 
                 $relation = strtoupper(htmlspecialchars($res['gstType'] ?? ''));
@@ -539,18 +730,26 @@ class BalesinCityController extends Controller
 
                 $arrDt = $res['arrdt'] ?? $res['arrDt'] ?? '';
                 $depDt = $res['depdt'] ?? $res['depDt'] ?? '';
-                echo '<td style=\'mso-number-format:"\\@"; text-align:center;\'>' . ($arrDt ? date('m/d/Y', strtotime($arrDt)) : '') . '</td>';
-                echo '<td style=\'mso-number-format:"\\@"; text-align:center;\'>' . ($depDt ? date('m/d/Y', strtotime($depDt)) : '') . '</td>';
+                echo '<td style=\'mso-number-format:"\\@"; text-align:center;\'>' . ($arrDt ? (strtotime($arrDt) ? strtoupper(date('d/M/Y', strtotime($arrDt))) : $arrDt) : '') . '</td>';
+                echo '<td style=\'mso-number-format:"\\@"; text-align:center;\'>' . ($depDt ? (strtotime($depDt) ? strtoupper(date('d/M/Y', strtotime($depDt))) : $depDt) : '') . '</td>';
 
                 if ($span > 0) {
                     foreach ($dateCols as $d) {
-                        $val = $rates['acc_dates'][$d]['val'] ?? ($groupTotals[$d] ?? 0);
+                        $val = ($span > 1) ? ($groupTotals[$d] ?? 0) : ($groupTotals[$d] ?? ($rates['acc_dates'][$d]['val'] ?? 0));
                         $rv  = round($val, 2);
-                        $formattedVal = ($val > 0 ? number_format($val, 2) : '');
+                        $rawFrac = round($val - floor($val), 2);
+                        $isFvn = in_array($rawFrac, [0.01, 0.02, 0.03]);
+                        if ($isFvn) {
+                            if ($rawFrac == 0.01)      $formattedVal = '1 FVN';
+                            elseif ($rawFrac == 0.02)  $formattedVal = '1.5 FVN';
+                            else                       $formattedVal = '.5 FVN';
+                        } else {
+                            $formattedVal = ($val > 0 ? number_format($val, 2) : '');
+                        }
 
                         echo '<td class="num" rowspan="' . $span . '" style="text-align: center;">' . $formattedVal . '</td>';
 
-                        if ($rv !== 0.01 && $rv !== 0.02 && $rv !== 0.5) {
+                        if (!$isFvn && $rv !== 0.5) {
                             $dateTotals[$d] += (float) $val;
                         }
                     }

@@ -62,6 +62,19 @@ abstract class AbstractPropertyHandler
         $dateCols          = [];
         $error             = null;
 
+        $scTargetService = app(\App\Services\ScTargetService::class);
+        $this->scOverrideRaw = (string) $request->get('sc_override', '');
+        $this->scRemoveRaw   = (string) $request->get('sc_remove', '');
+        $requestScTargetRaw  = (string) $request->get('sc_target', '');
+        $resNosForSc = [];
+        if (is_string($resNoList) && trim($resNoList) !== '') {
+            $resNosForSc = array_values(array_filter(array_map('trim', explode(',', $resNoList))));
+        }
+        $this->scTargetRaw   = $scTargetService->resolveRaw($this->slug, $requestScTargetRaw, $resNosForSc);
+        $this->scTargetMap   = $scTargetService->parseRaw($this->scTargetRaw);
+        $this->scOverrideMap = $scTargetService->parseOverrideRaw($this->scOverrideRaw);
+        $this->scRemoveMap   = $scTargetService->parseRemoveRaw($this->scRemoveRaw);
+
         try {
             $listData = [];
 
@@ -117,19 +130,6 @@ abstract class AbstractPropertyHandler
         }
 
         $settings = app(\App\Services\SettingsService::class)->getSettings();
-
-        $scTargetService = app(\App\Services\ScTargetService::class);
-        $this->scOverrideRaw = (string) $request->get('sc_override', '');
-        $this->scRemoveRaw   = (string) $request->get('sc_remove', '');
-        $requestScTargetRaw  = (string) $request->get('sc_target', '');
-        $resNosForSc = [];
-        if (is_string($resNoList) && trim($resNoList) !== '') {
-            $resNosForSc = array_values(array_filter(array_map('trim', explode(',', $resNoList))));
-        }
-        $this->scTargetRaw   = $scTargetService->resolveRaw($this->slug, $requestScTargetRaw, $resNosForSc);
-        $this->scTargetMap   = $scTargetService->parseRaw($this->scTargetRaw);
-        $this->scOverrideMap = $scTargetService->parseOverrideRaw($this->scOverrideRaw);
-        $this->scRemoveMap   = $scTargetService->parseRemoveRaw($this->scRemoveRaw);
 
         return view('dashboard', [
             'reservations' => $pagedReservations ?? [],

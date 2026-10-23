@@ -392,8 +392,8 @@
                     <td style="text-align: center;">{{ $res['age'] ?? '' }}</td>
                     <td>{{ $res['dateOfBirth'] ?? '' }}</td>
 
-                    <td>{{ ($d = $res['arrdt'] ?? $res['arrDt'] ?? '') ? date('m/d/Y', strtotime($d)) : '' }}</td>
-                    <td>{{ ($d = $res['depdt'] ?? $res['depDt'] ?? '') ? date('m/d/Y', strtotime($d)) : '' }}</td>
+                    <td style="text-align: center;">{{ ($d = $res['arrdt'] ?? $res['arrDt'] ?? '') ? (strtotime($d) ? strtoupper(date('d/M/Y', strtotime($d))) : $d) : '' }}</td>
+                    <td style="text-align: center;">{{ ($d = $res['depdt'] ?? $res['depDt'] ?? '') ? (strtotime($d) ? strtoupper(date('d/M/Y', strtotime($d))) : $d) : '' }}</td>
 
                     @php
                         $span        = $res['acc_span'] ?? 1;
@@ -407,12 +407,18 @@
                             }
                         }
                         $groupSize = max(1, (int) ($res['acc_group_size'] ?? $span ?? 1));
-                        $perOccupantAcc = $rates['acc'] ?? ($groupAccSum / $groupSize);
+                        $isExtraOcc = $res['is_extra_person'] ?? false;
+                        $hasDiscount = $res['acc_has_discount'] ?? false;
+                        if ($isExtraOcc || ($span === 1 && $hasDiscount)) {
+                            $perOccupantAcc = $groupAccSum;
+                        } else {
+                            $perOccupantAcc = $groupAccSum / $groupSize;
+                        }
                     @endphp
                     @if($span > 0)
                         @foreach($dateCols as $d)
                             @php
-                                $val = $rates['acc_dates'][$d]['val'] ?? ($groupTotals[$d] ?? 0);
+                                $val = ($span > 1) ? ($groupTotals[$d] ?? 0) : ($groupTotals[$d] ?? ($rates['acc_dates'][$d]['val'] ?? 0));
                                 $rv = round($val, 2);
                                 $breakdown = $rates['acc_dates'][$d]['breakdown'] ?? null;
                                 $isFvnCell = !empty($breakdown['is_fvn']);
@@ -443,10 +449,11 @@
                     @if($span > 0)
                         @foreach($dateCols as $d)
                             @php
-                                $val = $rates['acc_dates'][$d]['val'] ?? ($groupTotals[$d] ?? 0);
+                                $val = ($span > 1) ? ($groupTotals[$d] ?? 0) : ($groupTotals[$d] ?? ($rates['acc_dates'][$d]['val'] ?? 0));
                                 $rv  = round($val, 2);
+                                $rawFrac = round($val - floor($val), 2);
                                 $bkd = $rates['acc_dates'][$d]['breakdown'] ?? null;
-                                $isFvnTotal = !empty($bkd['is_fvn']) || in_array($rv, [0.01, 0.02, 0.03, 0.5]);
+                                $isFvnTotal = !empty($bkd['is_fvn']) || in_array($rv, [0.01, 0.02, 0.03, 0.5]) || in_array($rawFrac, [0.01, 0.02, 0.03]);
                                 if (!$isFvnTotal) {
                                     $dateTotals[$d] += (float) $val;
                                 }
