@@ -43,10 +43,18 @@ class BalesinCityController extends Controller
 
         $reservations = [];
         $ids = [];
+        $listData = [];
 
         try {
             if ($resNoList) {
-                $ids = array_filter(explode(',', $resNoList));
+                $ids = array_filter(array_map('trim', explode(',', $resNoList)));
+                if ($fromDate && $toDate) {
+                    $resp = Http::withHeaders(['Authorization' => $apiKey])
+                        ->withoutVerifying()
+                        ->timeout(30)
+                        ->get($listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
+                    $listData = $resp->successful() ? ($resp->json()['msg'] ?? []) : [];
+                }
             } elseif ($fromDate && $toDate) {
                 $resp = Http::withHeaders(['Authorization' => $apiKey])
                     ->withoutVerifying()
@@ -73,6 +81,10 @@ class BalesinCityController extends Controller
                 $ids = collect($all)->map(fn($i) => $i['conf'] ?? $i['resNo'] ?? null)->filter()->unique()->toArray();
             }
 
+            if (empty($ids)) {
+                return back()->with('error', 'No Balesin City data to print.');
+            }
+
             if (!empty($ids)) {
                 $chunks = array_chunk($ids, 25);
                 $rawDetail = [];
@@ -89,7 +101,36 @@ class BalesinCityController extends Controller
                 }
 
                 $calculator = app(\App\Services\BalesinCityRateCalculatorService::class);
+                
+                // Build list lookup map if listData is available
+                $listMap = [];
+                if (!empty($listData)) {
+                    foreach ($listData as $lr) {
+                        $k = trim($lr['resNo'] ?? $lr['conf'] ?? '');
+                        if ($k !== '') $listMap[$k] = $lr;
+                    }
+                }
+
                 foreach ($rawDetail as $res) {
+                    $resNo = trim((string)($res['resNo'] ?? $res['conf'] ?? ''));
+                    $lr = $listMap[$resNo] ?? [];
+
+                    $mNo = trim((string)($res['memNo'] ?? $res['memberNo'] ?? $res['member_no'] ?? $lr['memberNo'] ?? $lr['memNo'] ?? $lr['member_no'] ?? $lr['memberno'] ?? $lr['MemberNo'] ?? $lr['mem_no'] ?? ''));
+                    if ($mNo !== '') {
+                        $res['memberNo'] = $mNo;
+                        $res['memNo']    = $mNo;
+                    }
+
+                    $cName = trim((string)($res['custName'] ?? $res['customer_name'] ?? $res['customer'] ?? $lr['customer'] ?? $lr['custName'] ?? $lr['guestName'] ?? $lr['gstName'] ?? ''));
+                    if ($cName !== '') {
+                        $res['customer_name'] = $cName;
+                        $res['customer']      = $cName;
+                        $res['custName']      = $cName;
+                    }
+
+                    if (empty($res['bookDate'])) $res['bookDate'] = $lr['bookDate'] ?? '';
+                    if (empty($res['conactNo'])) $res['conactNo'] = $lr['conactNo'] ?? $lr['contactNo'] ?? '';
+
                     $roomType                = $res['roomtyp'] ?? $res['roomType'] ?? '';
                     $unitType                = $calculator->resolveCityUnitType($roomType, $res['rateCode'] ?? '');
                     $res['calculated_rates'] = $calculator->getPassThroughRates($res);
@@ -113,11 +154,68 @@ class BalesinCityController extends Controller
         }
         ksort($allDates);
         $dateCols = array_keys($allDates);
+        // Pre-calculate spans per reservation for Balesin City (Studio base_pax = 4, 2-Bedroom base_pax = 6)
+        $resGroups = [];
+        foreach ($reservations as $r) {
+            $rn = trim($r['resNo'] ?? $r['conf'] ?? 'N/A');
+            $resGroups[$rn][] = $r;
+        }
 
         $accSpans = [];
-        foreach ($reservations as $r) {
-            $accSpans[] = ['span' => 1, 'totals' => []];
+        foreach ($resGroups as $rn => $rows) {
+            $count = count($rows);
+            $basePax = 4;
+            foreach ($rows as $r) {
+                $unitType = strtoupper($r['village_name'] ?? $r['unit_type_label'] ?? $r['roomtyp'] ?? $r['roomType'] ?? '');
+                if (str_contains($unitType, '2-BEDROOM') || str_contains($unitType, '2-BR') || str_contains($unitType, 'TWOBED') || str_contains($unitType, 'TWO BEDROOM')) {
+                    $basePax = 6;
+                    break;
+                }
+            }
+            $curr = 0;
+            while ($curr < $count) {
+                $blockStart = $curr;
+                $isBlockExtra = ($curr >= $basePax);
+                $blockSize = $isBlockExtra ? 1 : min($count - $curr, $basePax);
+                $groupTotals = [];
+                foreach ($dateCols as $d) {
+                    $uv = 0;
+                    foreach ($rows[$blockStart]['rate'] ?? [] as $rt) {
+                        if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                    }
+                    $groupTotals[$d] = $uv;
+                }
+                for ($i = 0; $i < $blockSize; $i++) {
+                    $span = ($i === 0) ? $blockSize : 0;
+                    $isExtraPerson = ($curr + $i) >= $basePax;
+                    if ($isExtraPerson) {
+                        $extraTotals = [];
+                        foreach ($dateCols as $d) {
+                            $uv = 0;
+                            foreach ($rows[$curr + $i]['rate'] ?? [] as $rt) {
+                                if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                            }
+                            if ($uv > 1300 || $uv <= 1.0) $uv = 1300;
+                            $extraTotals[$d] = $uv;
+                        }
+                        $accSpans[] = ['span' => 1, 'totals' => $extraTotals, 'group_size' => 1, 'is_extra_person' => true];
+                    } else {
+                        $accSpans[] = ['span' => $span, 'totals' => $groupTotals, 'group_size' => $blockSize, 'is_extra_person' => false];
+                    }
+                }
+                $curr += $blockSize;
+            }
         }
+
+        // Attach to each reservation
+        foreach ($reservations as $idx => &$res) {
+            $spanInfo = $accSpans[$idx] ?? ['span' => 1, 'totals' => [], 'group_size' => 1, 'is_extra_person' => false];
+            $res['acc_span']          = $spanInfo['span'];
+            $res['acc_group_size']    = $spanInfo['group_size'];
+            $res['acc_group_totals']  = $spanInfo['totals'];
+            $res['is_extra_person']   = $spanInfo['is_extra_person'] ?? false;
+        }
+        unset($res);
 
         return view('city_print', compact('reservations', 'accSpans', 'dateCols', 'fromDate', 'toDate'));
     }
@@ -203,9 +301,15 @@ class BalesinCityController extends Controller
         $firstContactNo  = '';
         $firstBookDate   = '';
         foreach ($reservations as $res) {
-            if (!$firstMemberName && !empty($res['customer_name']))   $firstMemberName = $res['customer_name'];
-            if (!$firstMemberNo   && !empty($res['memberNo']))         $firstMemberNo   = $res['memberNo'];
-            if (!$firstContactNo  && !empty($res['conactNo']))         $firstContactNo  = (string)$res['conactNo'];
+            if (!$firstMemberName) {
+                $cCandidate = trim((string)($res['customer_name'] ?? $res['custName'] ?? $res['customer'] ?? $res['cust_name'] ?? $res['guestName'] ?? $res['gstName'] ?? ''));
+                if ($cCandidate !== '') $firstMemberName = $cCandidate;
+            }
+            if (!$firstMemberNo) {
+                $mCandidate = trim((string)($res['memNo'] ?? $res['memberNo'] ?? $res['member_no'] ?? $res['MemberNo'] ?? $res['memberno'] ?? $res['mem_no'] ?? ''));
+                if ($mCandidate !== '') $firstMemberNo = $mCandidate;
+            }
+            if (!$firstContactNo && !empty($res['conactNo']))         $firstContactNo  = (string)$res['conactNo'];
             elseif (!$firstContactNo && !empty($res['contactNo']))     $firstContactNo  = (string)$res['contactNo'];
             if (!$firstBookDate   && !empty($res['bookDate']))         $firstBookDate   = $res['bookDate'];
         }
@@ -232,6 +336,69 @@ class BalesinCityController extends Controller
             $rn                  = trim($res['resNo'] ?? $res['conf'] ?? '');
             $resGroupCounts[$rn] = ($resGroupCounts[$rn] ?? 0) + 1;
         }
+
+        // Pre-calculate spans per reservation for Balesin City Export
+        $resGroups = [];
+        foreach ($reservations as $r) {
+            $rn = trim($r['resNo'] ?? $r['conf'] ?? 'N/A');
+            $resGroups[$rn][] = $r;
+        }
+
+        $accSpans = [];
+        foreach ($resGroups as $rn => $rows) {
+            $count = count($rows);
+            $basePax = 4;
+            foreach ($rows as $r) {
+                $unitType = strtoupper($r['village_name'] ?? $r['unit_type_label'] ?? $r['roomtyp'] ?? $r['roomType'] ?? '');
+                if (str_contains($unitType, '2-BEDROOM') || str_contains($unitType, '2-BR') || str_contains($unitType, 'TWOBED') || str_contains($unitType, 'TWO BEDROOM')) {
+                    $basePax = 6;
+                    break;
+                }
+            }
+            $curr = 0;
+            while ($curr < $count) {
+                $blockStart = $curr;
+                $isBlockExtra = ($curr >= $basePax);
+                $blockSize = $isBlockExtra ? 1 : min($count - $curr, $basePax);
+                $groupTotals = [];
+                foreach ($dateCols as $d) {
+                    $uv = 0;
+                    foreach ($rows[$blockStart]['rate'] ?? [] as $rt) {
+                        if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                    }
+                    $groupTotals[$d] = $uv;
+                }
+                for ($i = 0; $i < $blockSize; $i++) {
+                    $span = ($i === 0) ? $blockSize : 0;
+                    $isExtraPerson = ($curr + $i) >= $basePax;
+                    if ($isExtraPerson) {
+                        $extraTotals = [];
+                        foreach ($dateCols as $d) {
+                            $uv = 0;
+                            foreach ($rows[$curr + $i]['rate'] ?? [] as $rt) {
+                                if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                            }
+                            if ($uv > 1300 || $uv <= 1.0) $uv = 1300;
+                            $extraTotals[$d] = $uv;
+                        }
+                        $accSpans[] = ['span' => 1, 'totals' => $extraTotals, 'group_size' => 1, 'is_extra_person' => true];
+                    } else {
+                        $accSpans[] = ['span' => $span, 'totals' => $groupTotals, 'group_size' => $blockSize, 'is_extra_person' => false];
+                    }
+                }
+                $curr += $blockSize;
+            }
+        }
+
+        // Attach to each reservation
+        foreach ($reservations as $idx => &$res) {
+            $spanInfo = $accSpans[$idx] ?? ['span' => 1, 'totals' => [], 'group_size' => 1, 'is_extra_person' => false];
+            $res['acc_span']          = $spanInfo['span'];
+            $res['acc_group_size']    = $spanInfo['group_size'];
+            $res['acc_group_totals']  = $spanInfo['totals'];
+            $res['is_extra_person']   = $spanInfo['is_extra_person'] ?? false;
+        }
+        unset($res);
 
         return response()->stream(function () use (
             $reservations, $dateCols, $dateCount, $logoImageFormula,

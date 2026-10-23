@@ -245,11 +245,17 @@
         foreach ($reservations as $r) {
             $rn = trim((string)($r['resNo'] ?? $r['conf'] ?? ''));
             $resGroupCounts[$rn] = ($resGroupCounts[$rn] ?? 0) + 1;
-            if (!$firstMemberName && !empty($r['customer_name'])) {
-                $firstMemberName = $r['customer_name'];
+            if (!$firstMemberName) {
+                $cCandidate = trim((string)($r['customer_name'] ?? $r['custName'] ?? $r['customer'] ?? $r['cust_name'] ?? $r['guestName'] ?? $r['gstName'] ?? ''));
+                if ($cCandidate !== '') {
+                    $firstMemberName = $cCandidate;
+                }
             }
-            if (!$firstMemberNo && !empty($r['memberNo'])) {
-                $firstMemberNo = $r['memberNo'];
+            if (!$firstMemberNo) {
+                $mNoCandidate = trim((string)($r['memNo'] ?? $r['memberNo'] ?? $r['member_no'] ?? $r['MemberNo'] ?? $r['memberno'] ?? $r['mem_no'] ?? ''));
+                if ($mNoCandidate !== '') {
+                    $firstMemberNo = $mNoCandidate;
+                }
             }
             if (!$firstContactNo && !empty($r['conactNo'])) {
                 $firstContactNo = (string)$r['conactNo'];
@@ -260,6 +266,10 @@
                 $firstBookDate = $r['bookDate'];
             }
         }
+
+        $firstMemNoClean = trim((string)$firstMemberNo);
+        $firstMemNoLower = strtolower($firstMemNoClean);
+        $hasValidMemberNo = $firstMemNoClean !== '' && !in_array($firstMemNoLower, ['n/a', 'na', 'none', 'null', '0', 'false', 'no']);
 
         $formattedBookDate = '';
         if ($firstBookDate) {
@@ -284,7 +294,15 @@
             </tr>
             <tr>
                 <td style="font-weight: bold; background-color: #dbeafe; border: 1px solid #cbd5e1; padding: 5px; text-align: center;">MEMBERSHIP NUMBER:</td>
-                <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;">{{ $firstMemberNo }}</td>
+                <td colspan="6" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;">
+                    @if($hasValidMemberNo)
+                        <a href="{{ route('member.search', ['member_no' => $firstMemberNo]) }}" target="_blank" title="View Member Reservation Filter for {{ $firstMemberNo }}" style="color: inherit; text-decoration: underline;">
+                            {{ $firstMemberNo }}
+                        </a>
+                    @else
+                        {{ $firstMemberNo ?: 'N/A' }}
+                    @endif
+                </td>
                 <td colspan="{{ count($dateCols) + 5 }}" style="border: none;"></td>
             </tr>
             <tr>
@@ -386,8 +404,11 @@
                     @php
                         $span        = $res['acc_span'] ?? 1;
                         $groupTotals = $res['acc_group_totals'] ?? [];
+                        $groupSize   = max(1, (int) ($res['acc_group_size'] ?? $span ?? 1));
 
-                        // Compute the total accommodation for this group (non-FVN only)
+                        // When groupSize=1, acc_group_totals already holds per-occupant values
+                        // (controller pre-divided by span for mixed-SC groups).
+                        // When groupSize>1, all occupants share the same rate cell so divide to get per-occupant share.
                         $groupAccSum = 0;
                         foreach ($groupTotals as $gv) {
                             $grv = round((float)$gv, 2);
@@ -395,22 +416,27 @@
                                 $groupAccSum += (float)$gv;
                             }
                         }
-                        // Each occupant's fair share of the shared accommodation
-                        $groupSize = max(1, (int) ($res['acc_group_size'] ?? $span ?? 1));
-                        $perOccupantAcc = $groupAccSum / $groupSize;
+                        $perOccupantAcc = ($groupSize > 1) ? ($groupAccSum / $groupSize) : $groupAccSum;
+                        $isMixedSc = ($groupSize === 1 && ($res['sc_target_villa'] ?? null) !== null);
                     @endphp
                     @if($span > 0)
                         @foreach($dateCols as $d)
                             @php
                                 $val = $groupTotals[$d] ?? 0;
                                 $rv = round($val, 2);
+                                // For grouped (shared) cells show the full room rate; for per-occupant cells show the pre-divided value
                                 $displayVal = ($val > 0 ? number_format($val, 2) : '');
                                 if ($rv == 0.01)        $displayVal = '1 FVN';
                                 elseif ($rv == 0.02)    $displayVal = '1.5 FVN';
                                 elseif ($rv == 0.5)     $displayVal = '.5 FVN';
                                 elseif ($rv == 3700.01) $displayVal = '3700.01';
                             @endphp
-                            <td class="num {{ $span > 1 ? 'merged' : '' }}" rowspan="{{ $span }}" style="text-align: center;">{{ $displayVal }}</td>
+                            <td class="num {{ $span > 1 ? 'merged' : '' }}" rowspan="{{ $span }}" style="text-align: center;">
+                                {{ $displayVal }}
+                                @if($isMixedSc && ($res['sc_target_villa'] ?? false))
+                                    <!-- <div style="font-size: 9px; color: #7c3aed; font-style: italic;">SC/PWD</div> -->
+                                @endif
+                            </td>
                         @endforeach
                     @endif
 
@@ -422,7 +448,9 @@
                                 $rv  = round($val, 2);
                                 // FVN marker rates do not contribute to grand totals
                                 if ($rv !== 0.01 && $rv !== 0.02 && $rv !== 0.5) {
-                                    $dateTotals[$d]    += (float) $val;
+                                    // For grouped cells: val is full room rate, add once per group (original behavior)
+                                    // For per-occupant cells (mixed SC): val is already per-occupant, add as-is
+                                    $dateTotals[$d] += ($groupSize > 1) ? (float) $val : (float) $val;
                                 }
                             @endphp
                         @endforeach
@@ -434,7 +462,7 @@
                                 <td style="text-align: center;">{{ ($res['calculated_rates']['env'] ?? 0) > 0 ? number_format($res['calculated_rates']['env'], 2) : '' }}</td>
 
                                 @php
-                                    // Per-occupant total = distributed acc share + individual fees
+                                    // Per-occupant total = per-occupant acc share + individual fees
                                     $passengerTotalRate = $perOccupantAcc
                                         + ($res['calculated_rates']['air'] ?? 0)
                                         + ($res['calculated_rates']['han'] ?? 0)

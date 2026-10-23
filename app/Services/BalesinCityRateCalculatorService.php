@@ -16,23 +16,66 @@ class BalesinCityRateCalculatorService
         $this->settings = $settingsService->getSettings();
     }
 
+    public function getStudioMemberRate(): float
+    {
+        return (float) ($this->settings['city']['rates']['studio_member'] ?? self::STUDIO_MEMBER_RATE);
+    }
+
+    public function getStudioGuestRate(): float
+    {
+        return (float) ($this->settings['city']['rates']['studio_guest'] ?? 8000);
+    }
+
+    public function getTwoBedMemberRate(): float
+    {
+        return (float) ($this->settings['city']['rates']['twobed_member'] ?? self::TWOBED_MEMBER_RATE);
+    }
+
+    public function getTwoBedGuestRate(): float
+    {
+        return (float) ($this->settings['city']['rates']['twobed_guest'] ?? 12500);
+    }
+
+    public function getExtraPersonRate(): float
+    {
+        return (float) ($this->settings['city']['extra_person']['rate'] ?? self::EXTRA_PERSON_RATE);
+    }
+
     /**
      * Resolve whether unit is Studio-Type Suite or 2-Bedroom Suite
      */
     public function resolveCityUnitType(string $roomType = '', string $rateCode = ''): string
     {
-        $rt = strtolower($roomType . ' ' . $rateCode);
-        if (str_contains($rt, '2') || str_contains($rt, '2-br') || str_contains($rt, '2br') || str_contains($rt, '2-bedroom') || str_contains($rt, 'two bedroom')) {
-            return '2-BEDROOM SUITE';
+        if (str_contains(strtoupper($roomType), '2-BEDROOM') || str_contains(strtoupper($roomType), '2-BR') || str_contains(strtoupper($roomType), 'TWOBED')) {
+            return 'Two-Bedroom Suite';
         }
-        return 'STUDIO-TYPE SUITE';
+        return 'Studio-Type Suite';
+    }
+
+    public function isExtraOccupant(int $occupantIndex, string $roomType = ''): bool
+    {
+        $is2Bed = str_contains(strtoupper($roomType), '2-BEDROOM') || str_contains(strtoupper($roomType), '2-BR') || str_contains(strtoupper($roomType), 'TWOBED');
+        $studioBase = (int) ($this->settings['city']['extra_person']['studio_base_pax'] ?? 4);
+        $twoBedBase = (int) ($this->settings['city']['extra_person']['twobed_base_pax'] ?? 6);
+        $basePax = $is2Bed ? $twoBedBase : $studioBase;
+        return $occupantIndex >= $basePax;
     }
 
     /**
-     * Calculate Pass-through Rates for Balesin City (raw rates sum without Island fees)
+     * Calculate City passenger rates with optional Senior/PWD accommodation discount.
      */
-    public function getPassThroughRates(array $passenger): array
+    public function calculatePassengerRates(array $passenger): array
     {
+        $gstType = strtolower($passenger['gstType'] ?? $passenger['gsttype'] ?? '');
+        $privCard = trim((string) ($passenger['privCard'] ?? $passenger['privcard'] ?? ''));
+        $privCardLower = strtolower($privCard);
+        $hasPrivCard = $privCard !== '' && !in_array($privCardLower, ['n', 'no', 'false', '0', 'none', 'null']);
+        if ($privCardLower === 'senior citizen' || $privCardLower === 'pwd' || str_contains($gstType, 'senior') || str_contains($gstType, 'pwd')) {
+            $hasPrivCard = true;
+        }
+
+        $hasVillaSc = isset($passenger['sc_target_villa']) ? (bool) $passenger['sc_target_villa'] : $hasPrivCard;
+
         $acc = 0;
         $accDates = [];
         $air = 0;
@@ -53,23 +96,74 @@ class BalesinCityRateCalculatorService
                 $avi += $val;
             } elseif (str_contains($desc, 'environmental')) {
                 $env += $val;
-            } else {
-                if ($date) {
-                    $acc += $val;
+            } elseif ($date) {
+                // ── Detect FVN magic fractions: .01 = 1FVN, .02 = 1.5FVN, .03 = 0.5FVN
+                $integerPart = (int) floor($val);
+                $fraction    = round($val - $integerPart, 2);
+                $fracKey     = number_format($fraction, 2, '.', '');
+                $fvnMapping  = ['0.01' => 1.0, '0.02' => 1.5, '0.03' => 0.5];
+
+                if (array_key_exists($fracKey, $fvnMapping)) {
+                    $fvnRate = $fvnMapping[$fracKey];
+                    // Base room is FVN (0 accommodation cost)
+                    // If integer part > 0 (e.g. 1300.01), it means extra person also has 1300 on top
                     $accDates[$date] = [
-                        'val'       => $val,
+                        'val'       => $fraction,
                         'breakdown' => [
-                            'gross_share'   => $val,
+                            'gross_share'   => $fraction,
                             'is_discounted' => false,
                             'is_infant'     => false,
                             'divisor'       => 1,
-                            'base'          => $val,
+                            'base'          => $fraction,
                             'discount'      => 0,
                             'sc'            => 0,
-                            'vat'           => 0
-                        ]
+                            'vat'           => 0,
+                            'is_fvn'        => true,
+                            'fvn_rate'      => $fvnRate,
+                            'fraction'      => $fraction,
+                            'paid_amount'   => ($integerPart > 0 && $integerPart !== 1300) ? (float)$integerPart : 0,
+                        ],
                     ];
+                    // Do NOT add to $acc – FVN = ₱0.00 accommodation
+                    continue;
                 }
+
+                // ── Regular accommodation rate
+                $finalVal = $val;
+                $isDiscounted = false;
+                $base = $val;
+                $discount = 0;
+                $sc = 0;
+                $vat = 0;
+
+                if ($hasVillaSc && $val > 0) {
+                    $scSettings  = $this->settings['city']['discounts']['sc_pwd'] ?? $this->settings['discounts']['sc_pwd'] ?? [];
+                    $removeVat   = $scSettings['remove_vat'] ?? true;
+                    $applyDisc   = $scSettings['apply_discount'] ?? true;
+                    $discPercent = $applyDisc ? (float) ($scSettings['additional_discount_percent'] ?? 20) : 0.0;
+                    $vatRate     = (float) ($this->settings['city']['discounts']['vat_rate'] ?? $this->settings['discounts']['vat_rate'] ?? 12);
+
+                    $vatExemptBase = $removeVat ? round($val / (1 + ($vatRate / 100)), 2) : $val;
+                    $discount      = round($vatExemptBase * ($discPercent / 100), 2);
+                    $finalVal      = round($vatExemptBase - $discount, 2);
+                    $base          = $vatExemptBase;
+                    $isDiscounted  = true;
+                }
+
+                $acc += $finalVal;
+                $accDates[$date] = [
+                    'val'       => $finalVal,
+                    'breakdown' => [
+                        'gross_share'   => $val,
+                        'is_discounted' => $isDiscounted,
+                        'is_infant'     => false,
+                        'divisor'       => 1,
+                        'base'          => $base,
+                        'discount'      => $discount,
+                        'sc'            => $sc,
+                        'vat'           => $vat,
+                    ],
+                ];
             }
         }
 
@@ -83,5 +177,13 @@ class BalesinCityRateCalculatorService
             'total_gross' => $acc + $air + $han + $avi + $env,
             'total_net'   => $acc + $air + $han + $avi + $env,
         ];
+    }
+
+    /**
+     * Calculate Pass-through Rates for Balesin City (raw rates sum without Island fees)
+     */
+    public function getPassThroughRates(array $passenger): array
+    {
+        return $this->calculatePassengerRates($passenger);
     }
 }

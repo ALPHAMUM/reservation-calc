@@ -46,10 +46,18 @@ class BalesinPinesController extends Controller
 
         $reservations = [];
         $ids = [];
+        $listData = [];
 
         try {
             if ($resNoList) {
-                $ids = array_filter(explode(',', $resNoList));
+                $ids = array_filter(array_map('trim', explode(',', $resNoList)));
+                if ($fromDate && $toDate) {
+                    $resp = Http::withHeaders(['Authorization' => $apiKey])
+                        ->withoutVerifying()
+                        ->timeout(30)
+                        ->get($listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
+                    $listData = $resp->successful() ? ($resp->json()['msg'] ?? []) : [];
+                }
             } elseif ($fromDate && $toDate) {
                 $resp = Http::withHeaders(['Authorization' => $apiKey])
                     ->withoutVerifying()
@@ -100,8 +108,40 @@ class BalesinPinesController extends Controller
             $reservations = [];
             $resOccupantIndex = [];
 
+            // Build list lookup map if listData is available
+            $listMap = [];
+            if (!empty($listData)) {
+                foreach ($listData as $lr) {
+                    $k = trim($lr['resNo'] ?? $lr['conf'] ?? '');
+                    if ($k !== '') $listMap[$k] = $lr;
+                }
+            }
+
             foreach ($rawDetail as $res) {
                 $resNo = trim((string)($res['resNo'] ?? $res['conf'] ?? ''));
+                $lr = $listMap[$resNo] ?? [];
+
+                $mNo = trim((string)($res['memNo'] ?? $res['memberNo'] ?? $res['member_no'] ?? $lr['memberNo'] ?? $lr['memNo'] ?? $lr['member_no'] ?? $lr['memberno'] ?? $lr['MemberNo'] ?? $lr['mem_no'] ?? ''));
+                if ($mNo !== '') {
+                    $res['memberNo'] = $mNo;
+                    $res['memNo']    = $mNo;
+                }
+
+                $cName = trim((string)($res['custName'] ?? $res['customer_name'] ?? $res['customer'] ?? $lr['customer'] ?? $lr['custName'] ?? $lr['guestName'] ?? $lr['gstName'] ?? ''));
+                if ($cName !== '') {
+                    $res['customer_name'] = $cName;
+                    $res['customer']      = $cName;
+                    $res['custName']      = $cName;
+                }
+
+                if (empty($res['bookDate'])) $res['bookDate'] = $lr['bookDate'] ?? '';
+                if (empty($res['conactNo'])) $res['conactNo'] = $lr['conactNo'] ?? $lr['contactNo'] ?? '';
+
+                // Preserve list rate label (GRATE / MRATE) for fixed Pines published rates
+                if (is_string($lr['rate'] ?? null) && trim($lr['rate']) !== '') {
+                    $res['list_rate'] = strtoupper(trim($lr['rate']));
+                }
+
                 if (!isset($resOccupantIndex[$resNo])) {
                     $resOccupantIndex[$resNo] = 0;
                 }
@@ -123,8 +163,10 @@ class BalesinPinesController extends Controller
                 if (isset($res['rate']) && is_array($res['rate'])) {
                     foreach ($res['rate'] as &$r) {
                         $d = $r['date'] ?? '';
-                        if ($d && isset($res['calculated_rates']['acc_dates'][$d]['breakdown'])) {
-                            $r['breakdown'] = $res['calculated_rates']['acc_dates'][$d]['breakdown'];
+                        if ($d && isset($res['calculated_rates']['acc_dates'][$d])) {
+                            // Keep calculated per-occupant val + breakdown (composite split applied)
+                            $r['val'] = $res['calculated_rates']['acc_dates'][$d]['val'];
+                            $r['breakdown'] = $res['calculated_rates']['acc_dates'][$d]['breakdown'] ?? null;
                         }
                     }
                     unset($r);
@@ -167,8 +209,26 @@ class BalesinPinesController extends Controller
                 $groupTotals = [];
                 foreach ($dateCols as $d) {
                     $uv = 0;
-                    foreach ($rows[$blockStart]['rate'] ?? [] as $rt) {
-                        if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                    $first = $rows[$blockStart] ?? null;
+                    if ($first) {
+                        // Prefer calculator gross_share (room rate after composite split, e.g. 21500 not 25500)
+                        $bd = $first['calculated_rates']['acc_dates'][$d]['breakdown'] ?? null;
+                        if ($bd && isset($bd['gross_share']) && empty($bd['is_fvn'])) {
+                            $uv = (float) $bd['gross_share'];
+                        } else {
+                            foreach ($first['rate'] ?? [] as $rt) {
+                                if (($rt['date'] ?? '') === $d) {
+                                    $uv = (float)($rt['breakdown']['gross_share'] ?? $rt['val'] ?? 0);
+                                    // If still a composite amount, strip extra person portion for base block
+                                    $split = app(\App\Services\BalesinPinesRateCalculatorService::class)
+                                        ->resolveCompositeFromPassenger($first, $uv);
+                                    if ($split) {
+                                        $uv = $split['base'];
+                                    }
+                                    break;
+                                }
+                            }
+                        }
                     }
                     $groupTotals[$d] = $uv;
                 }
@@ -183,6 +243,11 @@ class BalesinPinesController extends Controller
                                 foreach ($rows[$curr + $i]['rate'] ?? [] as $rt) {
                                     if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
                                 }
+                            }
+                            // Extra person is NEVER FVN — if raw rate is an FVN marker or composite, use 3700
+                            $uvFrac = round($uv - floor($uv), 2);
+                            if (in_array($uvFrac, [0.01, 0.02, 0.03]) || $uv <= 1.0 || $uv > \App\Services\BalesinPinesRateCalculatorService::EXTRA_PERSON_CHARGE) {
+                                $uv = \App\Services\BalesinPinesRateCalculatorService::EXTRA_PERSON_CHARGE;
                             }
                             $extraTotals[$d] = $uv;
                         }
@@ -228,8 +293,17 @@ class BalesinPinesController extends Controller
         $apiKey       = config('services.balesin_pines.api_key');
 
         $ids = [];
+        $listData = [];
         if ($resNoList) {
             $ids = array_filter(explode(',', $resNoList));
+            // Still pull list labels when date range is available (GRATE / MRATE)
+            if ($fromDate && $toDate) {
+                $resp = Http::withHeaders(['Authorization' => $apiKey])
+                    ->withoutVerifying()
+                    ->timeout(30)
+                    ->get($listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
+                $listData = $resp->successful() ? ($resp->json()['msg'] ?? []) : [];
+            }
         } elseif ($fromDate && $toDate) {
             $resp = Http::withHeaders(['Authorization' => $apiKey])
                 ->withoutVerifying()
@@ -246,6 +320,14 @@ class BalesinPinesController extends Controller
 
         if (empty($ids)) {
             return back()->with('error', 'No Balesin Pines data to export.');
+        }
+
+        $listRateMap = [];
+        foreach ($listData as $lr) {
+            $k = trim((string)($lr['resNo'] ?? $lr['conf'] ?? ''));
+            if ($k !== '' && is_string($lr['rate'] ?? null) && trim($lr['rate']) !== '') {
+                $listRateMap[$k] = strtoupper(trim($lr['rate']));
+            }
         }
 
         $chunks    = array_chunk($ids, 25);
@@ -273,11 +355,27 @@ class BalesinPinesController extends Controller
             }
             $occupantIndex = $resOccupantIndex[$resNo]++;
 
+            if (!empty($listRateMap[$resNo])) {
+                $res['list_rate'] = $listRateMap[$resNo];
+            }
+
             $roomType                = $res['roomtyp'] ?? $res['roomType'] ?? '';
             $unitType                = $calculator->resolvePinesUnitType($roomType, $res['rateCode'] ?? '');
             $res['calculated_rates'] = $calculator->calculatePassengerRates($res, $occupantIndex, $roomType, 2, $occupantIndex);
             $res['village_name']     = $unitType;
             $res['is_employee']      = false;
+
+            if (isset($res['rate']) && is_array($res['rate'])) {
+                foreach ($res['rate'] as &$r) {
+                    $d = $r['date'] ?? '';
+                    if ($d && isset($res['calculated_rates']['acc_dates'][$d])) {
+                        $r['val'] = $res['calculated_rates']['acc_dates'][$d]['val'];
+                        $r['breakdown'] = $res['calculated_rates']['acc_dates'][$d]['breakdown'] ?? null;
+                    }
+                }
+                unset($r);
+            }
+
             $reservations[]          = $res;
         }
 
@@ -312,8 +410,23 @@ class BalesinPinesController extends Controller
                 $groupTotals = [];
                 foreach ($dateCols as $d) {
                     $uv = 0;
-                    foreach ($rows[$blockStart]['rate'] ?? [] as $rt) {
-                        if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                    $first = $rows[$blockStart] ?? null;
+                    if ($first) {
+                        $bd = $first['calculated_rates']['acc_dates'][$d]['breakdown'] ?? null;
+                        if ($bd && isset($bd['gross_share']) && empty($bd['is_fvn'])) {
+                            $uv = (float) $bd['gross_share'];
+                        } else {
+                            foreach ($first['rate'] ?? [] as $rt) {
+                                if (($rt['date'] ?? '') === $d) {
+                                    $uv = (float)($rt['breakdown']['gross_share'] ?? $rt['val'] ?? 0);
+                                    $split = $calculator->resolveCompositeFromPassenger($first, $uv);
+                                    if ($split) {
+                                        $uv = $split['base'];
+                                    }
+                                    break;
+                                }
+                            }
+                        }
                     }
                     $groupTotals[$d] = $uv;
                 }
@@ -328,6 +441,10 @@ class BalesinPinesController extends Controller
                                 foreach ($rows[$curr + $i]['rate'] ?? [] as $rt) {
                                     if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
                                 }
+                            }
+                            $uvFrac = round($uv - floor($uv), 2);
+                            if (in_array($uvFrac, [0.01, 0.02, 0.03]) || $uv <= 1.0 || $uv > \App\Services\BalesinPinesRateCalculatorService::EXTRA_PERSON_CHARGE) {
+                                $uv = \App\Services\BalesinPinesRateCalculatorService::EXTRA_PERSON_CHARGE;
                             }
                             $extraTotals[$d] = $uv;
                         }
@@ -364,9 +481,15 @@ class BalesinPinesController extends Controller
         $firstContactNo  = '';
         $firstBookDate   = '';
         foreach ($reservations as $res) {
-            if (!$firstMemberName && !empty($res['customer_name']))   $firstMemberName = $res['customer_name'];
-            if (!$firstMemberNo   && !empty($res['memberNo']))         $firstMemberNo   = $res['memberNo'];
-            if (!$firstContactNo  && !empty($res['conactNo']))         $firstContactNo  = (string)$res['conactNo'];
+            if (!$firstMemberName) {
+                $cCandidate = trim((string)($res['customer_name'] ?? $res['custName'] ?? $res['customer'] ?? $res['cust_name'] ?? $res['guestName'] ?? $res['gstName'] ?? ''));
+                if ($cCandidate !== '') $firstMemberName = $cCandidate;
+            }
+            if (!$firstMemberNo) {
+                $mCandidate = trim((string)($res['memNo'] ?? $res['memberNo'] ?? $res['member_no'] ?? $res['MemberNo'] ?? $res['memberno'] ?? $res['mem_no'] ?? ''));
+                if ($mCandidate !== '') $firstMemberNo = $mCandidate;
+            }
+            if (!$firstContactNo && !empty($res['conactNo']))         $firstContactNo  = (string)$res['conactNo'];
             elseif (!$firstContactNo && !empty($res['contactNo']))     $firstContactNo  = (string)$res['contactNo'];
             if (!$firstBookDate   && !empty($res['bookDate']))         $firstBookDate   = $res['bookDate'];
         }
@@ -500,29 +623,7 @@ class BalesinPinesController extends Controller
                 $groupSize   = max(1, (int) ($res['acc_group_size'] ?? 1));
                 $isExtraPerson = $res['is_extra_person'] ?? false;
 
-                // Compute groupAccSum excluding FVN
-                $groupAccSum = 0;
-                foreach ($groupTotals as $gv) {
-                    $grv = round((float)$gv, 2);
-                    $frac = round($grv - floor($grv), 2);
-                    if (!in_array($frac, [0.01, 0.02, 0.5])) {
-                        $groupAccSum += (float)$gv;
-                    }
-                }
-
-                if ($isExtraPerson) {
-                    $perOccupantAcc = 0;
-                    foreach ($dateCols as $d) {
-                        $val = $rates['acc_dates'][$d]['val'] ?? 0;
-                        $rv = round($val, 2);
-                        $frac = round($rv - floor($rv), 2);
-                        if (!in_array($frac, [0.01, 0.02, 0.5])) {
-                            $perOccupantAcc += $val;
-                        }
-                    }
-                } else {
-                    $perOccupantAcc = ($groupSize > 0) ? ($groupAccSum / $groupSize) : 0;
-                }
+                $perOccupantAcc = $rates['acc'] ?? 0;
 
                 $accGrandTotal += $perOccupantAcc;
 
@@ -553,18 +654,23 @@ class BalesinPinesController extends Controller
                 // Accommodation cells – merged using rowspan
                 if ($span > 0) {
                     foreach ($dateCols as $d) {
-                        $val = $rates['acc_dates'][$d]['val'] ?? ($groupTotals[$d] ?? 0);
-                        $rv  = round($val, 2);
+                        $val = $groupTotals[$d] ?? ($rates['acc_dates'][$d]['val'] ?? 0);
+                        $rv = round($val, 2);
                         $frac = round($rv - floor($rv), 2);
+                        $integerPart = floor($rv);
                         if ($frac == 0.01)      $formattedVal = '1 FVN';
                         elseif ($frac == 0.02)  $formattedVal = '1.5 FVN';
-                        elseif ($frac == 0.5)   $formattedVal = '.5 FVN';
+                        elseif ($frac == 0.03)  $formattedVal = ($integerPart > 0) ? number_format($integerPart, 2) . '<br>.5 FVN' : '.5 FVN';
                         else                    $formattedVal = ($val > 0 ? number_format($val, 2) : '');
 
                         echo '<td class="num" rowspan="' . $span . '" style="text-align: center;">' . $formattedVal . '</td>';
 
-                        if (!in_array($frac, [0.01, 0.02, 0.5])) {
+                        if (!in_array($frac, [0.01, 0.02, 0.03])) {
                             $dateTotals[$d] += (float) $val;
+                        } else {
+                            if ($frac == 0.03) {
+                                $dateTotals[$d] += floor($val);
+                            }
                         }
                     }
                 }

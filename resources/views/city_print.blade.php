@@ -247,11 +247,17 @@
         foreach ($reservations as $r) {
             $rn = trim((string)($r['resNo'] ?? $r['conf'] ?? ''));
             $resGroupCounts[$rn] = ($resGroupCounts[$rn] ?? 0) + 1;
-            if (!$firstMemberName && !empty($r['customer_name'])) {
-                $firstMemberName = $r['customer_name'];
+            if (!$firstMemberName) {
+                $cCandidate = trim((string)($r['customer_name'] ?? $r['custName'] ?? $r['customer'] ?? $r['cust_name'] ?? $r['guestName'] ?? $r['gstName'] ?? ''));
+                if ($cCandidate !== '') {
+                    $firstMemberName = $cCandidate;
+                }
             }
-            if (!$firstMemberNo && !empty($r['memberNo'])) {
-                $firstMemberNo = $r['memberNo'];
+            if (!$firstMemberNo) {
+                $mNoCandidate = trim((string)($r['memNo'] ?? $r['memberNo'] ?? $r['member_no'] ?? $r['MemberNo'] ?? $r['memberno'] ?? $r['mem_no'] ?? ''));
+                if ($mNoCandidate !== '') {
+                    $firstMemberNo = $mNoCandidate;
+                }
             }
             if (!$firstContactNo && !empty($r['conactNo'])) {
                 $firstContactNo = (string)$r['conactNo'];
@@ -262,6 +268,10 @@
                 $firstBookDate = $r['bookDate'];
             }
         }
+
+        $firstMemNoClean = trim((string)$firstMemberNo);
+        $firstMemNoLower = strtolower($firstMemNoClean);
+        $hasValidMemberNo = $firstMemNoClean !== '' && !in_array($firstMemNoLower, ['n/a', 'na', 'none', 'null', '0', 'false', 'no']);
 
         $formattedBookDate = '';
         if ($firstBookDate) {
@@ -288,7 +298,15 @@
             </tr>
             <tr>
                 <td style="font-weight: bold; background-color: #10206d; color: #ffffff; border: 1px solid #3a4fa3; padding: 5px; text-align: center;">MEMBERSHIP NUMBER:</td>
-                <td colspan="5" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;">{{ $firstMemberNo }}</td>
+                <td colspan="5" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;" >
+                    @if($hasValidMemberNo)
+                        <a href="{{ route('member.search', ['member_no' => $firstMemberNo]) }}" target="_blank" title="View Member Reservation Filter for {{ $firstMemberNo }}" style="color: #0c0c0cff">
+                            {{ $firstMemberNo }}
+                        </a>
+                    @else
+                        {{ $firstMemberNo ?: 'N/A' }}
+                    @endif
+                </td>
                 <td colspan="{{ count($dateCols) + 1 }}" style="border: none;"></td>
             </tr>
             <tr>
@@ -396,9 +414,29 @@
                             @php
                                 $val = $rates['acc_dates'][$d]['val'] ?? ($groupTotals[$d] ?? 0);
                                 $rv = round($val, 2);
-                                $displayVal = ($val > 0 ? number_format($val, 2) : '');
+                                $breakdown = $rates['acc_dates'][$d]['breakdown'] ?? null;
+                                $isFvnCell = !empty($breakdown['is_fvn']);
+                                // Also detect FVN via fraction if not in acc_dates
+                                if (!$isFvnCell) {
+                                    $rawFrac = round($val - floor($val), 2);
+                                    $isFvnCell = in_array($rawFrac, [0.01, 0.02, 0.03]);
+                                    if ($isFvnCell) {
+                                        $breakdown = $breakdown ?? ['fvn_rate' => [0.01=>1.0,0.02=>1.5,0.03=>0.5][$rawFrac], 'fraction' => $rawFrac];
+                                    }
+                                }
+
+                                if ($isFvnCell) {
+                                    $fvnRate = $breakdown['fvn_rate'] ?? null;
+                                    $fraction = $breakdown['fraction'] ?? $rawFrac ?? null;
+                                    if ($fvnRate == 1.0 || $fraction == 0.01) $fvnLabel = '1 FVN';
+                                    elseif ($fvnRate == 1.5 || $fraction == 0.02) $fvnLabel = '1.5 FVN';
+                                    else $fvnLabel = '.5 FVN';
+                                    $displayVal = $fvnLabel;
+                                } else {
+                                    $displayVal = ($val > 0 ? number_format($val, 2) : '');
+                                }
                             @endphp
-                            <td class="num {{ $span > 1 ? 'merged' : '' }}" rowspan="{{ $span }}" style="text-align: center;">{{ $displayVal }}</td>
+                            <td class="num {{ $span > 1 ? 'merged' : '' }}" rowspan="{{ $span }}" style="text-align: center; {{ $isFvnCell ? 'color: #c0392b; font-weight: bold;' : '' }}">{{ $displayVal }}</td>
                         @endforeach
                     @endif
 
@@ -407,7 +445,9 @@
                             @php
                                 $val = $rates['acc_dates'][$d]['val'] ?? ($groupTotals[$d] ?? 0);
                                 $rv  = round($val, 2);
-                                if ($rv !== 0.01 && $rv !== 0.02 && $rv !== 0.5) {
+                                $bkd = $rates['acc_dates'][$d]['breakdown'] ?? null;
+                                $isFvnTotal = !empty($bkd['is_fvn']) || in_array($rv, [0.01, 0.02, 0.03, 0.5]);
+                                if (!$isFvnTotal) {
                                     $dateTotals[$d] += (float) $val;
                                 }
                             @endphp
@@ -415,7 +455,7 @@
                     @endif
                     @php $accGrandTotal += $perOccupantAcc; @endphp
 
-                    <td style="text-align: center; font-weight: bold;">{{ $perOccupantAcc > 0 ? number_format($perOccupantAcc, 2) : '' }}</td>
+                    <td style="text-align: center; font-weight: bold;">{{ $perOccupantAcc > 0 ? number_format($perOccupantAcc, 2) : '0.00' }}</td>
                 </tr>
             @endforeach
 

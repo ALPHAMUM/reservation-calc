@@ -3,6 +3,7 @@
 use App\Http\Controllers\ReservationController;
 use App\Http\Controllers\BalesinPinesController;
 use App\Http\Controllers\BalesinCityController;
+use App\Http\Controllers\ScTargetController;
 use App\Http\Controllers\SettingsController;
 use Illuminate\Support\Facades\Route;
 
@@ -16,6 +17,7 @@ Route::get('/', [ReservationController::class, 'index'])->name('dashboard');
 Route::get('/export', [ReservationController::class, 'export'])->name('export');
 Route::get('/print', [ReservationController::class, 'print'])->name('print');
 Route::get('/api/reservations/rates', [ReservationController::class, 'getRates']);
+Route::post('/api/sc-targets', [ScTargetController::class, 'store'])->name('sc-targets.store');
 Route::get('/api/status', [ReservationController::class, 'apiStatus'])->name('api.status');
 Route::get('/member-search', [ReservationController::class, 'memberSearch'])->name('member.search');
 

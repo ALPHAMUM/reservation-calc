@@ -50,6 +50,7 @@ class SettingsService
                 'vat_rate' => 12,
                 'sc_pwd' => [
                     'remove_vat' => true,
+                    'apply_discount' => true,
                     'additional_discount_percent' => 20,
                 ],
             ],
@@ -66,6 +67,78 @@ class SettingsService
                     'override' => false,
                     'amount' => 3700,
                 ]
+            ],
+
+            // Balesin City Defaults
+            'city' => [
+                'rates' => [
+                    'studio_member' => 6400,
+                    'studio_guest' => 8000,
+                    'twobed_member' => 9250,
+                    'twobed_guest' => 12500,
+                ],
+                'extra_person' => [
+                    'rate' => 1300,
+                    'studio_base_pax' => 4,
+                    'twobed_base_pax' => 6,
+                ],
+                'promo_rates' => [
+                    'active' => false,
+                    'description' => '',
+                    'studio_member' => 5500,
+                    'studio_guest' => 7000,
+                    'twobed_member' => 8000,
+                    'twobed_guest' => 11000,
+                    'start_date' => '',
+                    'end_date' => '',
+                    'peak_periods' => [],
+                ],
+                'discounts' => [
+                    'vat_rate' => 12,
+                    'sc_pwd' => [
+                        'remove_vat' => true,
+                        'apply_discount' => true,
+                        'additional_discount_percent' => 20,
+                    ],
+                ],
+            ],
+
+            // Balesin Pines Defaults
+            'pines' => [
+                'rates' => [
+                    'deluxe_member' => 10000,
+                    'deluxe_guest' => 14500,
+                    'suite_member' => 15000,
+                    'suite_guest' => 21500,
+                ],
+                'extra_person' => [
+                    'charge' => 3700,
+                    'base_pax' => 2,
+                ],
+                'rules' => [
+                    'max_member_units' => 3,
+                    'suite_fvn_fallback' => true,
+                    'extra_person_fvn_charge' => true,
+                ],
+                'promo_rates' => [
+                    'active' => false,
+                    'description' => '',
+                    'deluxe_member' => 8500,
+                    'deluxe_guest' => 12500,
+                    'suite_member' => 13000,
+                    'suite_guest' => 18500,
+                    'start_date' => '',
+                    'end_date' => '',
+                    'peak_periods' => [],
+                ],
+                'discounts' => [
+                    'vat_rate' => 12,
+                    'sc_pwd' => [
+                        'remove_vat' => true,
+                        'apply_discount' => true,
+                        'additional_discount_percent' => 20,
+                    ],
+                ],
             ],
         ];
     }

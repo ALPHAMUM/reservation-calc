@@ -251,11 +251,17 @@
         foreach ($reservations as $r) {
             $rn = trim((string)($r['resNo'] ?? $r['conf'] ?? ''));
             $resGroupCounts[$rn] = ($resGroupCounts[$rn] ?? 0) + 1;
-            if (!$firstMemberName && !empty($r['customer_name'])) {
-                $firstMemberName = $r['customer_name'];
+            if (!$firstMemberName) {
+                $cCandidate = trim((string)($r['customer_name'] ?? $r['custName'] ?? $r['customer'] ?? $r['cust_name'] ?? $r['guestName'] ?? $r['gstName'] ?? ''));
+                if ($cCandidate !== '') {
+                    $firstMemberName = $cCandidate;
+                }
             }
-            if (!$firstMemberNo && !empty($r['memberNo'])) {
-                $firstMemberNo = $r['memberNo'];
+            if (!$firstMemberNo) {
+                $mNoCandidate = trim((string)($r['memNo'] ?? $r['memberNo'] ?? $r['member_no'] ?? $r['MemberNo'] ?? $r['memberno'] ?? $r['mem_no'] ?? ''));
+                if ($mNoCandidate !== '') {
+                    $firstMemberNo = $mNoCandidate;
+                }
             }
             if (!$firstContactNo && !empty($r['conactNo'])) {
                 $firstContactNo = (string)$r['conactNo'];
@@ -266,6 +272,10 @@
                 $firstBookDate = $r['bookDate'];
             }
         }
+
+        $firstMemNoClean = trim((string)$firstMemberNo);
+        $firstMemNoLower = strtolower($firstMemNoClean);
+        $hasValidMemberNo = $firstMemNoClean !== '' && !in_array($firstMemNoLower, ['n/a', 'na', 'none', 'null', '0', 'false', 'no']);
 
         $formattedBookDate = '';
         if ($firstBookDate) {
@@ -293,7 +303,15 @@
             </tr>
             <tr>
                 <td style="font-weight: bold; background-color: #caeac8; color: #1e293b; border: 1px solid #cbd5e1; padding: 5px; text-align: center;">MEMBERSHIP NUMBER:</td>
-                <td colspan="5" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;">{{ $firstMemberNo }}</td>
+                <td colspan="5" style="border: 1px solid #cbd5e1; padding: 5px; text-align: center; font-weight: bold;">
+                    @if($hasValidMemberNo)
+                        <a href="{{ route('member.search', ['member_no' => $firstMemberNo]) }}" target="_blank" title="View Member Reservation Filter for {{ $firstMemberNo }}" style="color: inherit; text-decoration: underline;">
+                            {{ $firstMemberNo }}
+                        </a>
+                    @else
+                        {{ $firstMemberNo ?: 'N/A' }}
+                    @endif
+                </td>
                 <td colspan="{{ count($dateCols) + 1 }}" style="border: none;"></td>
             </tr>
             <tr>
@@ -393,42 +411,26 @@
                         $groupSize   = max(1, (int) ($res['acc_group_size'] ?? 1));
                         $isExtraPerson = $res['is_extra_person'] ?? false;
 
-                        $groupAccSum = 0;
-                        foreach ($groupTotals as $gv) {
-                            $grv = round((float)$gv, 2);
-                            $frac = round($grv - floor($grv), 2);
-                            if (!in_array($frac, [0.01, 0.02, 0.5])) {
-                                $groupAccSum += (float)$gv;
-                            }
-                        }
-                        // For base occupants: divide group sum by group size
-                        // For extra persons: use their own total (they have no group sharing)
-                        if ($isExtraPerson) {
-                            // Sum the individual's rates (from calculated_rates or raw rate)
-                            $perOccupantAcc = 0;
-                            foreach ($dateCols as $d) {
-                                $val = $rates['acc_dates'][$d]['val'] ?? 0;
-                                // Exclude any FVN if present (but extra person won't have FVN)
-                                $rv = round($val, 2);
-                                $frac = round($rv - floor($rv), 2);
-                                if (!in_array($frac, [0.01, 0.02, 0.5])) {
-                                    $perOccupantAcc += $val;
-                                }
-                            }
-                        } else {
-                            $perOccupantAcc = $groupAccSum / $groupSize;
-                        }
+                        // $groupAccSum and $groupSize remain defined for the merged cell, but we use the calculator's result for per-occupant total
+                        $perOccupantAcc = $rates['acc'] ?? 0;
                     @endphp
                 @if($span > 0)
     @foreach($dateCols as $d)
         @php
-            $val = $rates['acc_dates'][$d]['val'] ?? ($groupTotals[$d] ?? 0);
+            $val = $groupTotals[$d] ?? ($rates['acc_dates'][$d]['val'] ?? 0);
             $rv = round($val, 2);
             $frac = round($rv - floor($rv), 2);
-            $displayVal = ($val > 0 ? number_format($val, 2) : '');
-            if ($frac == 0.01)      $displayVal = '1 FVN';
+            $integerPart = floor($rv);
+            if ($isExtraPerson) {
+                // Extra person always shows numeric charge, never FVN label
+                $extraVal = (in_array($frac, [0.01, 0.02, 0.03]) || $rv <= 1.0)
+                    ? \App\Services\BalesinPinesRateCalculatorService::EXTRA_PERSON_CHARGE
+                    : $rv;
+                $displayVal = number_format($extraVal, 2);
+            } elseif ($frac == 0.01)      $displayVal = '1 FVN';
             elseif ($frac == 0.02)  $displayVal = '1.5 FVN';
-            elseif ($frac == 0.5)   $displayVal = '.5 FVN';
+            elseif ($frac == 0.03)  $displayVal = ($integerPart > 0) ? number_format($integerPart, 2) . '<br><span style="font-size: 8px;">.5 FVN</span>' : '.5 FVN';
+            else                    $displayVal = ($val > 0 ? number_format($val, 2) : '');
         @endphp
         <td class="num {{ $span > 1 ? 'merged' : '' }}"
             rowspan="{{ $span > 0 ? $span : 1 }}"
@@ -441,19 +443,49 @@
                     @if($span > 0)
                         @foreach($dateCols as $d)
                             @php
-                                $val = $rates['acc_dates'][$d]['val'] ?? ($groupTotals[$d] ?? 0);
+                                $val = $groupTotals[$d] ?? ($rates['acc_dates'][$d]['val'] ?? 0);
                                 $rv  = round($val, 2);
                                 $frac = round($rv - floor($rv), 2);
-                                if (!in_array($frac, [0.01, 0.02, 0.5])) {
+                                if ($isExtraPerson) {
+                                    // Extra person: FVN markers replaced by 3700 in groupTotals already
+                                    // But add safety net in case groupTotals still has FVN marker
+                                    $addVal = (in_array($frac, [0.01, 0.02, 0.03]) || $rv <= 1.0)
+                                        ? \App\Services\BalesinPinesRateCalculatorService::EXTRA_PERSON_CHARGE
+                                        : $rv;
+                                    $dateTotals[$d] += (float) $addVal;
+                                } elseif (!in_array($frac, [0.01, 0.02, 0.03])) {
                                     $dateTotals[$d] += (float) $val;
+                                } else {
+                                    if ($frac == 0.03) {
+                                        $dateTotals[$d] += floor($val);
+                                    }
                                 }
                             @endphp
                         @endforeach
                     @endif
-                    @php $accGrandTotal += $perOccupantAcc; @endphp
+                    @php
+                        // Determine if this passenger is a pure FVN (all date values are .01 or .02)
+                        $isFvnPassenger = false;
+                        if (!$isExtraPerson) {
+                            $fvnCheck = array_filter($groupTotals, function($v) {
+                                $f = round($v - floor($v), 2);
+                                return in_array($f, [0.01, 0.02]);
+                            });
+                            $isFvnPassenger = count($fvnCheck) > 0 && count($fvnCheck) === count($groupTotals);
+                        }
+                        if ($isExtraPerson && $perOccupantAcc <= 1.0) {
+                            // Extra person's rate was an FVN marker in the API — show the correct charge
+                            $displayTotal = \App\Services\BalesinPinesRateCalculatorService::EXTRA_PERSON_CHARGE;
+                        } elseif ($isFvnPassenger) {
+                            $displayTotal = 0.00;
+                        } else {
+                            $displayTotal = $perOccupantAcc;
+                        }
+                        $accGrandTotal += $displayTotal;
+                    @endphp
 
                     <td style="text-align: center; font-weight: bold;">
-                         {{ number_format($perOccupantAcc, 2) }}
+                         {{ number_format($displayTotal, 2) }}
                     </td>
                 </tr>
             @endforeach

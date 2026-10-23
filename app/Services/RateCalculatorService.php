@@ -156,6 +156,9 @@ class RateCalculatorService
             $hasPrivCard = true;
         }
 
+        $hasVillaSc = isset($passenger['sc_target_villa']) ? (bool) $passenger['sc_target_villa'] : $hasPrivCard;
+        $hasAirSc   = isset($passenger['sc_target_air'])   ? (bool) $passenger['sc_target_air']   : $hasPrivCard;
+
         $acc = 0;
         $accDates = [];
         $isVilla = $this->isVillaUnit($roomType, $rateMetadata);
@@ -249,7 +252,8 @@ class RateCalculatorService
                                 $grossAmount = $baseVal;
                             }
                         } else {
-                            $grossAmount = (float)($matchedDbRate->rate_extra - $matchedDbRate->rate_value);
+                            $extraVal = (float)$matchedDbRate->rate_extra;
+                            $grossAmount = ($extraVal > 100) ? $extraVal : self::EXTRA_PERSON_CHARGE;
                         }
                     } else {
                         if (!$isExtra) {
@@ -294,21 +298,28 @@ class RateCalculatorService
                     if (!$isFVN) {
                         $breakdown['gross_share'] = $grossAmount;
 
-                        if ($hasPrivCard) {
-                            $breakdown['is_discounted'] = true;
-                            $baseForDisc = $grossAmount / 1.12;
-                            $discount = $baseForDisc * 0.2;
-                            $netBase = $baseForDisc - $discount;
-                            $sc = $netBase * 0.1;
+                        if ($hasVillaSc) {
+                            $scSettings  = $this->settings['discounts']['sc_pwd'] ?? [];
+                            $removeVat   = $scSettings['remove_vat'] ?? true;
+                            $applyDisc   = $scSettings['apply_discount'] ?? true;
+                            $discPercent = $applyDisc ? (float) ($scSettings['additional_discount_percent'] ?? 20) : 0.0;
+                            $vatRate     = (float) ($this->settings['discounts']['vat_rate'] ?? 12);
 
-                            $breakdown['base'] = $baseForDisc;
+                            $breakdown['is_discounted'] = true;
+                            $baseForDisc = $removeVat ? ($grossAmount / (1 + ($vatRate / 100))) : $grossAmount;
+                            $discount    = $baseForDisc * ($discPercent / 100);
+                            $netBase     = $baseForDisc - $discount;
+                            $sc          = $netBase * 0.1;
+
+                            $breakdown['base']     = $baseForDisc;
                             $breakdown['discount'] = $discount;
-                            $breakdown['sc'] = $sc;
-                            $dateRate = $netBase + $sc;
+                            $breakdown['sc']       = $sc;
+                            $dateRate              = $netBase + $sc;
                         } else {
-                            $base = $grossAmount / 1.12;
-                            $sc = $base * 0.1;
-                            $vat = $base * 0.12;
+                            $vatRate = (float) ($this->settings['discounts']['vat_rate'] ?? 12);
+                            $base    = $grossAmount / (1 + ($vatRate / 100));
+                            $sc      = $base * 0.1;
+                            $vat     = $base * ($vatRate / 100);
 
                             $breakdown['base'] = $base;
                             $breakdown['sc'] = $sc;
@@ -392,11 +403,18 @@ class RateCalculatorService
                 $airfare = (float) ($this->settings['base_rates'][$passengerClass] ?? 0);
             }
 
-            if ($hasPrivCard && !$isEmployee) {
-                $vatRate = (float) ($this->settings['discounts']['vat_rate'] ?? 12);
-                $airfare = $airfare / (1 + ($vatRate / 100));
-                if ($passengerClass === 'guest' && $isPeak) {
-                    $airfare = $airfare * 0.8;
+            if ($hasAirSc && !$isEmployee) {
+                $scSettings  = $this->settings['discounts']['sc_pwd'] ?? [];
+                $removeVat   = $scSettings['remove_vat'] ?? true;
+                $applyDisc   = $scSettings['apply_discount'] ?? true;
+                $discPercent = $applyDisc ? (float) ($scSettings['additional_discount_percent'] ?? 20) : 0.0;
+                $vatRate     = (float) ($this->settings['discounts']['vat_rate'] ?? 12);
+
+                if ($removeVat) {
+                    $airfare = $airfare / (1 + ($vatRate / 100));
+                }
+                if ($discPercent > 0 && $passengerClass === 'guest' && $isPeak) {
+                    $airfare = $airfare * (1 - ($discPercent / 100));
                 }
             }
         }
@@ -566,6 +584,13 @@ class RateCalculatorService
         return $this->isVillaUnit($roomType, $rateMetadata, $rateCode, $rateValues) ? 'VILLA' : 'SUITE';
     }
 
+    public function isExtraOccupant(int $occupantIndex, string $roomType = '', string $rateMetadata = '', string $rateCode = '', array $rateValues = []): bool
+    {
+        $isVilla = $this->isVillaUnit($roomType, $rateMetadata, $rateCode, $rateValues);
+        $basePax = $isVilla ? 4 : 8;
+        return $occupantIndex >= $basePax;
+    }
+
     /**
      * Extra occupant gross rate: any API accommodation value → flat 3700 or custom settings (not FVN).
      * Villa 5th+ / suite 9th+ must never use 0.01 / 0.02 FVN markers from the API.
@@ -576,10 +601,10 @@ class RateCalculatorService
         $shouldOverride = $extraSet['override'] ?? true;
         $overrideAmt = (float)($extraSet['amount'] ?? self::EXTRA_PERSON_CHARGE);
 
-        if ($apiVal != 0) {
-            return $shouldOverride ? $overrideAmt : $apiVal;
+        if ($shouldOverride || $apiVal <= 1.0) {
+            return $overrideAmt;
         }
-        return 0;
+        return $apiVal > 0 ? $apiVal : $overrideAmt;
     }
 
     private function getAccommodationUnitRate($date, $isVilla, $isMember)
@@ -618,7 +643,8 @@ class RateCalculatorService
         try {
             $rate = \App\Models\Rate::where('rate_code', $isMember ? 'MVILLA-WKDAYS' : 'GVILLA-WKDAYS')->first();
             if ($rate) {
-                return (float) ($rate->rate_extra - $rate->rate_value);
+                $extraVal = (float)$rate->rate_extra;
+                return ($extraVal > 100) ? $extraVal : self::EXTRA_PERSON_CHARGE;
             }
         } catch (\Exception $e) {
         }

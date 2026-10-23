@@ -734,6 +734,9 @@
         </div>
 
         <form id="dashboardForm" action="{{ route('dashboard') }}" method="GET" class="search-box" style="flex-direction: column;">
+            <input type="hidden" name="sc_override" id="scOverrideInput" value="{{ $scOverrideRaw ?? '' }}">
+            <input type="hidden" name="sc_remove"   id="scRemoveInput"   value="{{ $scRemoveRaw ?? '' }}">
+            <input type="hidden" name="sc_target"   id="scTargetInput"   value="{{ $scTargetRaw ?? '' }}">
             <!-- First Row: Show Selection and Actions -->
             <div style="display: flex; justify-content: space-between; align-items: flex-end; width: 100%; gap: 1rem;">
                 <div class="input-group" style="flex: 0 0 100px; min-width: 100px;">
@@ -829,12 +832,12 @@
                     <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Search (Name, Res No...)</label>
                     <input type="text" name="search" value="{{ request('search') }}" placeholder="Search all records..." autocomplete="off">
                 </div>
-                @if($viewType !== 'detail' && $property === 'island')
+                @if($viewType !== 'detail')
                 <div class="input-group" style="max-width: 320px;">
                     <label style="display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem;">Res No List</label>
                     <input type="text" name="resnolist" value="{{ $resNoList }}" placeholder="IDs separated by comma...">
                 </div>
-                @elseif($viewType === 'detail')
+                @else
                     <input type="hidden" name="resnolist" value="{{ $resNoList }}">
                 @endif
             </div>
@@ -848,8 +851,14 @@
                 $detBookDate  = '';
                 $detContactNo = '';
                 foreach ($reservations as $_r) {
-                    if (!$detMemberName && !empty($_r['customer_name'])) $detMemberName = $_r['customer_name'];
-                    if (!$detMemberNo  && !empty($_r['memberNo']))       $detMemberNo  = $_r['memberNo'];
+                    if (!$detMemberName) {
+                        $cCandidate = trim((string)($_r['customer_name'] ?? $_r['custName'] ?? $_r['customer'] ?? $_r['cust_name'] ?? $_r['guestName'] ?? $_r['gstName'] ?? ''));
+                        if ($cCandidate !== '') $detMemberName = $cCandidate;
+                    }
+                    if (!$detMemberNo) {
+                        $mCandidate = trim((string)($_r['memNo'] ?? $_r['memberNo'] ?? $_r['member_no'] ?? $_r['MemberNo'] ?? $_r['memberno'] ?? $_r['mem_no'] ?? ''));
+                        if ($mCandidate !== '') $detMemberNo = $mCandidate;
+                    }
                     if (!$detBookDate  && !empty($_r['bookDate']))        $detBookDate  = $_r['bookDate'];
                     if (!$detContactNo && !empty($_r['conactNo']))        $detContactNo = $_r['conactNo'];
                     elseif (!$detContactNo && !empty($_r['contactNo']))   $detContactNo = $_r['contactNo'];
@@ -860,6 +869,9 @@
                 if ($detBookDate) {
                     try { $detBookDateFormatted = (new \DateTime($detBookDate))->format('l, d F Y'); } catch (\Exception $e) { $detBookDateFormatted = $detBookDate; }
                 }
+                $detMemNoClean = trim((string)$detMemberNo);
+                $detMemNoLower = strtolower($detMemNoClean);
+                $hasDetMemberNo = $detMemNoClean !== '' && !in_array($detMemNoLower, ['n/a', 'na', 'none', 'null', '0', 'false', 'no']);
             @endphp
             @if($detMemberName || $detMemberNo || $detBookDate || $detContactNo)
             <div style="margin-bottom: 1rem;">
@@ -869,10 +881,14 @@
                 </div>
                 @endif
                 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;">
-                    @if($detMemberNo)
-                    <a href="{{ route('member.search', ['member_no' => $detMemberNo]) }}" title="View Member Reservation Filter for {{ $detMemberNo }}" style="font-size: 0.8rem; font-family: monospace; font-weight: 700; color: #818cf8; letter-spacing: 0.04em; text-decoration: none; display: inline-flex; align-items: center; gap: 0.25rem;">
+                    @if($hasDetMemberNo)
+                    <a href="{{ route('member.search', ['member_no' => $detMemberNo]) }}" target="_blank" title="View Member Reservation Filter for {{ $detMemberNo }}" style="font-size: 0.8rem; font-family: monospace; font-weight: 700; color: #818cf8; letter-spacing: 0.04em; text-decoration: none; display: inline-flex; align-items: center; gap: 0.25rem;">
                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>{{ $detMemberNo }}
                     </a>
+                    @elseif($detMemberNo)
+                    <span style="font-size: 0.8rem; font-family: monospace; font-weight: 700; color: var(--text-muted); letter-spacing: 0.04em;">
+                        {{ $detMemberNo }}
+                    </span>
                     @endif
                     @if($detBookDateFormatted)
                     <span style="font-size: 0.75rem; color: var(--text-muted);">·</span>
@@ -892,6 +908,12 @@
                             <tr>
                                 <th class="sticky-col-1" style="width: 100px;">RSVN#</th>
                                 <th class="sticky-col-2" style="width: 120px;">Village</th>
+                                @if($property === 'island' || $property === 'pines' || $property === 'city')
+                                <th style="text-align:center; min-width:72px; font-size:0.75rem; padding: 0.5rem 0.4rem;">
+                                    SC / PWD
+                                    <div style="font-size:0.6rem;font-weight:normal;opacity:0.65;margin-top:2px">Override</div>
+                                </th>
+                                @endif
                                 <th class="sticky-col-3" style="width: 200px;">Occupant</th>
                                 @foreach($dateCols as $date)
                                     <th class="date-header">
@@ -907,6 +929,9 @@
                         </thead>
                         <tbody>
                             @php 
+                                // ─────────────────────────────────────────────────────────────
+                                // Pre‑calculate spans & build display rows (including splits)
+                                // ─────────────────────────────────────────────────────────────
                                 $reservations = array_values($reservations);
                                 $resDataForJs = [];
                                 $resGroups = [];
@@ -915,11 +940,28 @@
                                     $resGroups[$c][] = $r;
                                 }
 
-                                // Pre-calculate spans per reservation
+                                $scTargets = [];
+                                foreach (explode(',', $scTargetRaw ?? '') as $pair) {
+                                    $p = explode(':', trim($pair));
+                                    if (count($p) === 3) $scTargets[trim($p[0]) . ':' . (int)$p[1]] = strtolower(trim($p[2]));
+                                }
+                                $scOverrides = [];
+                                foreach (explode(',', $scOverrideRaw ?? '') as $pair) {
+                                    $p = explode(':', trim($pair));
+                                    if (count($p) === 2) $scOverrides[] = trim($p[0]) . ':' . (int)$p[1];
+                                }
+                                $scRemoves = [];
+                                foreach (explode(',', $scRemoveRaw ?? '') as $pair) {
+                                    $p = explode(':', trim($pair));
+                                    if (count($p) === 2) $scRemoves[] = trim($p[0]) . ':' . (int)$p[1];
+                                }
+
+                                $displayRows = []; // will hold [res, spanInfo] for each displayed row
                                 $accSpans = [];
+
                                 foreach($resGroups as $rn => $rows) {
                                     $count = count($rows);
-                                    // Determine base_pax: Island uses 4 or 8, Pines uses 2, City uses 1
+                                    // Determine base_pax
                                     $basePax = 4;
                                     if ($property === 'pines') {
                                         $basePax = 2;
@@ -933,144 +975,468 @@
                                     $curr = 0;
                                     while ($curr < $count) {
                                         $blockStart = $curr;
-                                        // For island & pines: limit block size to unit capacity (basePax). For City: no grouping, blockSize is 1
-                                        $blockSize = ($property === 'island' || $property === 'pines') ? min($count - $curr, $basePax) : 1;
+                                        $isBlockExtra = ($curr >= $basePax);
+                                        $blockSize = in_array($property, ['island', 'pines', 'city'], true) ? ($isBlockExtra ? 1 : min($count - $curr, $basePax)) : 1;
                                         
-                                        if ($property === 'island' || $property === 'pines') {
+                                        if (in_array($property, ['island', 'pines', 'city'], true)) {
+                                            // Build groupTotals from current occupant if extra person, or first occupant in block if base block
                                             $groupTotals = [];
                                             foreach($dateCols as $d) {
                                                 $uv = 0;
-                                                foreach($rows[$blockStart]['rate'] ?? [] as $rt) {
-                                                    if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                                                $firstPassenger = $isBlockExtra ? ($rows[$curr] ?? null) : ($rows[$blockStart] ?? null);
+                                                if ($firstPassenger) {
+                                                    foreach ($firstPassenger['rate'] ?? [] as $rt) {
+                                                        if (($rt['date'] ?? '') === $d) {
+                                                            $rawVal = (float)($rt['val'] ?? 0);
+                                                            $breakdown = $rt['breakdown'] ?? null;
+
+                                                            // ── FVN guard: 0.01 = 1 FVN, 0.02 = 1.5 FVN, 0.03 = 0.5 FVN split, 0.5 = 0.5 FVN
+                                                            // These are rate CODE markers — never do arithmetic on them
+                                                            $rawFrac = round($rawVal - floor($rawVal), 2);
+                                                            $isFvnMarker = !$isBlockExtra && in_array($rawFrac, [0.01, 0.02, 0.03, 0.5]);
+                                                            if (!$isFvnMarker && $breakdown && !empty($breakdown['is_fvn'])) {
+                                                                $isFvnMarker = true;
+                                                            }
+                                                            if ($isFvnMarker) {
+                                                                $uv = $rawVal; // pass through unchanged
+                                                                break;
+                                                            }
+
+                                                            $apiPriv = strtolower(trim((string)($firstPassenger['privCard'] ?? $firstPassenger['privcard'] ?? '')));
+                                                            $isApiSc = !in_array($apiPriv, ['', 'n', 'no', 'false', '0', 'none', 'null']) && (str_contains($apiPriv, 'senior') || str_contains($apiPriv, 'pwd'));
+
+                                                            if ($isBlockExtra) {
+                                                                $extraResNo = trim($firstPassenger['resNo'] ?? $firstPassenger['conf'] ?? 'N/A');
+                                                                $extraOccIdx = $curr;
+                                                                $extraKey = $extraResNo . ':' . $extraOccIdx;
+                                                                $extraTargetMode = $scTargets[$extraKey] ?? null;
+                                                                $extraHasVillaSc = false;
+                                                                if ($extraTargetMode === 'villa' || $extraTargetMode === 'both') {
+                                                                    $extraHasVillaSc = true;
+                                                                } elseif ($extraTargetMode === 'air' || $extraTargetMode === 'none') {
+                                                                    $extraHasVillaSc = false;
+                                                                } else {
+                                                                    if (in_array($extraKey, $scOverrides)) $extraHasVillaSc = true;
+                                                                    elseif (in_array($extraKey, $scRemoves)) $extraHasVillaSc = false;
+                                                                    else $extraHasVillaSc = $isApiSc;
+                                                                }
+
+                                                                $extraChargeVal = ($property === 'city') ? 1300 : 3700;
+                                                                if ($extraHasVillaSc || ($breakdown && !empty($breakdown['is_discounted']))) {
+                                                                    if ($rawVal > 0 && $rawVal < $extraChargeVal && abs($rawVal - round(($extraChargeVal / 1.12) * 0.8 * 1.1, 2)) < 10) {
+                                                                        $uv = $rawVal;
+                                                                    } else {
+                                                                        $uv = round(($extraChargeVal / 1.12) * 0.8 * 1.1, 2);
+                                                                    }
+                                                                } else {
+                                                                    $uv = ($rawVal > $extraChargeVal || $rawVal <= 1.0) ? $extraChargeVal : $rawVal;
+                                                                }
+                                                            } elseif ($breakdown && !empty($breakdown['gross_share'])) {
+                                                                $uv = (float)$breakdown['gross_share'];
+                                                                if ($uv > 0 && $uv < 3000 && $blockSize > 1 && !$isBlockExtra) {
+                                                                    $uv = $uv * $blockSize;
+                                                                }
+                                                                // Pines: composite rate (e.g. 25500 = 21500 + 3700) → show room base only
+                                                                if ($property === 'pines' && !$isBlockExtra) {
+                                                                    $pinesCalc = app(\App\Services\BalesinPinesRateCalculatorService::class);
+                                                                    $split = $pinesCalc->resolveCompositeFromPassenger($firstPassenger, $uv);
+                                                                    if ($split) {
+                                                                        $uv = $split['base'];
+                                                                    }
+                                                                }
+                                                            } elseif ($isApiSc || ($breakdown && !empty($breakdown['is_discounted']))) {
+                                                                $fullGross = round(($rawVal * 14 / 11), 2);
+                                                                if (abs($fullGross - round($fullGross)) < 0.15) {
+                                                                    $fullGross = round($fullGross);
+                                                                }
+                                                                if ($fullGross < 3000 && $blockSize > 1 && !$isBlockExtra) {
+                                                                    $fullGross = $fullGross * $blockSize;
+                                                                }
+                                                                $uv = $fullGross;
+                                                            } else {
+                                                                $uv = $rawVal;
+                                                                if ($property === 'pines' && !$isBlockExtra) {
+                                                                    $pinesCalc = app(\App\Services\BalesinPinesRateCalculatorService::class);
+                                                                    $split = $pinesCalc->resolveCompositeFromPassenger($firstPassenger, $uv);
+                                                                    if ($split) {
+                                                                        $uv = $split['base'];
+                                                                    }
+                                                                }
+                                                            }
+                                                            break;
+                                                        }
+                                                    }
                                                 }
                                                 $groupTotals[$d] = $uv;
                                             }
+
                                             for ($i = 0; $i < $blockSize; $i++) {
-                                                $span = ($i === 0) ? $blockSize : 0;
-                                                // For pines: 3rd+ occupant (extra person) always gets their own cell (no merging beyond base_pax)
-                                                // Extra person rate is stored directly in their rate[] array as 3700
-                                                $isExtraPerson = ($property === 'pines' && ($curr + $i) >= 2 && isset($rows[$curr + $i]));
-                                                if ($isExtraPerson) {
-                                                    // Extra person: show their calculated extra person rate (3700 or discounted rate), not the shared group total/FVN
-                                                    $extraTotals = [];
+                                                $isExtraPerson = (($curr + $i) >= $basePax && isset($rows[$curr + $i]));
+                                                $res = $rows[$curr + $i] ?? null;
+                                                if (!$res) continue;
+
+                                                // Check if this block has .03 and is not extra person
+                                                $has03 = false;
+                                                foreach ($groupTotals as $val) {
+                                                    $frac = round($val - floor($val), 2);
+                                                    if ($frac == 0.03 && !$isExtraPerson) {
+                                                        $has03 = true;
+                                                        break;
+                                                    }
+                                                }
+
+                                                if ($has03) {
+                                                    // Create TWO rows: paid part and FVN part
+                                                    $paidTotals = [];
+                                                    $fvnTotals  = [];
                                                     foreach ($dateCols as $d) {
-                                                        $uv = (float)($rows[$curr + $i]['calculated_rates']['acc_dates'][$d]['val'] ?? 0);
-                                                        if ($uv == 0) {
-                                                            foreach ($rows[$curr + $i]['rate'] ?? [] as $rt) {
-                                                                if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                                                        $val = $groupTotals[$d] ?? 0;
+                                                        $frac = round($val - floor($val), 2);
+                                                        if ($frac == 0.03) {
+                                                            $paidTotals[$d] = floor($val); // integer part
+                                                            $fvnTotals[$d]  = 0.03;        // marker for .5 FVN
+                                                        } else {
+                                                            $paidTotals[$d] = $val;
+                                                            $fvnTotals[$d]  = 0;
+                                                        }
+                                                    }
+
+                                                    // FVN row
+                                                    $displayRows[] = [
+                                                        'res' => $res,
+                                                        'spanInfo' => [
+                                                            'span'            => 1,
+                                                            'totals'          => $fvnTotals,
+                                                            'group_size'      => $blockSize,
+                                                            'is_extra_person' => $isExtraPerson,
+                                                            'is_split'        => true,
+                                                            'split_type'      => 'fvn',
+                                                            'occupant_idx'    => ($curr + $i)
+                                                        ]
+                                                    ];
+                                                    // Paid row
+                                                    $displayRows[] = [
+                                                        'res' => $res,
+                                                        'spanInfo' => [
+                                                            'span'            => 1,
+                                                            'totals'          => $paidTotals,
+                                                            'group_size'      => $blockSize,
+                                                            'is_extra_person' => $isExtraPerson,
+                                                            'is_split'        => true,
+                                                            'split_type'      => 'paid',
+                                                            'occupant_idx'    => ($curr + $i)
+                                                        ]
+                                                    ];
+                                                    
+                                                } else {
+                                                    // Check if accommodation has a discount (or SC/PWD override for Villa/Both)
+                                                    $resNo = trim($res['resNo'] ?? $res['conf'] ?? 'N/A');
+                                                    $occupantIdx = $curr + $i;
+                                                    $key = $resNo . ':' . $occupantIdx;
+
+                                                    $apiPrivCard = trim((string)($res['privCard'] ?? $res['privcard'] ?? ''));
+                                                    $apiPrivLower = strtolower($apiPrivCard);
+                                                    $alreadySc = !in_array($apiPrivLower, ['', 'n', 'no', 'false', '0', 'none', 'null'])
+                                                                 && (str_contains($apiPrivLower, 'senior') || str_contains($apiPrivLower, 'pwd') || str_contains($apiPrivLower, 'person with'));
+
+                                                    $targetMode = $scTargets[$key] ?? null;
+                                                    $hasVillaDiscount = false;
+                                                    if ($targetMode === 'villa' || $targetMode === 'both') {
+                                                        $hasVillaDiscount = true;
+                                                    } elseif ($targetMode === 'air' || $targetMode === 'none') {
+                                                        $hasVillaDiscount = false;
+                                                    } else {
+                                                        if (in_array($key, $scOverrides)) $hasVillaDiscount = true;
+                                                        elseif (in_array($key, $scRemoves)) $hasVillaDiscount = false;
+                                                        else $hasVillaDiscount = $alreadySc;
+                                                    }
+
+                                                    // Check if any occupant in this block has a Villa discount applied
+                                                    $blockHasDiscount = $hasVillaDiscount;
+                                                    if (!$blockHasDiscount) {
+                                                        for ($j = 0; $j < $blockSize; $j++) {
+                                                            $rCheck = $rows[$curr + $j] ?? null;
+                                                            if ($rCheck) {
+                                                                $kCheck = $resNo . ':' . ($curr + $j);
+                                                                $tmCheck = $scTargets[$kCheck] ?? null;
+                                                                if ($tmCheck === 'villa' || $tmCheck === 'both') {
+                                                                    $blockHasDiscount = true;
+                                                                    break;
+                                                                }
+                                                                if ($tmCheck === null) {
+                                                                    $pCheck = strtolower(trim((string)($rCheck['privCard'] ?? $rCheck['privcard'] ?? '')));
+                                                                    if (!in_array($pCheck, ['', 'n', 'no', 'false', '0', 'none', 'null']) && (str_contains($pCheck, 'senior') || str_contains($pCheck, 'pwd')) && !in_array($kCheck, $scRemoves)) {
+                                                                        $blockHasDiscount = true;
+                                                                        break;
+                                                                    }
+                                                                }
                                                             }
                                                         }
-                                                        $extraTotals[$d] = $uv;
                                                     }
-                                                    $accSpans[] = [
-                                                        'span' => 1,
-                                                        'totals' => $extraTotals,
-                                                        'group_size' => 1,
-                                                        'has_fvn' => false,
-                                                        'is_extra_person' => true
-                                                    ];
-                                                } else {
-                                                    $accSpans[] = [
-                                                        'span' => $span,
-                                                        'totals' => $groupTotals,
-                                                        'group_size' => $blockSize,
-                                                        'has_fvn' => false,
-                                                        'is_extra_person' => false
-                                                    ];
+
+                                                    if ($blockHasDiscount) {
+                                                        // DO NOT use groupspan! Show per-occupant discounted amount per row (span = 1)
+                                                        $passTotals = [];
+                                                        foreach ($dateCols as $d) {
+                                                            $uv = 0;
+                                                            foreach ($res['rate'] ?? [] as $rt) {
+                                                                if (($rt['date'] ?? '') === $d) {
+                                                                    $uv = (float)($rt['val'] ?? 0);
+                                                                    break;
+                                                                }
+                                                            }
+                                                            if ($uv == 0) {
+                                                                $uv = $groupTotals[$d] ?? 0;
+                                                            }
+                                                            // FVN markers (0.01, 0.02, 0.03, 0.5 with val < 10) — pass through unchanged, never divide
+                                                            // Extra person is a paid 3700 charge even when the API still sends FVN markers.
+                                                            $uvFrac = round($uv - floor($uv), 2);
+                                                            $isUvFvn = !$isExtraPerson && in_array($uvFrac, [0.01, 0.02, 0.03, 0.5]);
+                                                            if (!$isUvFvn) {
+                                                                if ($isExtraPerson) {
+                                                                    $extraChargeVal = ($property === 'city') ? 1300 : 3700;
+                                                                    if ($uv > $extraChargeVal || $uv <= 1.0) {
+                                                                        $uv = $extraChargeVal;
+                                                                    }
+                                                                } elseif ($uv > 100 && $blockSize > 1 && $property !== 'pines') {
+                                                                    // If rate is full room rate (e.g. 7857.14), divide by group size to show per-occupant share (1964.29)
+                                                                    if (abs($uv - ($groupTotals[$d] ?? 0)) < 1.0 || $uv > 3000) {
+                                                                        $uv = round($uv / $blockSize, 2);
+                                                                    }
+                                                                }
+                                                            }
+                                                            $passTotals[$d] = $uv;
+                                                        }
+
+                                                        $displayRows[] = [
+                                                            'res' => $res,
+                                                            'spanInfo' => [
+                                                                'span'            => 1,
+                                                                'totals'          => $passTotals,
+                                                                'group_size'      => $blockSize,
+                                                                'is_extra_person' => $isExtraPerson,
+                                                                'is_split'        => false,
+                                                                'occupant_idx'    => ($curr + $i),
+                                                                'has_discount'    => true
+                                                            ]
+                                                        ];
+                                                    } else {
+                                                        // Regular: keep standard group span
+                                                        $span = ($i === 0) ? $blockSize : 0;
+                                                        $displayRows[] = [
+                                                            'res' => $res,
+                                                            'spanInfo' => [
+                                                                'span'            => $span,
+                                                                'totals'          => $groupTotals,
+                                                                'group_size'      => $blockSize,
+                                                                'is_extra_person' => $isExtraPerson,
+                                                                'is_split'        => false,
+                                                                'occupant_idx'    => ($curr + $i),
+                                                                'has_discount'    => false
+                                                            ]
+                                                        ];
+                                                    }
                                                 }
                                             }
                                         } else {
-                                            // Non-island/pines: each passenger has their own rates, no span merging
-                                            $passTotals = [];
-                                            foreach ($dateCols as $d) {
-                                                $uv = 0;
-                                                foreach ($rows[$blockStart]['rate'] ?? [] as $rt) {
-                                                    if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                                            // City: no merging
+                                            for ($i = 0; $i < $blockSize; $i++) {
+                                                $res = $rows[$curr + $i] ?? null;
+                                                if (!$res) continue;
+                                                $passTotals = [];
+                                                foreach ($dateCols as $d) {
+                                                    $uv = 0;
+                                                    foreach ($res['rate'] ?? [] as $rt) {
+                                                        if (($rt['date'] ?? '') === $d) { $uv = (float)($rt['val'] ?? 0); break; }
+                                                    }
+                                                    $passTotals[$d] = $uv;
                                                 }
-                                                $passTotals[$d] = $uv;
+                                                $displayRows[] = [
+                                                    'res' => $res,
+                                                    'spanInfo' => [
+                                                        'span'            => 1,
+                                                        'totals'          => $passTotals,
+                                                        'group_size'      => 1,
+                                                        'is_extra_person' => false,
+                                                        'is_split'        => false,
+                                                        'occupant_idx'    => ($curr + $i)
+                                                    ]
+                                                ];
                                             }
-                                            $accSpans[] = [
-                                                'span' => 1,
-                                                'totals' => $passTotals,
-                                                'group_size' => 1,
-                                                'has_fvn' => false,
-                                                'is_extra_person' => false
-                                            ];
                                         }
                                         $curr += $blockSize;
                                     }
                                 }
+
+                                // Build a map of reservation number -> total number of rows (including splits)
+                                $resRowCounts = [];
+                                foreach ($displayRows as $row) {
+                                    $rn = trim($row['res']['resNo'] ?? $row['res']['conf'] ?? 'N/A');
+                                    $resRowCounts[$rn] = ($resRowCounts[$rn] ?? 0) + 1;
+                                }
+
+                                // Prepare data for JS and accSpans array
+                                $resDataForJs = [];
+                                foreach ($displayRows as $idx => $row) {
+                                    $resDataForJs[$idx] = $row['res'];
+                                }
+                                $accSpans = array_column($displayRows, 'spanInfo');
                                 $renderedRes = [];
                             @endphp
-                            @foreach($reservations as $idx => $res)
-                                @php 
+                            @foreach($displayRows as $idx => $row)
+                                @php
+                                    $res = $row['res'];
+                                    $spanInfo = $row['spanInfo'];
                                     $resNo = trim($res['resNo'] ?? $res['conf'] ?? 'N/A');
                                     $isFirstInGroup = !isset($renderedRes[$resNo]);
                                     if($isFirstInGroup) $renderedRes[$resNo] = true;
-                                    $spanInfo = $accSpans[$idx] ?? ['span' => 1, 'totals' => []];
-                                    $res['group_size'] = $spanInfo['group_size'] ?? 1;
-                                    $resDataForJs[$idx] = $res;
+
+                                    $isSplit = $spanInfo['is_split'] ?? false;
+                                    $splitType = $spanInfo['split_type'] ?? 'paid';
+                                    $groupSize = $spanInfo['group_size'] ?? 1;
+
+                                    // Rowspan for RSVN# and Room Type
+                                    $rowspan = $isFirstInGroup ? ($resRowCounts[$resNo] ?? 1) : 0;
+                                    $isExtraOccRow = $spanInfo['is_extra_person'] ?? false;
                                 @endphp
-                                <tr class="{{ $isFirstInGroup ? 'res-group-header' : '' }}" data-res-no="{{ $resNo }}">
+                                <tr class="{{ $isSplit ? 'split-row' : '' }}" data-res-no="{{ $resNo }}" data-split-type="{{ $splitType }}" data-is-extra="{{ $isExtraOccRow ? 'true' : 'false' }}" data-res-idx="{{ $idx }}">
                                     @if($isFirstInGroup)
-                                        <td rowspan="{{ count($resGroups[$resNo]) }}" class="sticky-col-1" style="vertical-align: top; padding-top: 1.5rem;">
+                                        <td rowspan="{{ $rowspan }}" class="sticky-col-1" style="vertical-align: top; padding-top: 1.5rem;">
                                             <span class="res-no">#{{ $resNo }}</span>
                                         </td>
-                                        <td rowspan="{{ count($resGroups[$resNo]) }}" class="sticky-col-2" style="vertical-align: top; padding-top: 1.5rem; font-weight: 600;">
+                                        <td rowspan="{{ $rowspan }}" class="sticky-col-2" style="vertical-align: top; padding-top: 1.5rem; font-weight: 600; white-space: normal; overflow-wrap: break-word; word-break: break-word;">
                                             <div>{{ strtoupper($res['village_name'] ?? 'N/A') }}</div>
                                             @if(!empty($res['unit_type_label']))
                                                 <div>{{ strtoupper($res['unit_type_label']) }}</div>
                                             @endif
                                         </td>
                                     @endif
+
+                                    @if($property === 'island' || $property === 'pines' || $property === 'city')
+                                    @php
+                                        $occupantIdx   = $spanInfo['occupant_idx'] ?? 0;
+                                        $isExtraOcc    = $spanInfo['is_extra_person'] ?? false;
+                                        $splitType2    = $spanInfo['split_type'] ?? 'paid';
+                                        $overrideKey   = $resNo . ':' . $occupantIdx;
+
+                                        $apiPrivCard   = trim((string)($res['privCard'] ?? $res['privcard'] ?? ''));
+                                        $apiPrivLower  = strtolower($apiPrivCard);
+                                        $alreadySc     = !in_array($apiPrivLower, ['', 'n', 'no', 'false', '0', 'none', 'null'])
+                                                         && (str_contains($apiPrivLower, 'senior') || str_contains($apiPrivLower, 'pwd') || str_contains($apiPrivLower, 'person with'));
+
+                                        $scTargets = [];
+                                        foreach (explode(',', $scTargetRaw ?? '') as $pair) {
+                                            $p = explode(':', trim($pair));
+                                            if (count($p) === 3) $scTargets[trim($p[0]) . ':' . (int)$p[1]] = strtolower(trim($p[2]));
+                                        }
+                                        $scOverrides = [];
+                                        foreach (explode(',', $scOverrideRaw ?? '') as $pair) {
+                                            $p = explode(':', trim($pair));
+                                            if (count($p) === 2) $scOverrides[] = trim($p[0]) . ':' . (int)$p[1];
+                                        }
+                                        $scRemoves = [];
+                                        foreach (explode(',', $scRemoveRaw ?? '') as $pair) {
+                                            $p = explode(':', trim($pair));
+                                            if (count($p) === 2) $scRemoves[] = trim($p[0]) . ':' . (int)$p[1];
+                                        }
+
+                                        $isFvnAccommodation = ($splitType2 === 'fvn');
+                                        if (!$isFvnAccommodation && $property === 'island' && !$isExtraOcc) {
+                                            $isFvnAccommodation = \App\Services\ScTargetService::isFvnAccommodation($spanInfo['totals'] ?? []);
+                                        }
+
+                                        $activeMode = $scTargets[$overrideKey] ?? null;
+                                        if (!$activeMode) {
+                                            if (in_array($overrideKey, $scOverrides)) $activeMode = 'both';
+                                            elseif (in_array($overrideKey, $scRemoves)) $activeMode = 'none';
+                                            elseif ($alreadySc) $activeMode = in_array($property, ['pines', 'city'], true) ? 'villa' : 'both';
+                                            else $activeMode = 'none';
+                                        }
+
+                                        $scTargetService = app(\App\Services\ScTargetService::class);
+                                        $activeMode = $scTargetService->normalizeMode($activeMode, $property, $isFvnAccommodation, $alreadySc, $isExtraOcc);
+
+                                         $showScCheckbox = true;
+                                    @endphp
+                                    <td style="text-align:center; vertical-align:middle; padding: 0.4rem;">
+                                        @if($showScCheckbox)
+                                            <button type="button" 
+                                                    class="btn open-sc-modal-btn" 
+                                                    data-override-key="{{ $overrideKey }}"
+                                                    data-mode="{{ $activeMode }}"
+                                                    data-is-fvn="{{ $isFvnAccommodation ? 'true' : 'false' }}"
+                                                    data-is-extra="{{ $isExtraOcc ? 'true' : 'false' }}"
+                                                    data-guest-name="{{ $res['gstName'] ?? $res['guestName'] ?? 'Occupant' }}"
+                                                    data-res-idx="{{ $idx }}"
+                                                    style="padding: 2px 7px; font-size: 0.7rem; font-weight: 600; border-radius: 6px; white-space: nowrap; border: 1px solid transparent; transition: all 0.2s;">
+                                                @if($activeMode === 'both')
+                                                    <span class="sc-badge-label" style="color: #4ade80; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.4); padding: 2px 6px; border-radius: 4px;">🌟 Both SC</span>
+                                                @elseif($activeMode === 'villa')
+                                                    <span class="sc-badge-label" style="color: #c084fc; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.4); padding: 2px 6px; border-radius: 4px;">🏡 {{ in_array($property, ['pines', 'city'], true) ? 'Accommodation Only' : 'Villa Only' }}</span>
+                                                @elseif($activeMode === 'air')
+                                                    <span class="sc-badge-label" style="color: #60a5fa; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.4); padding: 2px 6px; border-radius: 4px;">✈️ Airfare Only</span>
+                                                @else
+                                                    <span class="sc-badge-label" style="color: var(--text-muted, #94a3b8); background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); padding: 2px 6px; border-radius: 4px;">Regular</span>
+                                                @endif
+                                            </button>
+                                        @endif
+                                    </td>
+                                    @endif
+
                                     <td class="sticky-col-3" title="{{ $res['gstName'] ?? $res['guestName'] ?? '' }}">
                                         <div style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: white;">
                                             {{ $res['gstName'] ?? $res['guestName'] ?? 'Unknown' }}
                                         </div>
                                         <div style="font-size: 0.7rem; color: var(--text-muted)">
                                             {{ $res['gstType'] ?? 'Guest' }}
-                                            @if(!empty($res['is_employee'])) (Emp) @endif
-                                            @php
-                                                $privCard = trim((string) ($res['privCard'] ?? $res['privcard'] ?? ''));
-                                                $privCardLower = strtolower($privCard);
-                                                $isValidCard = $privCard !== '' && !in_array($privCardLower, ['n', 'no', 'false', '0', 'none', 'null']);
-                                            @endphp
-                                            @if($isValidCard)
-                                                ({{ $privCard }})
-                                            @endif
                                         </div>
                                     </td>
-                                    
+
+                                    @php
+                                        $resAge      = $res['age'] ?? null;
+                                        $resGstType  = strtolower(trim($res['gstType'] ?? ''));
+                                        $ageInt      = ($resAge !== null && $resAge !== '') ? (int)$resAge : 99;
+                                        $isInfant    = str_contains($resGstType, 'infant') || ($resAge !== null && $resAge !== '' && $ageInt >= 0 && $ageInt <= 1);
+                                    @endphp
+
                                     @if($spanInfo['span'] > 0)
                                         @foreach($dateCols as $date)
                                             @php 
                                                 $dayRate = (float)($spanInfo['totals'][$date] ?? 0);
+                                                $fullRoomBaseRate = (float)($spanInfo['full_group_totals'][$date] ?? $dayRate);
                                             @endphp
-                                            <td class="rate-cell" data-date="{{ $date }}" rowspan="{{ $spanInfo['span'] }}" style="vertical-align: middle; text-align: center; cursor: pointer;">
-                                                @if(isset($spanInfo['totals'][$date]))
+                                            <td class="rate-cell" data-date="{{ $date }}" data-base-rate="{{ $fullRoomBaseRate }}" data-orig-rowspan="{{ $spanInfo['span'] }}" rowspan="{{ $spanInfo['span'] }}" style="vertical-align: middle; text-align: center; cursor: pointer;">
+                                                @if($isInfant)
+                                                    {{-- Child / Infant: no accommodation charge --}}
+                                                    <div class="stay-block" style="background: rgba(148,163,184,0.15); border: 1px dashed rgba(148,163,184,0.3);">
+                                                        <span class="rate-display" style="color: var(--text-muted); font-size: 0.7rem;">Child</span>
+                                                    </div>
+                                                @elseif(isset($spanInfo['totals'][$date]))
                                                     @php 
-                                                        $dayRate = (float)($spanInfo['totals'][$date]); 
                                                         $rounded = round($dayRate, 2);
-                                                        $frac = round($rounded - floor($rounded), 2); // fractional part: 0.01, 0.02, 0.5, or 0
+                                                        $frac = round($rounded - floor($rounded), 2);
+                                                        $integerPart = floor($rounded);
                                                         $isExtra = $spanInfo['is_extra_person'] ?? false;
                                                     @endphp
                                                     <div class="stay-block" draggable="true">
-                                                        <span class="rate-display {{ (!$isExtra && in_array($frac, [0.01, 0.02, 0.5])) ? 'fvn-display' : '' }}">
+                                                        <span class="rate-display {{ (!$isExtra && in_array($frac, [0.01, 0.02, 0.03])) ? 'fvn-display' : '' }}">
                                                             @if($isExtra)
-                                                                {{-- Extra person: show rate + "extra" --}}
-                                                                @if($rounded == 3700)
-                                                                    3700.00
+                                                                @if($rounded <= 1.0 || abs($rounded - 3700) < 1.0)
+                                                                    3,700.00
                                                                 @else
-                                                                    {{ number_format($rounded, 2) }} extra
+                                                                    {{ number_format($rounded, 2) }}
                                                                 @endif
                                                             @else
-                                                                {{-- Base occupants: check fractional part for FVN --}}
                                                                 @if($frac == 0.01)
                                                                     1 FVN
                                                                 @elseif($frac == 0.02)
                                                                     1.5 FVN
-                                                                @elseif($frac == 0.5)
-                                                                    .5 FVN
+                                                                @elseif($frac == 0.03)
+                                                                    @if($integerPart > 0)
+                                                                        {{ number_format($integerPart, 0) }}
+                                                                    @else
+                                                                        .5 FVN
+                                                                    @endif
                                                                 @else
                                                                     {{ number_format($rounded, 2) }}
                                                                 @endif
@@ -1083,33 +1449,57 @@
                                             </td>
                                         @endforeach
                                     @endif
-                                          @php
-                                            $spanInfo = $accSpans[$idx] ?? ['span' => 1, 'totals' => [], 'group_size' => 1, 'has_fvn' => false, 'is_extra_person' => false];
-                                            $groupAccSum = 0;
-                                            foreach(($spanInfo['totals'] ?? []) as $gv) {
-                                                $grv = round((float)$gv, 2);
-                                                $frac = round($grv - floor($grv), 2); // fractional part: .01, .02, .5
-                                                // Exclude FVN rates (fractional parts .01, .02, .5)
-                                                if (!in_array($frac, [0.01, 0.02, 0.5])) {
+
+                                    @php
+                                        $r = $res['calculated_rates'] ?? [];
+                                        
+                                        // Compute the total accommodation for this group (non-FVN only)
+                                        $groupTotals = $spanInfo['totals'] ?? [];
+                                        $groupAccSum = 0;
+                                        $isExtraOccForTotal = $spanInfo['is_extra_person'] ?? false;
+                                        $extraNightCount = 0;
+                                        foreach ($groupTotals as $gv) {
+                                            $grv = round((float)$gv, 2);
+                                            $gFrac = round($grv - floor($grv), 2);
+                                            if ($isExtraOccForTotal && $property === 'pines') {
+                                                // Extra person: FVN/0 markers still count as one billable night at 3700
+                                                if ($grv <= 1.0 || in_array($gFrac, [0.01, 0.02, 0.03, 0.5], true) || $grv > 3700) {
+                                                    $groupAccSum += 3700;
+                                                } else {
                                                     $groupAccSum += (float)$gv;
                                                 }
+                                                $extraNightCount++;
+                                            } elseif ($grv !== 0.01 && $grv !== 0.02 && $grv !== 0.5) {
+                                                $groupAccSum += (float)$gv;
                                             }
-                                            $groupSize = max(1, (int)($spanInfo['group_size'] ?? 1));
-                                            
-                                            $r = $res['calculated_rates'] ?? [];
-                                            // Island & Pines: distribute shared accommodation across group members
-                                            // Pines extra person: uses their own flat 3700 rate directly
-                                            $isExtraPerson = $spanInfo['is_extra_person'] ?? false;
-                                            if ($property === 'island') {
-                                                $perOccupantAcc = $groupAccSum / $groupSize;
-                                            } elseif ($property === 'pines' && !$isExtraPerson) {
-                                                $perOccupantAcc = $groupAccSum / $groupSize;
-                                            } else {
-                                                $perOccupantAcc = $r['acc'] ?? 0;
+                                        }
+                                        // Prefer calculator acc for Pines extra person when day cells were empty/zero
+                                        if ($isExtraOccForTotal && $property === 'pines') {
+                                            $calcAcc = (float)(($res['calculated_rates']['acc'] ?? 0));
+                                            if ($groupAccSum <= 0 && $calcAcc > 0) {
+                                                $groupAccSum = $calcAcc;
+                                            } elseif ($groupAccSum <= 0 && $extraNightCount === 0 && !empty($dateCols)) {
+                                                $groupAccSum = 3700 * count($dateCols);
                                             }
-                                            
-                                            $total = $perOccupantAcc + ($r['air'] ?? 0) + ($r['han'] ?? 0) + ($r['avi'] ?? 0) + ($r['env'] ?? 0);
-                                            $baseFees = ($r['air'] ?? 0) + ($r['han'] ?? 0) + ($r['avi'] ?? 0) + ($r['env'] ?? 0);
+                                        }
+                                        $groupSize = max(1, (int) ($spanInfo['group_size'] ?? 1));
+                                        $span = $spanInfo['span'] ?? 1;
+                                        $hasDiscount = $spanInfo['has_discount'] ?? false;
+                                        if ($isExtraOccForTotal || ($span === 1 && $hasDiscount)) {
+                                            // Extra person / per-occupant discounted totals — already the correct individual amount
+                                            $perOccupantAcc = $groupAccSum;
+                                        } else {
+                                            // Regular span (span>1 = first row, span=0 = non-first row) — full room rate, divide by group size
+                                            $perOccupantAcc = $groupAccSum / $groupSize;
+                                        }
+
+                                        // For FVN split rows, set total to 0
+                                        if ($splitType === 'fvn') {
+                                            $perOccupantAcc = 0;
+                                        }
+
+                                        $total = $perOccupantAcc + ($r['air'] ?? 0) + ($r['han'] ?? 0) + ($r['avi'] ?? 0) + ($r['env'] ?? 0);
+                                        $baseFees = ($r['air'] ?? 0) + ($r['han'] ?? 0) + ($r['avi'] ?? 0) + ($r['env'] ?? 0);
                                     @endphp
                                     <td class="row-total" style="text-align: right; font-weight: 700; color: var(--primary);">
                                         <span class="total-val" data-base-fees="{{ $baseFees }}">{{ number_format($total, 2) }}</span>
@@ -1149,11 +1539,14 @@
                             @php
                                 $currentResNo = $res['resNo'] ?? $res['conf'] ?? null;
                                 $memNo = trim((string) (
-                                    $res['memberNo']  ??
-                                    $res['memNo']     ??
-                                    $res['member_no'] ??
-                                    $res['memberno']  ??
-                                    $res['MemberNo']  ??
+                                    $res['memberNo']    ??
+                                    $res['memNo']       ??
+                                    $res['member_no']   ??
+                                    $res['memberno']    ??
+                                    $res['MemberNo']    ??
+                                    $res['mem_no']      ??
+                                    $res['custNo']      ??
+                                    $res['customer_no'] ??
                                     ''
                                 ));
                                 $memNoLower = strtolower($memNo);
@@ -1175,13 +1568,19 @@
                                     @endif
                                 </td>
                                 <td>
-                                    <div>{{ $res['gstName'] ?? $res['guestName'] ?? $res['custName'] ?? $res['customer'] ?? 'Unknown' }}</div>
-                                    @if($res['custName'] ?? $res['customer'] ?? null)
-                                        <div style="font-size: 0.75rem; color: var(--text-muted)">{{ $res['custName'] ?? $res['customer'] }}</div>
+                                    @php
+                                        $primaryName = $res['gstName'] ?? $res['guestName'] ?? $res['custName'] ?? $res['customer'] ?? $res['customer_name'] ?? 'Unknown';
+                                        $secondaryName = $res['custName'] ?? $res['customer'] ?? $res['customer_name'] ?? null;
+                                        $showSecondary = $secondaryName && strtolower(trim($secondaryName)) !== strtolower(trim($primaryName));
+                                    @endphp
+                                    <div>{{ $primaryName }}</div>
+                                    @if($showSecondary)
+                                        <div style="font-size: 0.75rem; color: var(--text-muted)">{{ $secondaryName }}</div>
                                     @endif
                                     @if($hasMemberNo)
                                         <div style="margin-top: 0.25rem;">
                                             <a href="{{ route('member.search', ['member_no' => $memNo]) }}" 
+                                               target="_blank"
                                                title="View Member Reservation Filter for {{ $memNo }}" 
                                                style="font-size: 0.75rem; font-family: monospace; color: #818cf8; text-decoration: none; display: inline-flex; align-items: center; gap: 0.25rem; font-weight: 600;"
                                                onmouseover="this.style.textDecoration='underline'"
@@ -1244,6 +1643,67 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SC/PWD Discount Option Modal -->
+<div class="modal fade" id="scDiscountModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-md">
+        <div class="modal-content" style="background: var(--bg-card, #1e293b); border: 1px solid var(--border, #334155); border-radius: 12px; color: white;">
+            <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding: 1rem 1.25rem;">
+                <h5 class="modal-title" style="font-weight: 700; font-size: 1.1rem; color: var(--primary, #fbbf24); display: flex; align-items: center; gap: 8px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                    Apply SC / PWD Privilege
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" style="padding: 1.25rem;">
+                <p id="scModalOccupantName" style="font-weight: 600; font-size: 0.95rem; margin-bottom: 0.25rem; color: #f8fafc;"></p>
+                <p style="font-size: 0.8rem; color: var(--text-muted, #94a3b8); margin-bottom: 1.25rem;">Select which component(s) should receive the Senior Citizen / PWD privilege discount for this occupant:</p>
+                
+                <div class="d-flex flex-column gap-2">
+                    <button type="button" class="btn sc-option-btn text-start p-3" data-mode="air" data-sc-group="airfare" style="background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.3); border-radius: 8px; color: white; transition: all 0.2s;">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <div style="font-weight: 700; color: #60a5fa; font-size: 0.95rem;">✈️ Airfare Only</div>
+                                <div style="font-size: 0.75rem; color: #cbd5e1; margin-top: 2px;">Applies 12% VAT exemption to Airfare. Room rate remains regular.</div>
+                            </div>
+                            <span class="badge bg-primary" style="font-size: 0.7rem;">Airfare</span>
+                        </div>
+                    </button>
+
+                    <button type="button" class="btn sc-option-btn text-start p-3" data-mode="villa" data-sc-group="accommodation" style="background: rgba(168,85,247,0.1); border: 1px solid rgba(168,85,247,0.3); border-radius: 8px; color: white; transition: all 0.2s;">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <div style="font-weight: 700; color: #c084fc; font-size: 0.95rem;">🏡 <span class="sc-villa-label">Villa Only</span></div>
+                                <div style="font-size: 0.75rem; color: #cbd5e1; margin-top: 2px;" class="sc-villa-desc">Applies 12% VAT exemption & 20% discount to Villa accommodation.</div>
+                            </div>
+                            <span class="badge" style="font-size: 0.7rem; background: #9333ea; color: white;">Villa</span>
+                        </div>
+                    </button>
+
+                    <button type="button" class="btn sc-option-btn text-start p-3" data-mode="both" data-sc-group="airfare" style="background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); border-radius: 8px; color: white; transition: all 0.2s;">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <div style="font-weight: 700; color: #4ade80; font-size: 0.95rem;">🌟 Both (Airfare & Villa)</div>
+                                <div style="font-size: 0.75rem; color: #cbd5e1; margin-top: 2px;">Applies Senior/PWD discount to BOTH Airfare and Villa accommodation.</div>
+                            </div>
+                            <span class="badge bg-success" style="font-size: 0.7rem;">Full SC</span>
+                        </div>
+                    </button>
+
+                    <button type="button" class="btn sc-option-btn text-start p-3" data-mode="none" style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; color: white; transition: all 0.2s;">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <div style="font-weight: 700; color: #f87171; font-size: 0.95rem;">❌ Remove Discount (None)</div>
+                                <div style="font-size: 0.75rem; color: #cbd5e1; margin-top: 2px;">Removes SC/PWD discount. Standard regular rates will apply.</div>
+                            </div>
+                            <span class="badge bg-danger" style="font-size: 0.7rem;">Regular</span>
+                        </div>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -1391,6 +1851,7 @@
             const resBtn = tr.find('.show-breakdown-btn');
             const resIdx = resBtn.length ? parseInt(resBtn.data('res-idx'), 10) : -1;
             const res = (resIdx !== -1 && window.__resData) ? window.__resData[resIdx] : null;
+            const property = window.__property || 'island';
 
             // 1. Sync target row's edited cell rate into model
             tr.find('.rate-cell').each(function() {
@@ -1399,7 +1860,7 @@
                 const inp  = cell.find('.rate-input');
                 if (!inp.length) return;
                 const val  = parseFloat(inp.val()) || 0;
-                const isFvn = (Math.round(val * 100) / 100 === 0.01 || Math.round(val * 100) / 100 === 0.02 || Math.round(val * 100) / 100 === 0.5);
+                const isFvn = (Math.round(val * 100) / 100 === 0.01 || Math.round(val * 100) / 100 === 0.02 || Math.round(val * 100) / 100 === 0.03 || Math.round(val * 100) / 100 === 0.5);
 
                 if (res && date) {
                     if (!res.rate) res.rate = [];
@@ -1435,40 +1896,114 @@
             // 2. Perform group-wide calculation
             if (resNo) {
                 const groupRows = $('tr[data-res-no="' + resNo + '"]');
-                const groupSize = Math.max(1, groupRows.length);
-
-                let groupAccTotal = 0;
+                let baseCount = 0;
                 groupRows.each(function() {
-                    $(this).find('.rate-cell').each(function() {
-                        const cell = $(this);
-                        const inp  = cell.find('.rate-input');
-                        if (!inp.length) return;
-                        const val  = parseFloat(inp.val()) || 0;
-                        const frac = Math.round((val - Math.floor(val)) * 100) / 100;
-                        const isFvn = (frac === 0.01 || frac === 0.02 || frac === 0.5);
-                        if (!isFvn) {
-                            groupAccTotal += val;
-                        }
-                    });
+                    const r = $(this);
+                    const isExtra = r.attr('data-is-extra') === 'true' || r.data('is-extra') === true;
+                    if (!isExtra) baseCount++;
+                });
+                const baseGroupSize = baseCount > 0 ? baseCount : Math.max(1, groupRows.length);
+                const firstRow  = groupRows.first();
+
+                // Read group accommodation total from DOM (first row cells — unchanged for grouped view)
+                let groupAccTotal = 0;
+                firstRow.find('.rate-cell').each(function() {
+                    const cell = $(this);
+                    const inp  = cell.find('.rate-input');
+                    let val = 0;
+                    if (inp.length) {
+                        val = parseFloat(inp.val()) || 0;
+                    } else {
+                        const txt = cell.find('.rate-display').text().replace(/,/g, '').trim();
+                        val = parseFloat(txt) || 0;
+                    }
+                    const frac = Math.round((val - Math.floor(val)) * 100) / 100;
+                    const isFvn = (frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5 || isNaN(val));
+                    if (!isFvn) {
+                        groupAccTotal += val;
+                    }
                 });
 
-                const perOccupantAcc = groupAccTotal / groupSize;
-
-                // Update the total rate and sync the model for all rows in the group
+                // Update the total rate for each row using per-occupant model data when available
                 groupRows.each(function() {
                     const currentRow = $(this);
-                    const totalSpan = currentRow.find('.total-val');
-                    const baseFees = parseFloat(totalSpan.data('base-fees')) || 0;
-                    const passengerTotal = perOccupantAcc + baseFees;
-
-                    totalSpan.text(passengerTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+                    const totalSpan  = currentRow.find('.total-val');
+                    const firstCell  = currentRow.find('.rate-cell').first();
+                    const spanAttr   = firstCell.length ? parseInt(firstCell.attr('rowspan') || '1', 10) : 1;
 
                     const rowResBtn = currentRow.find('.show-breakdown-btn');
                     const rowResIdx = rowResBtn.length ? parseInt(rowResBtn.data('res-idx'), 10) : -1;
                     const rowRes = (rowResIdx !== -1 && window.__resData) ? window.__resData[rowResIdx] : null;
+
+                    const domIsExtra = currentRow.attr('data-is-extra') === 'true' || currentRow.data('is-extra') === true;
+                    const rowSpanInfo = (window.__accSpans && window.__accSpans[rowResIdx]) ? window.__accSpans[rowResIdx] : {};
+                    const rowIsExtra = domIsExtra || rowSpanInfo.is_extra_person === true;
+
+                    let rowAcc;
+
+                    // ── Model-first: if this occupant has computed rate data in window.__resData, use it ──
+                    // This ensures per-occupant SC discounts are isolated (e.g., occupant 2 SC ≠ occupant 1)
+                    if (rowRes && rowRes.rate && rowRes.rate.length > 0 && rowRes.rate[0].breakdown) {
+                        let modelSum = 0;
+                        let nightCount = 0;
+                        rowRes.rate.forEach(function(r) {
+                            const val = parseFloat(r.val || 0);
+                            const frac = Math.round((val - Math.floor(val)) * 100) / 100;
+                            const isFvn = (frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5 || isNaN(val));
+                            nightCount++;
+                            if (rowIsExtra && property === 'pines') {
+                                // Extra person: FVN/0/composite → 3700 per night
+                                if (isFvn || val <= 1.0 || val > 3700) {
+                                    modelSum += 3700;
+                                } else {
+                                    modelSum += val;
+                                }
+                            } else if (!isFvn) {
+                                modelSum += val;
+                            }
+                        });
+                        if (rowIsExtra && property === 'pines' && modelSum <= 0) {
+                            const calcAcc = parseFloat((rowRes.calculated_rates && rowRes.calculated_rates.acc) || 0);
+                            modelSum = calcAcc > 0 ? calcAcc : (3700 * Math.max(1, nightCount));
+                        }
+                        rowAcc = rowIsExtra ? modelSum : (modelSum / baseGroupSize);
+                    } else if (firstCell.length && spanAttr === 1) {
+                        // Unspanned DOM cells: read this row's own cells
+                        let sum = 0;
+                        currentRow.find('.rate-cell').each(function() {
+                            const cell = $(this);
+                            const inp  = cell.find('.rate-input');
+                            let val = 0;
+                            if (inp.length) {
+                                val = parseFloat(inp.val()) || 0;
+                            } else {
+                                const txt = cell.find('.rate-display').text().replace(/,/g, '').trim();
+                                val = parseFloat(txt) || 0;
+                            }
+                            const frac = Math.round((val - Math.floor(val)) * 100) / 100;
+                            const isFvn = (frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5 || isNaN(val));
+                            if (!isFvn) sum += val;
+                        });
+                        rowAcc = sum > 0 ? sum : (rowIsExtra ? 3700 : (groupAccTotal / baseGroupSize));
+                    } else {
+                        // Grouped DOM cells: share first-row total divided by base group size
+                        rowAcc = rowIsExtra ? 3700 : (groupAccTotal / baseGroupSize);
+                    }
+
+                    let currentFees = 0;
+                    if (rowRes && rowRes.calculated_rates) {
+                        const cr = rowRes.calculated_rates;
+                        currentFees = (parseFloat(cr.air) || 0) + (parseFloat(cr.han) || 0) + (parseFloat(cr.avi) || 0) + (parseFloat(cr.env) || 0);
+                    } else {
+                        currentFees = parseFloat(totalSpan.data('base-fees')) || 0;
+                    }
+
+                    const passengerTotal = rowAcc + currentFees;
+                    totalSpan.text(passengerTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
                     if (rowRes) {
                         if (!rowRes.calculated_rates) rowRes.calculated_rates = {};
-                        rowRes.calculated_rates.acc = perOccupantAcc;
+                        rowRes.calculated_rates.acc = rowAcc;
                     }
                 });
             } else {
@@ -1480,7 +2015,7 @@
                     if (!inp.length) return;
                     const val  = parseFloat(inp.val()) || 0;
                     const frac = Math.round((val - Math.floor(val)) * 100) / 100;
-                    const isFvn = (frac === 0.01 || frac === 0.02 || frac === 0.5);
+                    const isFvn = (frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5);
                     if (!isFvn) {
                         accTotal += val;
                     }
@@ -1701,6 +2236,14 @@
             params.append('resnolist', resNoList);
             params.append('search', search);
             params.append('per_page', perPage);
+
+            // Carry the SC/PWD override, remove, and target lists into export/print
+            const scOverride = $('#scOverrideInput').val() || '';
+            if (scOverride) params.append('sc_override', scOverride);
+            const scRemove = $('#scRemoveInput').val() || '';
+            if (scRemove) params.append('sc_remove', scRemove);
+            const scTarget = $('#scTargetInput').val() || '';
+            if (scTarget) params.append('sc_target', scTarget);
             
             if (Array.isArray(statusFilter)) {
                 statusFilter.forEach(s => params.append('status_filter[]', s));
@@ -1720,7 +2263,8 @@
         // Checkbox logic for selective export
         function syncResNoList() {
             let listInput = $('input[name="resnolist"]');
-            let currentList = listInput.val().split(',').map(s => s.trim()).filter(s => s !== '');
+            if (!listInput.length) return;
+            let currentList = (listInput.val() || '').split(',').map(s => s.trim()).filter(s => s !== '');
             let currentSet = new Set(currentList);
 
             $('.res-checkbox').each(function() {
@@ -1737,7 +2281,7 @@
         }
 
         // When a checkbox is toggled, update the input
-        $('.res-checkbox').on('change', function() {
+        $(document).on('change', '.res-checkbox', function() {
             syncResNoList();
             if (!$(this).is(':checked')) {
                 $('#selectAllRes').prop('checked', false);
@@ -1745,7 +2289,7 @@
         });
 
         // "Select All" toggle
-        $('#selectAllRes').on('change', function() {
+        $(document).on('change', '#selectAllRes', function() {
             let isChecked = $(this).is(':checked');
             $('.res-checkbox').prop('checked', isChecked);
             syncResNoList();
@@ -1753,6 +2297,402 @@
         const tooltipTriggerList = [].slice.call(document.querySelectorAll('[title]'));
         const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
             return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+
+        // ── SC / PWD Option Modal Logic ──────────────────────────────────
+        let currentScTargetBtn = null;
+
+        function configureScModalOptions(property, isFvn) {
+            const $airfareOptions = $('.sc-option-btn[data-sc-group="airfare"]');
+            const $accommodationOption = $('.sc-option-btn[data-mode="villa"]');
+            const $bothOption = $('.sc-option-btn[data-mode="both"]');
+            const $noneOption = $('.sc-option-btn[data-mode="none"]');
+
+            $airfareOptions.show();
+            $accommodationOption.show();
+            $bothOption.show();
+            $noneOption.show();
+
+            if (property === 'island' && isFvn) {
+                $accommodationOption.hide();
+                $bothOption.hide();
+            } else if (property === 'pines' || property === 'city') {
+                $airfareOptions.hide();
+                $accommodationOption.find('.sc-villa-label').text('Accommodation Only');
+                $accommodationOption.find('.sc-villa-desc').text('Applies 12% VAT exemption & 20% discount to accommodation.');
+            } else {
+                $accommodationOption.find('.sc-villa-label').text('Villa Only');
+                $accommodationOption.find('.sc-villa-desc').text('Applies 12% VAT exemption & 20% discount to Villa accommodation.');
+            }
+        }
+
+        function saveScTargetToDb(property, key, mode) {
+            const parts = String(key).split(':');
+            if (parts.length < 2) return;
+
+            $.ajax({
+                url: '{{ route('sc-targets.store') }}',
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                },
+                data: {
+                    property: property,
+                    res_no: parts[0],
+                    occupant_idx: parts[1],
+                    mode: mode
+                }
+            });
+        }
+
+        $(document).on('click', '.open-sc-modal-btn', function() {
+            currentScTargetBtn = $(this);
+            const guestName   = currentScTargetBtn.data('guest-name') || 'Occupant';
+            const property    = window.__property || 'island';
+            const isExtra     = currentScTargetBtn.data('is-extra') === true || currentScTargetBtn.data('is-extra') === 'true';
+            const isFvn       = !isExtra && (currentScTargetBtn.data('is-fvn') === true || currentScTargetBtn.data('is-fvn') === 'true');
+
+            $('#scModalOccupantName').text(guestName);
+            configureScModalOptions(property, isFvn);
+
+            const scModalEl = document.getElementById('scDiscountModal');
+            if (scModalEl) {
+                const scModal = bootstrap.Modal.getOrCreateInstance(scModalEl);
+                scModal.show();
+            }
+        });
+
+        $(document).on('click', '.sc-option-btn', function() {
+            if (!currentScTargetBtn) return;
+            let selectedMode = $(this).data('mode'); // "air", "villa", "both", "none"
+            const property = window.__property || 'island';
+            const isExtra = currentScTargetBtn.data('is-extra') === true || currentScTargetBtn.data('is-extra') === 'true';
+            const isFvn = !isExtra && (currentScTargetBtn.data('is-fvn') === true || currentScTargetBtn.data('is-fvn') === 'true');
+
+            if (property === 'island' && isFvn && !['air', 'none'].includes(selectedMode)) {
+                return;
+            }
+            if ((property === 'pines' || property === 'city') && ['air', 'both'].includes(selectedMode)) {
+                return;
+            }
+
+            const key = currentScTargetBtn.data('override-key');
+            const tr  = currentScTargetBtn.closest('tr');
+
+            // Hide modal
+            const scModalEl = document.getElementById('scDiscountModal');
+            if (scModalEl) {
+                const modalInstance = bootstrap.Modal.getInstance(scModalEl);
+                if (modalInstance) modalInstance.hide();
+            }
+
+            // 1. Sync hidden input field sc_target
+            const scTargetInput = $('#scTargetInput');
+            let list = scTargetInput.val() ? scTargetInput.val().split(',').map(s => s.trim()).filter(Boolean) : [];
+            list = list.filter(item => !item.startsWith(key + ':'));
+            list.push(key + ':' + selectedMode);
+            scTargetInput.val(list.join(','));
+
+            // Clean legacy override/remove for this key
+            const removeInput = $('#scRemoveInput');
+            let remList = removeInput.val() ? removeInput.val().split(',').map(s => s.trim()).filter(Boolean) : [];
+            remList = remList.filter(k => k !== key);
+            if (selectedMode === 'none') {
+                remList.push(key);
+            }
+            removeInput.val(remList.join(','));
+
+            const overrideInput = $('#scOverrideInput');
+            let ovList = overrideInput.val() ? overrideInput.val().split(',').map(s => s.trim()).filter(Boolean) : [];
+            ovList = ovList.filter(k => k !== key);
+            overrideInput.val(ovList.join(','));
+
+            // Sync Export links
+            updateLinks();
+
+            saveScTargetToDb(window.__property || 'island', key, selectedMode);
+
+            // 2. Update UI Badge on button
+            currentScTargetBtn.data('mode', selectedMode).attr('data-mode', selectedMode);
+            let badgeHtml = '';
+            if (selectedMode === 'both') {
+                badgeHtml = '<span class="sc-badge-label" style="color: #4ade80; background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.4); padding: 2px 6px; border-radius: 4px;">🌟 Both SC</span>';
+            } else if (selectedMode === 'villa') {
+                const villaLabel = (window.__property === 'pines' || window.__property === 'city') ? 'Accommodation Only' : 'Villa Only';
+                badgeHtml = '<span class="sc-badge-label" style="color: #c084fc; background: rgba(168, 85, 247, 0.15); border: 1px solid rgba(168, 85, 247, 0.4); padding: 2px 6px; border-radius: 4px;">🏡 ' + villaLabel + '</span>';
+            } else if (selectedMode === 'air') {
+                badgeHtml = '<span class="sc-badge-label" style="color: #60a5fa; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.4); padding: 2px 6px; border-radius: 4px;">✈️ Airfare Only</span>';
+            } else {
+                badgeHtml = '<span class="sc-badge-label" style="color: var(--text-muted, #94a3b8); background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); padding: 2px 6px; border-radius: 4px;">Regular</span>';
+            }
+            currentScTargetBtn.html(badgeHtml);
+
+            // 3. Update Model in window.__resData
+            const resBtn = tr.find('.show-breakdown-btn');
+            const resIdx = resBtn.length ? parseInt(resBtn.data('res-idx'), 10) : -1;
+            const res    = (resIdx !== -1 && window.__resData) ? window.__resData[resIdx] : null;
+
+            if (res) {
+                const hasVillaSc = (selectedMode === 'villa' || selectedMode === 'both');
+                const hasAirSc   = (selectedMode === 'air'   || selectedMode === 'both');
+
+                res.sc_mode = selectedMode;
+                res.privCard = hasVillaSc ? 'Senior Citizen' : 'N';
+
+                // Recalculate Airfare rate in res.calculated_rates
+                let currentAir = parseFloat(res.calculated_rates.air || 0);
+                const isEmployee = !!res.is_employee;
+                const isMember   = ['member', 'spouse', 'dependent', 'authorized'].some(t => (res.gstType || '').toLowerCase().includes(t));
+                const defaultRegular = isEmployee ? 0 : (isMember ? 4200 : 8400);
+
+                let baseAir = 0;
+                if (res.calculated_rates.air_base !== undefined) {
+                    baseAir = res.calculated_rates.air_base;
+                } else {
+                    if (currentAir > 0 && Math.abs(currentAir - Math.round(defaultRegular / 1.12)) < 50) {
+                        baseAir = defaultRegular;
+                    } else if (currentAir > 0) {
+                        baseAir = currentAir;
+                    } else {
+                        baseAir = defaultRegular;
+                    }
+                    res.calculated_rates.air_base = baseAir;
+                }
+
+                if (hasAirSc && !isEmployee) {
+                    res.calculated_rates.air = Math.round((baseAir / 1.12) * 100) / 100;
+                } else {
+                    res.calculated_rates.air = baseAir;
+                }
+
+                // Update Villa daily rate calculations for reservation group
+                const resNo = tr.data('res-no');
+                const groupRows = window.__resData.filter(item => (item.resNo || item.conf) === (res.resNo || res.conf));
+                const firstRes  = groupRows[0] || res;
+                const si = (window.__accSpans && window.__accSpans[resIdx]) ? window.__accSpans[resIdx] : {};
+                const isExtraOcc = si.is_extra_person || tr.data('is-extra') === true;
+
+                (res.rate || []).forEach(r => {
+                    const val  = parseFloat(r.val || 0);
+                    const frac = Math.round((val - Math.floor(val)) * 100) / 100;
+                    const isFvn = !isExtraOcc && (frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5);
+
+                    if (!isFvn) {
+                        if (!r.breakdown) r.breakdown = {};
+                        let gross = r.breakdown.gross_share || 0;
+                        if (isExtraOcc && (gross > 3700 || gross === 0 || val <= 1.0 || frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5)) {
+                            gross = 3700;
+                        } else if (!gross || gross === val) {
+                            gross = r.breakdown.is_discounted ? Math.round((val * 14 / 11) * 100) / 100 : val;
+                        }
+                        r.breakdown.gross_share = gross;
+
+                        const scApplyDiscount = @json(!isset($settings['discounts']['sc_pwd']['apply_discount']) || !empty($settings['discounts']['sc_pwd']['apply_discount']));
+                        const scDiscountPercent = @json((float)($settings['discounts']['sc_pwd']['additional_discount_percent'] ?? 20));
+                        const scRemoveVat = @json(!empty($settings['discounts']['sc_pwd']['remove_vat']));
+                        const vatRateVal = @json((float)($settings['discounts']['vat_rate'] ?? 12));
+
+                        if (hasVillaSc) {
+                            const base = scRemoveVat ? (gross / (1 + (vatRateVal / 100))) : gross;
+                            const discFrac = scApplyDiscount ? (scDiscountPercent / 100) : 0;
+                            const discount = base * discFrac;
+                            const netBase = base - discount;
+                            const sc = netBase * 0.10;
+                            const newDailyVal = Math.round((netBase + sc) * 100) / 100;
+
+                            r.val = newDailyVal;
+                            r.breakdown.is_discounted = true;
+                            r.breakdown.base = base;
+                            r.breakdown.discount = discount;
+                            r.breakdown.sc = sc;
+                            r.breakdown.vat = 0;
+                        } else {
+                            const base = gross / (1 + (vatRateVal / 100));
+                            const sc = base * 0.10;
+                            const vat = base * (vatRateVal / 100);
+
+                            r.val = Math.round(gross * 100) / 100;
+                            r.breakdown.is_discounted = false;
+                            r.breakdown.base = base;
+                            r.breakdown.discount = 0;
+                            r.breakdown.sc = sc;
+                            r.breakdown.vat = vat;
+                        }
+                    }
+                });
+
+            }
+
+            // 4. Recalculate this occupant's row first
+            recalculateRow(tr);
+
+            // 5. Unspan / Respan accommodation cells so each occupant sees their own per-person rate
+            const resNo     = tr.data('res-no');
+            const groupTrs  = $('tr[data-res-no="' + resNo + '"]');
+            
+            // Separate base occupant rows from extra occupant rows
+            const baseTrs  = [];
+            const extraTrs = [];
+            groupTrs.each(function() {
+                const row    = $(this);
+                const rowBtn = row.find('.show-breakdown-btn');
+                const rowIdx = rowBtn.length ? parseInt(rowBtn.data('res-idx'), 10) : -1;
+                const si     = (window.__accSpans && window.__accSpans[rowIdx]) ? window.__accSpans[rowIdx] : {};
+                const isExtra = si.is_extra_person || row.data('is-extra') === true;
+                if (isExtra) {
+                    extraTrs.push(row);
+                } else {
+                    baseTrs.push(row);
+                }
+            });
+
+            const baseGroupSize = baseTrs.length;
+
+            if (baseGroupSize > 1) {
+                // Check if ANY base occupant (not extra) currently has villa/both SC mode
+                let anyVillaDiscount = false;
+                baseTrs.forEach(function(row) {
+                    const scBtn = row.find('.open-sc-modal-btn');
+                    const mode = scBtn.attr('data-mode') || scBtn.data('mode') || 'none';
+                    if (mode === 'villa' || mode === 'both') anyVillaDiscount = true;
+                });
+
+                const firstTr   = $(baseTrs[0]);
+                const dateCells = firstTr.find('.rate-cell');
+
+                // ── Helper: per-occupant nightly value from model ──
+                // Reads res.rate from window.__resData so SC vs regular is already baked in.
+                function perOccFromModel(rowTr) {
+                    const rowBtn = rowTr.find('.show-breakdown-btn');
+                    const rowIdx = rowBtn.length ? parseInt(rowBtn.data('res-idx'), 10) : -1;
+                    const rowRes = (rowIdx !== -1 && window.__resData) ? window.__resData[rowIdx] : null;
+                    const si     = (window.__accSpans && window.__accSpans[rowIdx]) ? window.__accSpans[rowIdx] : {};
+                    const isExtra = si.is_extra_person || rowTr.data('is-extra') === true;
+                    if (!rowRes || !rowRes.rate) return null;
+                    let modelSum = 0;
+                    rowRes.rate.forEach(function(r) {
+                        const val  = parseFloat(r.val || 0);
+                        const frac = Math.round((val - Math.floor(val)) * 100) / 100;
+                        // 0.01 = 1 FVN, 0.02 = 1.5 FVN, 0.03 = 0.5 FVN (split marker), 0.5 = 0.5 FVN — never add these to the sum
+                        const isFvn = (frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5 || isNaN(val));
+                        if (!isFvn) modelSum += val;
+                    });
+                    const nights = rowRes.rate.filter(r => {
+                        const v = parseFloat(r.val || 0);
+                        const f = Math.round((v - Math.floor(v)) * 100) / 100;
+                        return !(f === 0.01 || f === 0.02 || f === 0.03 || f === 0.5 || isNaN(v));
+                    }).length || 1;
+                    const perNight = modelSum / nights;
+                    let perOccShare = perNight;
+                    if (isExtra && (perNight > 3700 || perNight <= 1.0)) {
+                        return 3700;
+                    }
+                    if (perNight > 4000 && baseGroupSize > 1 && !isExtra) {
+                        perOccShare = perNight / baseGroupSize;
+                    }
+                    return isExtra ? perNight : perOccShare;
+                }
+
+                if (anyVillaDiscount) {
+                    // ── UNSPAN base occupants: give each base occupant row its own accommodation cell ──
+                    dateCells.each(function() {
+                        const cell = $(this);
+                        const baseRate = parseFloat(cell.data('base-rate') || cell.attr('data-base-rate') || 0);
+                        const frac = Math.round((baseRate - Math.floor(baseRate)) * 100) / 100;
+                        const isFvn = (frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5);
+
+                        cell.attr('rowspan', 1);
+                        if (!isFvn) {
+                            const perOcc = perOccFromModel(firstTr);
+                            if (perOcc !== null) {
+                                cell.find('.rate-display').text(
+                                    perOcc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                );
+                            }
+                        }
+                    });
+
+                    baseTrs.forEach(function(rowTr, i) {
+                        if (i === 0) return;
+                        const perOcc = perOccFromModel(rowTr);
+
+                        dateCells.each(function() {
+                            const refCell  = $(this);
+                            const date     = refCell.data('date');
+                            const baseRate = parseFloat(refCell.data('base-rate') || refCell.attr('data-base-rate') || 0);
+                            const frac     = Math.round((baseRate - Math.floor(baseRate)) * 100) / 100;
+                            const isFvn    = (frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5);
+                            const dispVal  = (perOcc !== null && !isFvn)
+                                ? perOcc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                : baseRate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+                            const existing = rowTr.find('.rate-cell[data-date="' + date + '"]');
+                            if (existing.length === 0) {
+                                const newCell = $('<td class="rate-cell" style="vertical-align: middle; text-align: center; cursor: pointer;"></td>');
+                                newCell.attr('data-date', date);
+                                newCell.attr('data-base-rate', baseRate);
+                                newCell.attr('data-orig-rowspan', 0);
+                                newCell.attr('rowspan', 1);
+                                newCell.attr('data-inserted', '1');
+                                newCell.html('<div class="stay-block"><span class="rate-display">' + dispVal + '</span></div>');
+                                const totalCell = rowTr.find('.row-total');
+                                if (totalCell.length) newCell.insertBefore(totalCell);
+                                else rowTr.append(newCell);
+                            } else if (!isFvn) {
+                                existing.find('.rate-display').text(dispVal);
+                            }
+                        });
+                    });
+
+                } else {
+                    // ── RESPAN base occupants only: remove non-first base row rate cells, restore first base row cell ──
+                    baseTrs.forEach(function(rowTr, i) {
+                        if (i === 0) return;
+                        dateCells.each(function() {
+                            const date = $(this).data('date');
+                            rowTr.find('.rate-cell[data-date="' + date + '"]').remove();
+                        });
+                    });
+
+                    dateCells.each(function() {
+                        const cell    = $(this);
+                        const rawBase = parseFloat(cell.attr('data-base-rate') || cell.data('base-rate') || 0);
+
+                        const rawFrac = Math.round((rawBase - Math.floor(rawBase)) * 100) / 100;
+                        const isFvn   = (rawFrac === 0.01 || rawFrac === 0.02 || rawFrac === 0.03 || rawFrac === 0.5);
+
+                        cell.attr('rowspan', baseGroupSize);
+
+                        if (!isFvn) {
+                            cell.find('.rate-display').text(
+                                rawBase.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                            );
+                        }
+                    });
+                }
+
+                // Ensure extra occupant rows retain their own rate-cells (rowspan=1) and updated displays
+                extraTrs.forEach(function(rowTr) {
+                    const perOcc = perOccFromModel(rowTr);
+                    const cells = rowTr.find('.rate-cell');
+                    cells.each(function() {
+                        const cell = $(this);
+                        const date = cell.data('date');
+                        const baseRate = parseFloat(cell.data('base-rate') || cell.attr('data-base-rate') || 0);
+                        const frac = Math.round((baseRate - Math.floor(baseRate)) * 100) / 100;
+                        const isFvn = (frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5);
+                        cell.attr('rowspan', 1);
+                        if (!isFvn && perOcc !== null) {
+                            cell.find('.rate-display').text(
+                                perOcc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                            );
+                        }
+                    });
+                });
+
+                // Recalculate all rows — model-first logic gives each occupant their own correct total
+                groupTrs.each(function() { recalculateRow(this); });
+            }
         });
 
         // Breakdown Modal Logic
@@ -1767,8 +2707,12 @@
 
             // Find all occupants of this reservation group to compute distributed share
             const groupRows = window.__resData.filter(item => (item.resNo || item.conf) === (res.resNo || res.conf));
-            const groupSize = isExtraPerson ? 1 : (res.group_size || spanInfo.group_size || Math.max(1, groupRows.length));
-            const ratesToUse = res.rate || [];
+            const firstRes = groupRows[0] || res;
+            let groupSize = isExtraPerson ? 1 : (res.group_size || spanInfo.group_size || Math.max(1, groupRows.length));
+            if (property === 'pines' && !isExtraPerson && groupSize < 2) {
+                groupSize = 2;
+            }
+            const ratesToUse = (res.rate && res.rate.length > 0) ? res.rate : (firstRes.rate || []);
 
             const privCard = (res.privCard || res.privcard || '').trim();
             const privCardLower = privCard.toLowerCase();
@@ -1810,33 +2754,88 @@
                 const b = r.breakdown;
                 if (!b) return;
 
-                const isFvn = (Math.round(r.val * 100) / 100 === 0.01 || Math.round(r.val * 100) / 100 === 0.02 || Math.round(r.val * 100) / 100 === 0.5);
+                const isFvn = (Math.round(r.val * 100) / 100 === 0.01 || Math.round(r.val * 100) / 100 === 0.02 || Math.round(r.val * 100) / 100 === 0.03 || Math.round(r.val * 100) / 100 === 0.5);
 
-                const dailyVal = isFvn ? r.val : (parseFloat(r.val || 0) / groupSize);
-                const baseVal = parseFloat(b.base || 0) / groupSize;
-                const scVal = parseFloat(b.sc || 0) / groupSize;
-                const vatVal = parseFloat(b.vat || 0) / groupSize;
-                const discVal = parseFloat(b.discount || 0) / groupSize;
-                const grossShareVal = parseFloat(b.gross_share || 0) / groupSize;
+                const rawVal = parseFloat(r.val || 0);
+                const rawBase = parseFloat(b.base || 0);
+                const isRoomFullRate = (rawVal > 3000 || rawBase > 3000);
+                const divisor = (property === 'pines' && !isExtraPerson)
+                    ? 1
+                    : ((isRoomFullRate && groupSize > 1 && !isExtraPerson) ? groupSize : 1);
+
+                let dailyVal      = isFvn ? r.val : (rawVal / divisor);
+                let baseVal       = rawBase / divisor;
+                let scVal         = parseFloat(b.sc || 0) / divisor;
+                let vatVal        = parseFloat(b.vat || 0) / divisor;
+                let discVal       = parseFloat(b.discount || 0) / divisor;
+                let grossShareVal = parseFloat(b.gross_share || 0) / divisor;
+
+                // Pines base occupants: show full room rate as reference; daily/total use per-occupant share
+                if (property === 'pines' && !isExtraPerson && !isFvn) {
+                    grossShareVal = parseFloat(b.gross_share || 0);
+                    const occShare = rawVal;
+                    baseVal       = parseFloat(b.base || 0) / (groupSize > 1 ? groupSize : 1);
+                    scVal         = parseFloat(b.sc || 0) / (groupSize > 1 ? groupSize : 1);
+                    vatVal        = parseFloat(b.vat || 0) / (groupSize > 1 ? groupSize : 1);
+                    discVal       = parseFloat(b.discount || 0) / (groupSize > 1 ? groupSize : 1);
+                    dailyVal      = b.is_discounted
+                        ? Math.round((baseVal + scVal) * 100) / 100
+                        : occShare;
+                }
+
+                if (isExtraPerson && !isFvn && (rawVal > 3700 || rawBase > 3700 || grossShareVal > 3700)) {
+                    grossShareVal = 3700;
+                    if (b.is_discounted) {
+                        const scApplyDiscount = @json(!isset($settings['discounts']['sc_pwd']['apply_discount']) || !empty($settings['discounts']['sc_pwd']['apply_discount']));
+                        const scDiscountPercent = @json((float)($settings['discounts']['sc_pwd']['additional_discount_percent'] ?? 20));
+                        const scRemoveVat = @json(!empty($settings['discounts']['sc_pwd']['remove_vat']));
+                        const vatRateVal = @json((float)($settings['discounts']['vat_rate'] ?? 12));
+
+                        baseVal = scRemoveVat ? Math.round((3700 / (1 + (vatRateVal / 100))) * 100) / 100 : 3700;
+                        discVal = (scApplyDiscount && scDiscountPercent > 0) ? Math.round((baseVal * (scDiscountPercent / 100)) * 100) / 100 : 0;
+                        const netBase = baseVal - discVal;
+                        scVal = Math.round((netBase * 0.10) * 100) / 100;
+                        vatVal = 0;
+                        dailyVal = Math.round((netBase + scVal) * 100) / 100;
+                    } else {
+                        baseVal = Math.round((3700 / 1.12) * 100) / 100;
+                        discVal = 0;
+                        scVal = Math.round((baseVal * 0.10) * 100) / 100;
+                        vatVal = Math.round((baseVal * 0.12) * 100) / 100;
+                        dailyVal = 3700;
+                    }
+                }
 
                 if (!isFvn) {
-                    overallTotal += dailyVal;
+                    if (property === 'pines' && !isExtraPerson) {
+                        overallTotal += rawVal;
+                    } else {
+                        overallTotal += dailyVal;
+                    }
                 }
                 if (b.is_discounted) hasDiscount = true;
 
                 const dateStr = r.date;
                 let detailHtml = '';
 
-                // Pines: show SC/VAT/Discount breakdown for base occupants and extra person
-                // Island: full breakdown as before
+                // Pines & Island: show SC/VAT/Discount breakdown for base occupants and extra person
                 const showBreakdown = (property === 'island' || property === 'pines');
 
                 if (showBreakdown) {
+                    const scApplyDiscount = @json(!isset($settings['discounts']['sc_pwd']['apply_discount']) || !empty($settings['discounts']['sc_pwd']['apply_discount']));
+                    const scDiscountPercent = @json((float)($settings['discounts']['sc_pwd']['additional_discount_percent'] ?? 20));
+                    const scRemoveVat = @json(!empty($settings['discounts']['sc_pwd']['remove_vat']));
+
                     if (b.is_discounted) {
+                        const discLine = (scApplyDiscount && discVal > 0)
+                            ? `<div style="font-size: 0.7rem; color: #4ade80;">- ${scDiscountPercent}% Disc: ₱${discVal.toFixed(2)}</div>`
+                            : '';
+                        const vatLine = scRemoveVat ? `<div style="font-size: 0.7rem; color: #f87171;">VAT EXEMPT</div>` : '';
+
                         detailHtml = `
-                            <div style="font-size: 0.7rem; color: #4ade80;">- 20% Disc: ₱${discVal.toFixed(2)}</div>
+                            ${discLine}
                             <div style="font-size: 0.7rem; color: var(--text-muted);">+ 10% SC: ₱${scVal.toFixed(2)}</div>
-                            <div style="font-size: 0.7rem; color: #f87171;">VAT EXEMPT</div>
+                            ${vatLine}
                         `;
                     } else {
                         detailHtml = `
@@ -1863,7 +2862,7 @@
                             </td>
                         </tr>
                     `;
-                } else if (property === 'pines' && isExtraPerson) {
+                } else if (isExtraPerson) {
                     // Extra person row: show flat 3,700/night rate
                     html += `
                         <tr style="background: rgba(251,191,36,0.05);">
@@ -1872,7 +2871,7 @@
                                 <div style="font-weight: 500; color: #fbbf24;">Extra Person Charge${b.is_discounted ? ' <span style="font-size: 0.65rem; color: #4ade80;">(Senior/PWD)</span>' : ''}</div>
                                 <div style="font-size: 0.65rem; color: var(--text-muted);">Base Rate: ₱3,700.00/night</div>
                             </td>
-                            <td>₱${dailyVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            <td>₱${baseVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                             <td>${showBreakdown ? detailHtml : '-'}</td>
                             <td style="font-weight: bold; text-align: right; color: #fbbf24;">
                                 ₱${dailyVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
@@ -1884,8 +2883,8 @@
                         <tr>
                             <td style="white-space: nowrap; font-weight: 600;">${dateStr}</td>
                             <td>
-                                <div style="font-weight: 500;">${b.is_discounted ? (isValidCard ? privCard : 'Senior/PWD') : 'Regular'} ${groupSize > 1 ? '<span style="font-size: 0.7rem; color: var(--primary);">(' + groupSize + '-Pax Share)</span>' : ''}</div>
-                                <div style="font-size: 0.65rem; color: var(--text-muted);">Gross Share: ₱${grossShareVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+                                <div style="font-weight: 500;">${b.is_discounted ? (isValidCard ? privCard : 'Senior/PWD') : 'Regular'} ${(property === 'pines') ? '<span style="font-size: 0.7rem; color: var(--primary);">(Per Occupant)</span>' : (groupSize > 1 ? '<span style="font-size: 0.7rem; color: var(--primary);">(' + groupSize + '-Pax Share)</span>' : '')}</div>
+                                <div style="font-size: 0.65rem; color: var(--text-muted);">Room Rate: ₱${grossShareVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}/night</div>
                             </td>
                             <td>₱${baseVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                             <td>${showBreakdown ? detailHtml : '-'}</td>
