@@ -176,10 +176,12 @@ abstract class AbstractPropertyHandler
 
         if (!$resp->successful()) {
             \Illuminate\Support\Facades\Log::error("List API request failed for [{$this->slug}]: HTTP {$resp->status()}", [
-                'url'  => $this->listApiUrl,
-                'body' => substr($resp->body(), 0, 500),
+                'url'      => $this->listApiUrl,
+                'fromdate' => $fromDate,
+                'todate'   => $toDate,
+                'body'     => substr($resp->body(), 0, 1000),
             ]);
-            throw new \RuntimeException("API Error ({$this->label()} List): HTTP {$resp->status()} - " . \Illuminate\Support\Str::limit(strip_tags($resp->body()), 120));
+            throw new \RuntimeException("API Error ({$this->label()} List from {$this->listApiUrl}?fromdate={$fromDate}&todate={$toDate}): HTTP {$resp->status()} - " . \Illuminate\Support\Str::limit(strip_tags($resp->body()), 120));
         }
 
         return $resp->json()['msg'] ?? [];
