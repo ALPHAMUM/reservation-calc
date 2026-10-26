@@ -44,6 +44,10 @@ class BalesinPinesController extends Controller
         $detailApiUrl = config('services.balesin_pines.detail_url');
         $apiKey       = config('services.balesin_pines.api_key');
 
+        if (empty($listApiUrl) || empty($detailApiUrl) || empty($apiKey)) {
+            return back()->with('error', 'Balesin Pines API configuration is missing. Please check .env and run "php artisan config:clear" on the server.');
+        }
+
         $reservations = [];
         $ids = [];
         $listData = [];
@@ -351,6 +355,10 @@ class BalesinPinesController extends Controller
         $listApiUrl   = config('services.balesin_pines.list_url');
         $detailApiUrl = config('services.balesin_pines.detail_url');
         $apiKey       = config('services.balesin_pines.api_key');
+
+        if (empty($listApiUrl) || empty($detailApiUrl) || empty($apiKey)) {
+            return back()->with('error', 'Balesin Pines API configuration is missing. Please check .env and run "php artisan config:clear" on the server.');
+        }
 
         $ids = [];
         $listData = [];

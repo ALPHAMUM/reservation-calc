@@ -62,18 +62,26 @@ abstract class AbstractPropertyHandler
         $dateCols          = [];
         $error             = null;
 
-        $scTargetService = app(\App\Services\ScTargetService::class);
-        $this->scOverrideRaw = (string) $request->get('sc_override', '');
-        $this->scRemoveRaw   = (string) $request->get('sc_remove', '');
-        $requestScTargetRaw  = (string) $request->get('sc_target', '');
-        $resNosForSc = [];
-        if (is_string($resNoList) && trim($resNoList) !== '') {
-            $resNosForSc = array_values(array_filter(array_map('trim', explode(',', $resNoList))));
+        try {
+            $scTargetService = app(\App\Services\ScTargetService::class);
+            $this->scOverrideRaw = (string) $request->get('sc_override', '');
+            $this->scRemoveRaw   = (string) $request->get('sc_remove', '');
+            $requestScTargetRaw  = (string) $request->get('sc_target', '');
+            $resNosForSc = [];
+            if (is_string($resNoList) && trim($resNoList) !== '') {
+                $resNosForSc = array_values(array_filter(array_map('trim', explode(',', $resNoList))));
+            }
+            $this->scTargetRaw   = $scTargetService->resolveRaw($this->slug, $requestScTargetRaw, $resNosForSc);
+            $this->scTargetMap   = $scTargetService->parseRaw($this->scTargetRaw);
+            $this->scOverrideMap = $scTargetService->parseOverrideRaw($this->scOverrideRaw);
+            $this->scRemoveMap   = $scTargetService->parseRemoveRaw($this->scRemoveRaw);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("Could not resolve SC targets for [{$this->slug}]: " . $e->getMessage());
+            $this->scTargetRaw   = '';
+            $this->scTargetMap   = [];
+            $this->scOverrideMap = [];
+            $this->scRemoveMap   = [];
         }
-        $this->scTargetRaw   = $scTargetService->resolveRaw($this->slug, $requestScTargetRaw, $resNosForSc);
-        $this->scTargetMap   = $scTargetService->parseRaw($this->scTargetRaw);
-        $this->scOverrideMap = $scTargetService->parseOverrideRaw($this->scOverrideRaw);
-        $this->scRemoveMap   = $scTargetService->parseRemoveRaw($this->scRemoveRaw);
 
         try {
             $listData = [];
@@ -124,8 +132,10 @@ abstract class AbstractPropertyHandler
             }
 
         } catch (\Illuminate\Http\Client\ConnectionException $e) {
-            $error = 'Connection Error: Could not reach the API server.';
+            \Illuminate\Support\Facades\Log::error("API Connection error for [{$this->slug}]: " . $e->getMessage());
+            $error = 'Connection Error: Could not reach the API server (' . $this->label() . '). Please check network/DNS connectivity.';
         } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("API/System error for [{$this->slug}]: " . $e->getMessage());
             $error = 'System Error: ' . $e->getMessage();
         }
 
@@ -154,12 +164,25 @@ abstract class AbstractPropertyHandler
 
     protected function fetchList(string $fromDate, string $toDate): array
     {
+        if (empty($this->listApiUrl)) {
+            \Illuminate\Support\Facades\Log::error("List API URL is not configured for property [{$this->slug}]. Check .env or run 'php artisan config:clear'.");
+            throw new \RuntimeException("API List URL is not configured for {$this->label()}. Please check .env and run 'php artisan config:clear'.");
+        }
+
         $resp = Http::withHeaders(['Authorization' => $this->apiKey])
             ->withoutVerifying()
             ->timeout(30)
             ->get($this->listApiUrl, ['fromdate' => $fromDate, 'todate' => $toDate]);
 
-        return $resp->successful() ? ($resp->json()['msg'] ?? []) : [];
+        if (!$resp->successful()) {
+            \Illuminate\Support\Facades\Log::error("List API request failed for [{$this->slug}]: HTTP {$resp->status()}", [
+                'url'  => $this->listApiUrl,
+                'body' => substr($resp->body(), 0, 500),
+            ]);
+            throw new \RuntimeException("API Error ({$this->label()} List): HTTP {$resp->status()} - " . \Illuminate\Support\Str::limit(strip_tags($resp->body()), 120));
+        }
+
+        return $resp->json()['msg'] ?? [];
     }
 
     protected function fetchDetail(string $resNoList, array $listData = []): array
@@ -178,13 +201,22 @@ abstract class AbstractPropertyHandler
         }
 
         foreach ($chunks as $chunk) {
+            if (empty($this->detailApiUrl)) {
+                \Illuminate\Support\Facades\Log::error("Detail API URL is not configured for property [{$this->slug}]. Check .env or run 'php artisan config:clear'.");
+                throw new \RuntimeException("Detail API URL is not configured for {$this->label()}. Please check .env and run 'php artisan config:clear'.");
+            }
+
             $resp = Http::withHeaders(['Authorization' => $this->apiKey])
                 ->withoutVerifying()
                 ->timeout(30)
                 ->get($this->detailApiUrl, ['resnolist' => implode(',', $chunk)]);
 
             if (!$resp->successful()) {
-                throw new \RuntimeException('API Error (Detail): Status ' . $resp->status());
+                \Illuminate\Support\Facades\Log::error("Detail API request failed for [{$this->slug}]: HTTP {$resp->status()}", [
+                    'url'  => $this->detailApiUrl,
+                    'body' => substr($resp->body(), 0, 500),
+                ]);
+                throw new \RuntimeException("API Error ({$this->label()} Detail): HTTP " . $resp->status() . ' - ' . \Illuminate\Support\Str::limit(strip_tags($resp->body()), 120));
             }
 
             $msgs = $resp->json()['msg'] ?? [];

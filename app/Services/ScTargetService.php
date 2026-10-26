@@ -41,17 +41,26 @@ class ScTargetService
 
     public function loadFromDb(string $property, array $resNos = []): array
     {
-        $query = ReservationScTarget::where('property', $property);
-        if ($resNos !== []) {
-            $query->whereIn('res_no', $resNos);
-        }
+        try {
+            if (!\Illuminate\Support\Facades\Schema::hasTable('reservation_sc_targets')) {
+                return [];
+            }
 
-        $map = [];
-        foreach ($query->get() as $row) {
-            $map[$row->res_no][(int) $row->occupant_idx] = $row->mode;
-        }
+            $query = ReservationScTarget::where('property', $property);
+            if ($resNos !== []) {
+                $query->whereIn('res_no', $resNos);
+            }
 
-        return $map;
+            $map = [];
+            foreach ($query->get() as $row) {
+                $map[$row->res_no][(int) $row->occupant_idx] = $row->mode;
+            }
+
+            return $map;
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('ScTargetService loadFromDb failed: ' . $e->getMessage());
+            return [];
+        }
     }
 
     public function resolveRaw(string $property, string $requestRaw, array $resNos = []): string
@@ -74,14 +83,22 @@ class ScTargetService
             return;
         }
 
-        ReservationScTarget::updateOrCreate(
-            [
-                'property'     => $property,
-                'res_no'       => $resNo,
-                'occupant_idx' => $occupantIdx,
-            ],
-            ['mode' => $mode]
-        );
+        try {
+            if (!\Illuminate\Support\Facades\Schema::hasTable('reservation_sc_targets')) {
+                return;
+            }
+
+            ReservationScTarget::updateOrCreate(
+                [
+                    'property'     => $property,
+                    'res_no'       => $resNo,
+                    'occupant_idx' => $occupantIdx,
+                ],
+                ['mode' => $mode]
+            );
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('ScTargetService save failed: ' . $e->getMessage());
+        }
     }
 
     public function parseOverrideRaw(string $raw): array
