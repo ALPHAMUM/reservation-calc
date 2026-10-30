@@ -402,8 +402,8 @@
                     <td style="text-align: center;">{{ $res['age'] ?? '' }}</td>
                     <td>{{ $res['dateOfBirth'] ?? '' }}</td>
 
-                    <td style="text-align: center;">{{ ($d = $res['arrdt'] ?? $res['arrDt'] ?? '') ? (strtotime($d) ? strtoupper(date('d/M/Y', strtotime($d))) : $d) : '' }}</td>
-                    <td style="text-align: center;">{{ ($d = $res['depdt'] ?? $res['depDt'] ?? '') ? (strtotime($d) ? strtoupper(date('d/M/Y', strtotime($d))) : $d) : '' }}</td>
+                    <td style="text-align: center;">{{ ($d = $res['arrdt'] ?? $res['arrDt'] ?? '') ? (strtotime($d) ? strtoupper(date('d-M-Y', strtotime($d))) : $d) : '' }}</td>
+                    <td style="text-align: center;">{{ ($d = $res['depdt'] ?? $res['depDt'] ?? '') ? (strtotime($d) ? strtoupper(date('d-M-Y', strtotime($d))) : $d) : '' }}</td>
 
                     @php
                         $span        = $res['acc_span'] ?? 1;

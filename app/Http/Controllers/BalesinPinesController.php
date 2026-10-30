@@ -785,8 +785,8 @@ class BalesinPinesController extends Controller
 
                 $arrDt = $res['arrdt'] ?? $res['arrDt'] ?? '';
                 $depDt = $res['depdt'] ?? $res['depDt'] ?? '';
-                echo '<td style=\'mso-number-format:"\\@"; text-align:center;\'>' . ($arrDt ? (strtotime($arrDt) ? strtoupper(date('d/M/Y', strtotime($arrDt))) : $arrDt) : '') . '</td>';
-                echo '<td style=\'mso-number-format:"\\@"; text-align:center;\'>' . ($depDt ? (strtotime($depDt) ? strtoupper(date('d/M/Y', strtotime($depDt))) : $depDt) : '') . '</td>';
+                echo '<td style=\'mso-number-format:"\\@"; text-align:center;\'>' . ($arrDt ? (strtotime($arrDt) ? strtoupper(date('d-M-Y', strtotime($arrDt))) : $arrDt) : '') . '</td>';
+                echo '<td style=\'mso-number-format:"\\@"; text-align:center;\'>' . ($depDt ? (strtotime($depDt) ? strtoupper(date('d-M-Y', strtotime($depDt))) : $depDt) : '') . '</td>';
 
                 // Accommodation cells – merged using rowspan
                 if ($span > 0) {
