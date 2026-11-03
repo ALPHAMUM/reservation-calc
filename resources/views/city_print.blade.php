@@ -421,9 +421,9 @@
                                 $val = ($span > 1) ? ($groupTotals[$d] ?? 0) : ($groupTotals[$d] ?? ($rates['acc_dates'][$d]['val'] ?? 0));
                                 $rv = round($val, 2);
                                 $breakdown = $rates['acc_dates'][$d]['breakdown'] ?? null;
-                                $isFvnCell = !empty($breakdown['is_fvn']);
+                                $isFvnCell = !$isExtraOcc && !empty($breakdown['is_fvn']);
                                 // Also detect FVN via fraction if not in acc_dates
-                                if (!$isFvnCell) {
+                                if (!$isFvnCell && !$isExtraOcc) {
                                     $rawFrac = round($val - floor($val), 2);
                                     $isFvnCell = in_array($rawFrac, [0.01, 0.02, 0.03]);
                                     if ($isFvnCell) {
@@ -453,7 +453,7 @@
                                 $rv  = round($val, 2);
                                 $rawFrac = round($val - floor($val), 2);
                                 $bkd = $rates['acc_dates'][$d]['breakdown'] ?? null;
-                                $isFvnTotal = !empty($bkd['is_fvn']) || in_array($rv, [0.01, 0.02, 0.03, 0.5]) || in_array($rawFrac, [0.01, 0.02, 0.03]);
+                                $isFvnTotal = !$isExtraOcc && (!empty($bkd['is_fvn']) || in_array($rv, [0.01, 0.02, 0.03, 0.5]) || in_array($rawFrac, [0.01, 0.02, 0.03]));
                                 if (!$isFvnTotal) {
                                     $dateTotals[$d] += (float) $val;
                                 }

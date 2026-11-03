@@ -962,7 +962,7 @@
                                 foreach($resGroups as $rn => $rows) {
                                     $count = count($rows);
                                     // Determine base_pax
-                                    $basePax = 4;
+                                    $basePax = ($property === 'city' && str_contains(strtoupper($rows[0]['village_name'] ?? $rows[0]['roomtyp'] ?? ''), 'TWO-BEDROOM')) ? 6 : 4;
                                     if ($property === 'pines') {
                                         $basePax = 2;
                                     } elseif ($property === 'island') {
@@ -975,8 +975,8 @@
                                     $curr = 0;
                                     while ($curr < $count) {
                                         $blockStart = $curr;
-                                        $isBlockExtra = ($curr >= $basePax);
-                                        $blockSize = in_array($property, ['island', 'pines', 'city'], true) ? ($isBlockExtra ? 1 : min($count - $curr, $basePax)) : 1;
+                                        $isBlockExtra = !empty($rows[$curr]['is_extra_person']) || ($curr >= $basePax);
+                                        $blockSize = in_array($property, ['island', 'pines', 'city'], true) ? ($isBlockExtra ? 1 : (function() use ($rows, $curr, $count, $basePax) { $bs = 0; $mb = min($count - $curr, $basePax); while ($bs < $mb) { if (!empty($rows[$curr + $bs]['is_extra_person']) || (($curr + $bs) >= $basePax)) break; $bs++; } return $bs > 0 ? $bs : 1; })()) : 1;
                                         
                                         if (in_array($property, ['island', 'pines', 'city'], true)) {
                                             // Build groupTotals from current occupant if extra person, or first occupant in block if base block
@@ -1071,7 +1071,7 @@
                                             }
 
                                             for ($i = 0; $i < $blockSize; $i++) {
-                                                $isExtraPerson = (($curr + $i) >= $basePax && isset($rows[$curr + $i]));
+                                                $isExtraPerson = isset($rows[$curr + $i]) && (!empty($rows[$curr + $i]['is_extra_person']) || (($curr + $i) >= $basePax));
                                                 $res = $rows[$curr + $i] ?? null;
                                                 if (!$res) continue;
 
@@ -1417,12 +1417,13 @@
                                                         $frac = round($rounded - floor($rounded), 2);
                                                         $integerPart = floor($rounded);
                                                         $isExtra = $spanInfo['is_extra_person'] ?? false;
+                                                        $defaultExtraCharge = ($property === 'city') ? 1300 : 3700;
                                                     @endphp
                                                     <div class="stay-block" draggable="true">
                                                         <span class="rate-display {{ (!$isExtra && in_array($frac, [0.01, 0.02, 0.03])) ? 'fvn-display' : '' }}">
                                                             @if($isExtra)
-                                                                @if($rounded <= 1.0 || abs($rounded - 3700) < 1.0)
-                                                                    3,700.00
+                                                                @if($rounded <= 1.0 || abs($rounded - $defaultExtraCharge) < 1.0)
+                                                                    {{ number_format($defaultExtraCharge, 2) }}
                                                                 @else
                                                                     {{ number_format($rounded, 2) }}
                                                                 @endif
@@ -1461,10 +1462,10 @@
                                         foreach ($groupTotals as $gv) {
                                             $grv = round((float)$gv, 2);
                                             $gFrac = round($grv - floor($grv), 2);
-                                            if ($isExtraOccForTotal && $property === 'pines') {
+                                            if ($isExtraOccForTotal && in_array($property, ['pines', 'city'], true)) {
                                                 // Extra person: FVN/0 markers still count as one billable night at 3700
-                                                if ($grv <= 1.0 || in_array($gFrac, [0.01, 0.02, 0.03, 0.5], true) || $grv > 3700) {
-                                                    $groupAccSum += 3700;
+                                                if ($grv <= 1.0 || in_array($gFrac, [0.01, 0.02, 0.03, 0.5], true) || $grv > $defaultExtraCharge) {
+                                                    $groupAccSum += $defaultExtraCharge;
                                                 } else {
                                                     $groupAccSum += (float)$gv;
                                                 }
@@ -1474,12 +1475,12 @@
                                             }
                                         }
                                         // Prefer calculator acc for Pines extra person when day cells were empty/zero
-                                        if ($isExtraOccForTotal && $property === 'pines') {
+                                        if ($isExtraOccForTotal && in_array($property, ['pines', 'city'], true)) {
                                             $calcAcc = (float)(($res['calculated_rates']['acc'] ?? 0));
                                             if ($groupAccSum <= 0 && $calcAcc > 0) {
                                                 $groupAccSum = $calcAcc;
                                             } elseif ($groupAccSum <= 0 && $extraNightCount === 0 && !empty($dateCols)) {
-                                                $groupAccSum = 3700 * count($dateCols);
+                                                $groupAccSum = $defaultExtraCharge * count($dateCols);
                                             }
                                         }
                                         $groupSize = max(1, (int) ($spanInfo['group_size'] ?? 1));
@@ -1951,10 +1952,10 @@
                             const frac = Math.round((val - Math.floor(val)) * 100) / 100;
                             const isFvn = (frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5 || isNaN(val));
                             nightCount++;
-                            if (rowIsExtra && property === 'pines') {
+                            if (rowIsExtra && (property === 'pines' || property === 'city')) {
                                 // Extra person: FVN/0/composite → 3700 per night
-                                if (isFvn || val <= 1.0 || val > 3700) {
-                                    modelSum += 3700;
+                                if (isFvn || val <= 1.0 || val > ((property === 'city') ? 1300 : 3700)) {
+                                    modelSum += ((property === 'city') ? 1300 : 3700);
                                 } else {
                                     modelSum += val;
                                 }
@@ -1962,9 +1963,9 @@
                                 modelSum += val;
                             }
                         });
-                        if (rowIsExtra && property === 'pines' && modelSum <= 0) {
+                        if (rowIsExtra && (property === 'pines' || property === 'city') && modelSum <= 0) {
                             const calcAcc = parseFloat((rowRes.calculated_rates && rowRes.calculated_rates.acc) || 0);
-                            modelSum = calcAcc > 0 ? calcAcc : (3700 * Math.max(1, nightCount));
+                            modelSum = calcAcc > 0 ? calcAcc : (((property === 'city') ? 1300 : 3700) * Math.max(1, nightCount));
                         }
                         rowAcc = rowIsExtra ? modelSum : (modelSum / baseGroupSize);
                     } else if (firstCell.length && spanAttr === 1) {
@@ -2487,8 +2488,8 @@
                     if (!isFvn) {
                         if (!r.breakdown) r.breakdown = {};
                         let gross = r.breakdown.gross_share || 0;
-                        if (isExtraOcc && (gross > 3700 || gross === 0 || val <= 1.0 || frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5)) {
-                            gross = 3700;
+                        if (isExtraOcc && (gross > ((property === 'city') ? 1300 : 3700) || gross === 0 || val <= 1.0 || frac === 0.01 || frac === 0.02 || frac === 0.03 || frac === 0.5)) {
+                            gross = (property === 'city') ? 1300 : 3700;
                         } else if (!gross || gross === val) {
                             gross = r.breakdown.is_discounted ? Math.round((val * 14 / 11) * 100) / 100 : val;
                         }
@@ -2591,8 +2592,8 @@
                     }).length || 1;
                     const perNight = modelSum / nights;
                     let perOccShare = perNight;
-                    if (isExtra && (perNight > 3700 || perNight <= 1.0)) {
-                        return 3700;
+                    if (isExtra && (perNight > ((property === 'city') ? 1300 : 3700) || perNight <= 1.0)) {
+                        return (property === 'city') ? 1300 : 3700;
                     }
                     if (perNight > 4000 && baseGroupSize > 1 && !isExtra) {
                         perOccShare = perNight / baseGroupSize;
@@ -2728,7 +2729,7 @@
             // For pines: determine unit label
             const unitLabel = res.village_name || 'N/A';
             let extraPersonNote = '';
-            if (property === 'pines' && isExtraPerson) {
+            if ((property === 'pines' || property === 'city') && isExtraPerson) {
                 extraPersonNote = ' <span style="font-size: 0.7rem; background: rgba(251,191,36,0.2); color: #fbbf24; border-radius: 4px; padding: 2px 6px;">Extra Person</span>';
             }
 
@@ -2761,7 +2762,7 @@
                 const b = r.breakdown;
                 if (!b) return;
 
-                const isFvn = (Math.round(r.val * 100) / 100 === 0.01 || Math.round(r.val * 100) / 100 === 0.02 || Math.round(r.val * 100) / 100 === 0.03 || Math.round(r.val * 100) / 100 === 0.5);
+                const isFvn = !isExtraPerson && (Math.round(r.val * 100) / 100 === 0.01 || Math.round(r.val * 100) / 100 === 0.02 || Math.round(r.val * 100) / 100 === 0.03 || Math.round(r.val * 100) / 100 === 0.5);
 
                 const rawVal = parseFloat(r.val || 0);
                 const rawBase = parseFloat(b.base || 0);
@@ -2876,7 +2877,7 @@
                             <td style="white-space: nowrap; font-weight: 600;">${dateStr}</td>
                             <td>
                                 <div style="font-weight: 500; color: #fbbf24;">Extra Person Charge${b.is_discounted ? ' <span style="font-size: 0.65rem; color: #4ade80;">(Senior/PWD)</span>' : ''}</div>
-                                <div style="font-size: 0.65rem; color: var(--text-muted);">Base Rate: ₱3,700.00/night</div>
+                                <div style="font-size: 0.65rem; color: var(--text-muted);">Base Rate: ₱${((property === 'city') ? 1300 : 3700).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}/night</div>
                             </td>
                             <td>₱${baseVal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                             <td>${showBreakdown ? detailHtml : '-'}</td>

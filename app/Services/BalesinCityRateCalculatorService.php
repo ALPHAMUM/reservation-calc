@@ -46,25 +46,60 @@ class BalesinCityRateCalculatorService
      */
     public function resolveCityUnitType(string $roomType = '', string $rateCode = ''): string
     {
-        if (str_contains(strtoupper($roomType), '2-BEDROOM') || str_contains(strtoupper($roomType), '2-BR') || str_contains(strtoupper($roomType), 'TWOBED')) {
+        if (str_contains(strtoupper($roomType), '2-BEDROOM') || str_contains(strtoupper($roomType), '2-BR') || str_contains(strtoupper($roomType), 'TWOBED') || str_contains(strtoupper($roomType), 'TWO-BEDROOM') || str_contains(strtoupper($roomType), 'TWO BEDROOM')) {
             return 'Two-Bedroom Suite';
         }
         return 'Studio-Type Suite';
     }
 
-    public function isExtraOccupant(int $occupantIndex, string $roomType = ''): bool
+    public function isExtraOccupant(int $occupantIndex, string $roomType = '', int $adultIndex = 0, bool $isAdult = true): bool
     {
-        $is2Bed = str_contains(strtoupper($roomType), '2-BEDROOM') || str_contains(strtoupper($roomType), '2-BR') || str_contains(strtoupper($roomType), 'TWOBED');
+        $is2Bed = str_contains(strtoupper($roomType), '2-BEDROOM') || str_contains(strtoupper($roomType), '2-BR') || str_contains(strtoupper($roomType), 'TWOBED') || str_contains(strtoupper($roomType), 'TWO-BEDROOM') || str_contains(strtoupper($roomType), 'TWO BEDROOM');
         $studioBase = (int) ($this->settings['city']['extra_person']['studio_base_pax'] ?? 4);
         $twoBedBase = (int) ($this->settings['city']['extra_person']['twobed_base_pax'] ?? 6);
-        $basePax = $is2Bed ? $twoBedBase : $studioBase;
-        return $occupantIndex >= $basePax;
+        $basePax    = $is2Bed ? $twoBedBase : $studioBase;
+        $baseAdults = $is2Bed ? 4 : 2;
+
+        if ($occupantIndex >= $basePax) {
+            return true;
+        }
+        if ($isAdult && $adultIndex >= $baseAdults) {
+            return true;
+        }
+        return false;
+    }
+
+    public function isAdultOccupant(array $passenger): bool
+    {
+        $gstType = strtolower(trim((string) ($passenger['gstType'] ?? $passenger['gsttype'] ?? '')));
+        if (str_contains($gstType, 'infant') || str_contains($gstType, 'child') || str_contains($gstType, 'kid')) {
+            return false;
+        }
+        $ageRaw = $passenger['age'] ?? null;
+        if ($ageRaw !== null && $ageRaw !== '' && is_numeric($ageRaw)) {
+            return ((int) $ageRaw) > 12;
+        }
+        return true;
+    }
+
+    public function isInfantOccupant(array $passenger): bool
+    {
+        $gstType = strtolower(trim((string) ($passenger['gstType'] ?? $passenger['gsttype'] ?? '')));
+        if (str_contains($gstType, 'infant')) {
+            return true;
+        }
+        $ageRaw = $passenger['age'] ?? null;
+        if ($ageRaw !== null && $ageRaw !== '' && is_numeric($ageRaw)) {
+            $age = (int) $ageRaw;
+            return $age >= 0 && $age <= 1;
+        }
+        return false;
     }
 
     /**
      * Calculate City passenger rates with optional Senior/PWD accommodation discount.
      */
-    public function calculatePassengerRates(array $passenger): array
+    public function calculatePassengerRates(array $passenger, bool $isExtraPerson = false): array
     {
         $gstType = strtolower($passenger['gstType'] ?? $passenger['gsttype'] ?? '');
         $privCard = trim((string) ($passenger['privCard'] ?? $passenger['privcard'] ?? ''));
@@ -97,6 +132,52 @@ class BalesinCityRateCalculatorService
             } elseif (str_contains($desc, 'environmental')) {
                 $env += $val;
             } elseif ($date) {
+                if ($isExtraPerson) {
+                    $baseFee = $this->getExtraPersonRate();
+                    $scSettings  = $this->settings['city']['discounts']['sc_pwd'] ?? $this->settings['discounts']['sc_pwd'] ?? [];
+                    $removeVat   = $scSettings['remove_vat'] ?? true;
+                    $applyDisc   = $scSettings['apply_discount'] ?? true;
+                    $discPercent = $applyDisc ? (float) ($scSettings['additional_discount_percent'] ?? 20) : 0.0;
+                    $vatRate     = (float) ($this->settings['city']['discounts']['vat_rate'] ?? $this->settings['discounts']['vat_rate'] ?? 12);
+
+                    if ($hasVillaSc) {
+                        $vatExemptBase = $removeVat ? ($baseFee / (1 + ($vatRate / 100))) : $baseFee;
+                        $discount      = $vatExemptBase * ($discPercent / 100);
+                        $netBase       = $vatExemptBase - $discount;
+                        $sc            = $netBase * 0.10;
+                        $finalVal      = round($netBase + $sc, 2);
+                        $base          = round($netBase, 2);
+                        $discount      = round($discount, 2);
+                        $sc            = round($sc, 2);
+                        $vat           = 0;
+                        $isDiscounted  = true;
+                    } else {
+                        $finalVal      = $baseFee;
+                        $base          = round($baseFee / 1.22, 2);
+                        $discount      = 0;
+                        $sc            = round($base * 0.10, 2);
+                        $vat           = round($base * 0.12, 2);
+                        $isDiscounted  = false;
+                    }
+
+                    $acc += $finalVal;
+                    $accDates[$date] = [
+                        'val'       => $finalVal,
+                        'breakdown' => [
+                            'gross_share'   => $baseFee,
+                            'is_discounted' => $isDiscounted,
+                            'is_infant'     => false,
+                            'divisor'       => 1,
+                            'base'          => $base,
+                            'discount'      => $discount,
+                            'sc'            => $sc,
+                            'vat'           => $vat,
+                            'is_fvn'        => false,
+                        ],
+                    ];
+                    continue;
+                }
+
                 // ── Detect FVN magic fractions: .01 = 1FVN, .02 = 1.5FVN, .03 = 0.5FVN
                 $integerPart = (int) floor($val);
                 $fraction    = round($val - $integerPart, 2);

@@ -111,6 +111,7 @@ class BalesinCityController extends Controller
 
                 $calculator = app(\App\Services\BalesinCityRateCalculatorService::class);
                 $resOccupantIndex = [];
+                $resAdultIndex = [];
                 
                 // Build list lookup map if listData is available
                 $listMap = [];
@@ -143,13 +144,17 @@ class BalesinCityController extends Controller
 
                     if (!isset($resOccupantIndex[$resNo])) {
                         $resOccupantIndex[$resNo] = 0;
+                        $resAdultIndex[$resNo]    = 0;
                     }
                     $occupantIndex = $resOccupantIndex[$resNo]++;
                     $res['occupant_idx'] = $occupantIndex;
 
                     $roomType                = $res['roomtyp'] ?? $res['roomType'] ?? '';
                     $unitType                = $calculator->resolveCityUnitType($roomType, $res['rateCode'] ?? '');
-                    $isExtraPerson           = $calculator->isExtraOccupant($occupantIndex, $roomType);
+                    $isAdult                 = $calculator->isAdultOccupant($res);
+                    $adultIndex              = $isAdult ? ($resAdultIndex[$resNo]++) : $resAdultIndex[$resNo];
+                    $isExtraPerson           = $calculator->isExtraOccupant($occupantIndex, $roomType, $adultIndex, $isAdult);
+                    $res['is_extra_person']  = $isExtraPerson;
 
                     $resForCalc = $scTargetService->applyToPassenger(
                         $res,
@@ -163,7 +168,7 @@ class BalesinCityController extends Controller
                     );
                     $scTargetService->syncPassengerFlags($res, $resForCalc);
 
-                    $res['calculated_rates'] = $calculator->calculatePassengerRates($resForCalc);
+                    $res['calculated_rates'] = $calculator->calculatePassengerRates($resForCalc, $isExtraPerson);
                     $res['village_name']     = $unitType;
                     $res['is_employee']      = false;
 
@@ -217,8 +222,21 @@ class BalesinCityController extends Controller
             $curr = 0;
             while ($curr < $count) {
                 $blockStart = $curr;
-                $isBlockExtra = ($curr >= $basePax);
-                $blockSize = $isBlockExtra ? 1 : min($count - $curr, $basePax);
+                $isBlockExtra = ($rows[$curr]['is_extra_person'] ?? false) || ($curr >= $basePax);
+                if ($isBlockExtra) {
+                    $blockSize = 1;
+                } else {
+                    $blockSize = 0;
+                    $maxBlock = min($count - $curr, $basePax);
+                    while ($blockSize < $maxBlock) {
+                        $nextIdx = $curr + $blockSize;
+                        if (($rows[$nextIdx]['is_extra_person'] ?? false) || ($nextIdx >= $basePax)) {
+                            break;
+                        }
+                        $blockSize++;
+                    }
+                    if ($blockSize === 0) $blockSize = 1;
+                }
 
                 // Detect whether ANY base occupant in this block has a Villa SC/PWD discount
                 $hasAnyVillaScInBlock = false;
@@ -247,7 +265,7 @@ class BalesinCityController extends Controller
                 }
                 for ($i = 0; $i < $blockSize; $i++) {
                     $span = ($i === 0) ? $blockSize : 0;
-                    $isExtraPerson = ($curr + $i) >= $basePax;
+                    $isExtraPerson = ($rows[$curr + $i]['is_extra_person'] ?? false) || (($curr + $i) >= $basePax);
                     if ($isExtraPerson) {
                         $extraTotals = [];
                         foreach ($dateCols as $d) {
@@ -375,17 +393,22 @@ class BalesinCityController extends Controller
         $calculator   = app(\App\Services\BalesinCityRateCalculatorService::class);
         $reservations = [];
         $resOccupantIndex = [];
+        $resAdultIndex = [];
         foreach ($rawDetail as $res) {
             $resNo = trim((string)($res['resNo'] ?? $res['conf'] ?? ''));
             if (!isset($resOccupantIndex[$resNo])) {
                 $resOccupantIndex[$resNo] = 0;
+                $resAdultIndex[$resNo]    = 0;
             }
             $occupantIndex = $resOccupantIndex[$resNo]++;
             $res['occupant_idx'] = $occupantIndex;
 
             $roomType                = $res['roomtyp'] ?? $res['roomType'] ?? '';
             $unitType                = $calculator->resolveCityUnitType($roomType, $res['rateCode'] ?? '');
-            $isExtraPerson           = $calculator->isExtraOccupant($occupantIndex, $roomType);
+            $isAdult                 = $calculator->isAdultOccupant($res);
+            $adultIndex              = $isAdult ? ($resAdultIndex[$resNo]++) : $resAdultIndex[$resNo];
+            $isExtraPerson           = $calculator->isExtraOccupant($occupantIndex, $roomType, $adultIndex, $isAdult);
+            $res['is_extra_person']  = $isExtraPerson;
 
             $resForCalc = $scTargetService->applyToPassenger(
                 $res,
@@ -399,7 +422,7 @@ class BalesinCityController extends Controller
             );
             $scTargetService->syncPassengerFlags($res, $resForCalc);
 
-            $res['calculated_rates'] = $calculator->calculatePassengerRates($resForCalc);
+            $res['calculated_rates'] = $calculator->calculatePassengerRates($resForCalc, $isExtraPerson);
             $res['village_name']     = $unitType;
             $res['is_employee']      = false;
 
@@ -493,8 +516,21 @@ class BalesinCityController extends Controller
             $curr = 0;
             while ($curr < $count) {
                 $blockStart = $curr;
-                $isBlockExtra = ($curr >= $basePax);
-                $blockSize = $isBlockExtra ? 1 : min($count - $curr, $basePax);
+                $isBlockExtra = ($rows[$curr]['is_extra_person'] ?? false) || ($curr >= $basePax);
+                if ($isBlockExtra) {
+                    $blockSize = 1;
+                } else {
+                    $blockSize = 0;
+                    $maxBlock = min($count - $curr, $basePax);
+                    while ($blockSize < $maxBlock) {
+                        $nextIdx = $curr + $blockSize;
+                        if (($rows[$nextIdx]['is_extra_person'] ?? false) || ($nextIdx >= $basePax)) {
+                            break;
+                        }
+                        $blockSize++;
+                    }
+                    if ($blockSize === 0) $blockSize = 1;
+                }
 
                 // Detect whether ANY base occupant in this block has a Villa SC/PWD discount
                 $hasAnyVillaScInBlock = false;
@@ -523,7 +559,7 @@ class BalesinCityController extends Controller
                 }
                 for ($i = 0; $i < $blockSize; $i++) {
                     $span = ($i === 0) ? $blockSize : 0;
-                    $isExtraPerson = ($curr + $i) >= $basePax;
+                    $isExtraPerson = ($rows[$curr + $i]['is_extra_person'] ?? false) || (($curr + $i) >= $basePax);
                     if ($isExtraPerson) {
                         $extraTotals = [];
                         foreach ($dateCols as $d) {
@@ -738,7 +774,7 @@ class BalesinCityController extends Controller
                         $val = ($span > 1) ? ($groupTotals[$d] ?? 0) : ($groupTotals[$d] ?? ($rates['acc_dates'][$d]['val'] ?? 0));
                         $rv  = round($val, 2);
                         $rawFrac = round($val - floor($val), 2);
-                        $isFvn = in_array($rawFrac, [0.01, 0.02, 0.03]);
+                        $isFvn = !$isExtraOcc && in_array($rawFrac, [0.01, 0.02, 0.03]);
                         if ($isFvn) {
                             if ($rawFrac == 0.01)      $formattedVal = '1 FVN';
                             elseif ($rawFrac == 0.02)  $formattedVal = '1.5 FVN';

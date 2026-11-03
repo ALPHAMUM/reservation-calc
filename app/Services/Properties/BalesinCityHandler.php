@@ -41,17 +41,24 @@ class BalesinCityHandler extends AbstractPropertyHandler
         $calculator = app(BalesinCityRateCalculatorService::class);
         $out        = [];
         $resOccupantIndex = [];
+        $resAdultIndex    = [];
 
         foreach ($msgs as &$res) {
             $resNo = trim((string)($res['resNo'] ?? $res['conf'] ?? ''));
             if (!isset($resOccupantIndex[$resNo])) {
                 $resOccupantIndex[$resNo] = 0;
+                $resAdultIndex[$resNo]    = 0;
             }
             $occupantIndex = $resOccupantIndex[$resNo]++;
             $res['occupant_idx'] = $occupantIndex;
 
             $roomType = $res['roomtyp'] ?? $res['roomType'] ?? '';
             $unitType = $calculator->resolveCityUnitType($roomType, $res['rateCode'] ?? '');
+
+            $isAdult    = $calculator->isAdultOccupant($res);
+            $adultIndex = $isAdult ? ($resAdultIndex[$resNo]++) : $resAdultIndex[$resNo];
+            $isExtraPerson = $calculator->isExtraOccupant($occupantIndex, $roomType, $adultIndex, $isAdult);
+            $res['is_extra_person'] = $isExtraPerson;
 
             $scTargetService = app(\App\Services\ScTargetService::class);
             $resForCalc = $scTargetService->applyToPassenger(
@@ -61,11 +68,12 @@ class BalesinCityHandler extends AbstractPropertyHandler
                 $this->scTargetMap,
                 $this->scOverrideMap,
                 $this->scRemoveMap,
-                $this->slug
+                $this->slug,
+                $isExtraPerson
             );
             $scTargetService->syncPassengerFlags($res, $resForCalc);
 
-            $res['calculated_rates'] = $calculator->calculatePassengerRates($resForCalc);
+            $res['calculated_rates'] = $calculator->calculatePassengerRates($resForCalc, $isExtraPerson);
             $res['village_name']     = $unitType;
             $res['is_employee']      = false;
 
