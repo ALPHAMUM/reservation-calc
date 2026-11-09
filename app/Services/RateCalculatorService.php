@@ -400,7 +400,7 @@ class RateCalculatorService
             if ($usePromo) {
                 $airfare = (float) ($this->settings['promo_rates'][$passengerClass] ?? 0);
             } else {
-                $airfare = (float) ($this->settings['base_rates'][$passengerClass] ?? 0);
+                $airfare = $this->calculateBaseSectoralAirfare($passenger, $passengerClass, $checkInDate);
             }
 
             if ($hasAirSc && !$isEmployee) {
@@ -650,6 +650,73 @@ class RateCalculatorService
         }
 
         return self::EXTRA_PERSON_CHARGE;
+    }
+
+    private function calculateBaseSectoralAirfare(array $passenger, string $passengerClass, ?string $checkInDate): float
+    {
+        $baseRates = $this->settings['base_rates'] ?? [];
+        if ($passengerClass === 'employee') {
+            return (float) ($baseRates['employee'] ?? 2800);
+        }
+
+        $effectiveClass = ($passengerClass === 'others') ? 'member' : $passengerClass;
+        $weekdayExtraEnabled = (bool) ($baseRates['weekday_extra_discount_enabled'] ?? true);
+        $weekdayExtraPercent = (float) ($baseRates['weekday_extra_discount_percent'] ?? 10);
+        $guestDiscPercent = (float) ($baseRates['guest_discount_percent'] ?? 20);
+        $memberDiscPercent = (float) ($baseRates['member_discount_percent'] ?? 40);
+
+        $sectoralRates = $this->settings['sectoral_rates'] ?? [];
+        $sectorMap = [];
+        foreach ($sectoralRates as $sr) {
+            $dest = strtolower(trim($sr['destination'] ?? ''));
+            if ($dest !== '') {
+                $sectorMap[$dest] = $sr;
+            }
+        }
+
+        // Detect if Clark route is specified in passenger metadata/remarks, default to Manila
+        $metaStr = strtolower(($passenger['rate_metadata'] ?? '') . ' ' . ($passenger['remarks'] ?? '') . ' ' . ($passenger['route'] ?? ''));
+        $isClark = str_contains($metaStr, 'clark') || str_contains($metaStr, 'crk');
+
+        $outboundKey = $isClark ? 'clark - balesin' : 'manila - balesin';
+        $returnKey = $isClark ? 'balesin - clark' : 'balesin - manila';
+
+        $checkOutDate = $passenger['depdt'] ?? $passenger['depDt'] ?? $checkInDate;
+
+        if (isset($sectorMap[$outboundKey]) || isset($sectorMap[$returnKey])) {
+            $outboundLeg = $sectorMap[$outboundKey] ?? ($sectorMap['manila - balesin'] ?? null);
+            $returnLeg = $sectorMap[$returnKey] ?? ($sectorMap['balesin - manila'] ?? $outboundLeg);
+
+            $calcLeg = function (?array $leg, ?string $dateStr) use ($effectiveClass, $guestDiscPercent, $memberDiscPercent, $weekdayExtraEnabled, $weekdayExtraPercent): float {
+                if (!$leg) {
+                    return 0.0;
+                }
+                $airfareBase = (float) ($leg['airfare_base_rate'] ?? 0);
+                $isWeekday = false;
+                if ($dateStr) {
+                    $ts = strtotime($dateStr);
+                    if ($ts !== false) {
+                        $dayNum = (int) date('N', $ts); // 1=Mon, 2=Tue, 3=Wed, 4=Thu
+                        $isWeekday = in_array($dayNum, [1, 2, 3, 4], true);
+                    }
+                }
+
+                if ($airfareBase > 0) {
+                    $disc = ($effectiveClass === 'member') ? $memberDiscPercent : $guestDiscPercent;
+                    if ($weekdayExtraEnabled && $isWeekday) {
+                        $disc += $weekdayExtraPercent;
+                    }
+                    return round($airfareBase * (1 - ($disc / 100)), 2);
+                }
+
+                $legRate = (float) ($leg[$effectiveClass . '_base_rate'] ?? 0);
+                return $legRate;
+            };
+
+            return $calcLeg($outboundLeg, $checkInDate) + $calcLeg($returnLeg, $checkOutDate);
+        }
+
+        return (float) ($baseRates[$effectiveClass] ?? 0);
     }
 
     private function calculateAof($date)

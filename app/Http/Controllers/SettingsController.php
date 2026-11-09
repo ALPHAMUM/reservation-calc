@@ -136,28 +136,42 @@ class SettingsController extends Controller
 
         // Default: Balesin Island
         // Update Base Rates
-        $settings['base_rates']['member'] = (float)($input['base_rates']['member'] ?? $settings['base_rates']['member']);
-        $settings['base_rates']['guest'] = (float)($input['base_rates']['guest'] ?? $settings['base_rates']['guest']);
+        $settings['base_rates']['member'] = (float)($input['base_rates']['member'] ?? $settings['base_rates']['member'] ?? 11400);
+        $settings['base_rates']['guest'] = (float)($input['base_rates']['guest'] ?? $settings['base_rates']['guest'] ?? 15200);
         $settings['base_rates']['employee'] = (float)($input['base_rates']['employee'] ?? $settings['base_rates']['employee'] ?? 2800);
+        $settings['base_rates']['guest_discount_percent'] = (float)($input['base_rates']['guest_discount_percent'] ?? $settings['base_rates']['guest_discount_percent'] ?? 20);
+        $settings['base_rates']['member_discount_percent'] = (float)($input['base_rates']['member_discount_percent'] ?? $settings['base_rates']['member_discount_percent'] ?? 40);
+        $settings['base_rates']['weekday_extra_discount_enabled'] = isset($input['base_rates']['weekday_extra_discount_enabled']);
+        $settings['base_rates']['weekday_extra_discount_percent'] = (float)($input['base_rates']['weekday_extra_discount_percent'] ?? $settings['base_rates']['weekday_extra_discount_percent'] ?? 10);
 
-        // Update Sectoral Destinations (Dropdown Presets)
-        $settings['sectoral_destinations'] = isset($input['sectoral_destinations']) && is_array($input['sectoral_destinations'])
-            ? array_values(array_filter(array_map('trim', $input['sectoral_destinations'])))
-            : [];
+        // Default Sectoral Destinations
+        $settings['sectoral_destinations'] = [
+            'Manila - Balesin',
+            'Balesin - Manila',
+            'Clark - Balesin',
+            'Balesin - Clark',
+        ];
 
         // Update Sectoral Rates
         $sectoralRates = [];
+        $guestDisc = $settings['base_rates']['guest_discount_percent'];
+        $memberDisc = $settings['base_rates']['member_discount_percent'];
         if (isset($input['sectoral_rates']['destination']) && is_array($input['sectoral_rates']['destination'])) {
             foreach ($input['sectoral_rates']['destination'] as $index => $destination) {
                 if (!empty(trim($destination))) {
+                    $airfareBase = (float)($input['sectoral_rates']['airfare_base_rate'][$index] ?? 0);
+                    $guestBase = isset($input['sectoral_rates']['guest_base_rate'][$index]) && $input['sectoral_rates']['guest_base_rate'][$index] !== ''
+                        ? (float)$input['sectoral_rates']['guest_base_rate'][$index]
+                        : round($airfareBase * (1 - ($guestDisc / 100)), 2);
+                    $memberBase = isset($input['sectoral_rates']['member_base_rate'][$index]) && $input['sectoral_rates']['member_base_rate'][$index] !== ''
+                        ? (float)$input['sectoral_rates']['member_base_rate'][$index]
+                        : round($airfareBase * (1 - ($memberDisc / 100)), 2);
+
                     $sectoralRates[] = [
                         'destination' => trim($destination),
-                        'member_base_rate' => (float)($input['sectoral_rates']['member_base_rate'][$index] ?? 0),
-                        'member_weekday_discount' => (float)($input['sectoral_rates']['member_weekday_discount'][$index] ?? 0),
-                        'member_weekend_discount' => (float)($input['sectoral_rates']['member_weekend_discount'][$index] ?? 0),
-                        'guest_base_rate' => (float)($input['sectoral_rates']['guest_base_rate'][$index] ?? 0),
-                        'guest_weekday_discount' => (float)($input['sectoral_rates']['guest_weekday_discount'][$index] ?? 0),
-                        'guest_weekend_discount' => (float)($input['sectoral_rates']['guest_weekend_discount'][$index] ?? 0),
+                        'airfare_base_rate' => $airfareBase,
+                        'guest_base_rate' => $guestBase,
+                        'member_base_rate' => $memberBase,
                     ];
                 }
             }

@@ -12,27 +12,44 @@ class SettingsService
     {
         return [
             'base_rates' => [
-                'member' => 5600,
-                'guest' => 12320,
+                'member' => 11400,
+                'guest' => 15200,
                 'employee' => 2800,
+                'guest_discount_percent' => 20,
+                'member_discount_percent' => 40,
+                'weekday_extra_discount_enabled' => true,
+                'weekday_extra_discount_percent' => 10,
             ],
             'sectoral_destinations' => [
                 'Manila - Balesin',
                 'Balesin - Manila',
                 'Clark - Balesin',
                 'Balesin - Clark',
-                'Sangley - Balesin',
-                'Balesin - Sangley',
             ],
             'sectoral_rates' => [
                 [
                     'destination' => 'Manila - Balesin',
-                    'member_base_rate' => 5600,
-                    'member_weekday_discount' => 0,
-                    'member_weekend_discount' => 0,
-                    'guest_base_rate' => 12320,
-                    'guest_weekday_discount' => 0,
-                    'guest_weekend_discount' => 0,
+                    'airfare_base_rate' => 9500,
+                    'guest_base_rate' => 7600,
+                    'member_base_rate' => 5700,
+                ],
+                [
+                    'destination' => 'Balesin - Manila',
+                    'airfare_base_rate' => 9500,
+                    'guest_base_rate' => 7600,
+                    'member_base_rate' => 5700,
+                ],
+                [
+                    'destination' => 'Clark - Balesin',
+                    'airfare_base_rate' => 8500,
+                    'guest_base_rate' => 6800,
+                    'member_base_rate' => 5100,
+                ],
+                [
+                    'destination' => 'Balesin - Clark',
+                    'airfare_base_rate' => 8500,
+                    'guest_base_rate' => 6800,
+                    'member_base_rate' => 5100,
                 ],
             ],
             'promo_rates' => [
@@ -182,8 +199,31 @@ class SettingsService
                     unset($defaults['sectoral_destinations']);
                 }
 
-                if (isset($stored['sectoral_rates'])) {
-                    unset($defaults['sectoral_rates']);
+                // Upgrade legacy base_rates (5600 / 12320) to new round-trip base rates (11400 / 15200)
+                if (
+                    isset($stored['base_rates']['member'], $stored['base_rates']['guest']) &&
+                    (float)$stored['base_rates']['member'] == 5600 &&
+                    (float)$stored['base_rates']['guest'] == 12320 &&
+                    !isset($stored['base_rates']['guest_discount_percent'])
+                ) {
+                    $stored['base_rates']['member'] = 11400;
+                    $stored['base_rates']['guest'] = 15200;
+                }
+
+                // Upgrade legacy sectoral_rates if airfare_base_rate is not yet present
+                if (isset($stored['sectoral_rates']) && is_array($stored['sectoral_rates'])) {
+                    $hasAirfareBase = false;
+                    foreach ($stored['sectoral_rates'] as $sr) {
+                        if (isset($sr['airfare_base_rate'])) {
+                            $hasAirfareBase = true;
+                            break;
+                        }
+                    }
+                    if ($hasAirfareBase) {
+                        unset($defaults['sectoral_rates']);
+                    } else {
+                        unset($stored['sectoral_rates']);
+                    }
                 }
 
                 return array_replace_recursive($defaults, $stored);

@@ -342,7 +342,7 @@
             @csrf
             <input type="hidden" name="property" value="island">
 
-            <!-- Base Rates -->
+            <!-- Base Airfare & Sectoral Price Rates -->
             <div class="setup-section">
                 <div class="info-btn" onclick="toggleHelp('help-base')">
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
@@ -350,219 +350,235 @@
                 <h3 class="setup-title">Base Airfare Rates</h3>
                 <div id="help-base" class="help-box">
                     <span class="help-close" onclick="toggleHelp('help-base')">&times;</span>
-                    <strong>Base Airfare Rates</strong>
-                    <div>Configure the standard, year-round airfare rates for Members, Guests, and Employees. Use the checkbox to define if infants (under 24 months) are billed or fly for free.</div>
+                    <strong>Base Airfare & Sectoral Rates</strong>
+                    <div>Configure the standard year-round airfare rates, Guest (20%) and Member (40%) discounts, optional +10% weekday discount (Mon–Thu), and route-specific sectoral base rates.</div>
                 </div>
-                <div class="grid-2">
+
+                @php
+                    $standardDestinations = [
+                        'Manila - Balesin',
+                        'Balesin - Manila',
+                        'Clark - Balesin',
+                        'Balesin - Clark',
+                    ];
+                    $defaultSectoralRates = [
+                        ['destination' => 'Manila - Balesin', 'airfare_base_rate' => 9500, 'guest_base_rate' => 7600, 'member_base_rate' => 5700],
+                        ['destination' => 'Balesin - Manila', 'airfare_base_rate' => 9500, 'guest_base_rate' => 7600, 'member_base_rate' => 5700],
+                        ['destination' => 'Clark - Balesin',  'airfare_base_rate' => 8500, 'guest_base_rate' => 6800, 'member_base_rate' => 5100],
+                        ['destination' => 'Balesin - Clark',  'airfare_base_rate' => 8500, 'guest_base_rate' => 6800, 'member_base_rate' => 5100],
+                    ];
+                    $sectoralRows = !empty($settings['sectoral_rates']) ? $settings['sectoral_rates'] : $defaultSectoralRates;
+                    if (count($sectoralRows) === 1 && !isset($sectoralRows[0]['airfare_base_rate'])) {
+                        $sectoralRows = $defaultSectoralRates;
+                    }
+                    $guestDiscPct = $settings['base_rates']['guest_discount_percent'] ?? 20;
+                    $memberDiscPct = $settings['base_rates']['member_discount_percent'] ?? 40;
+                    $weekdayExtraEnabled = $settings['base_rates']['weekday_extra_discount_enabled'] ?? true;
+                    $weekdayExtraPct = $settings['base_rates']['weekday_extra_discount_percent'] ?? 10;
+                @endphp
+
+                <div class="grid-3" style="margin-bottom: 0.25rem;">
                     <div class="form-group">
-                        <label class="form-label">Member Airfare Rate (₱)</label>
-                        <input type="number" step="0.01" name="base_rates[member]" class="form-control" value="{{ $settings['base_rates']['member'] ?? 5600 }}">
+                        <label class="form-label">Member Round Trip Rate - MNL (₱)</label>
+                        <input type="number" step="0.01" id="base_rate_member_input" name="base_rates[member]" class="form-control" value="{{ $settings['base_rates']['member'] ?? 11400 }}">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Guest Airfare Rate (₱)</label>
-                        <input type="number" step="0.01" name="base_rates[guest]" class="form-control" value="{{ $settings['base_rates']['guest'] ?? 12320 }}">
+                        <label class="form-label">Guest Round Trip Rate - MNL (₱)</label>
+                        <input type="number" step="0.01" id="base_rate_guest_input" name="base_rates[guest]" class="form-control" value="{{ $settings['base_rates']['guest'] ?? 15200 }}">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Employee Airfare Rate (₱)</label>
                         <input type="number" step="0.01" name="base_rates[employee]" class="form-control" value="{{ $settings['base_rates']['employee'] ?? 2800 }}">
                     </div>
                 </div>
-                <div class="checkbox-wrap">
-                    <input type="checkbox" id="airfare_free" name="infants[airfare_free]" {{ !empty($settings['infants']['airfare_free']) ? 'checked' : '' }}>
-                    <label for="airfare_free" class="form-label" style="margin:0">Infants (≤23 mos) travel free of charge</label>
-                </div>
-            </div>
 
-
-            <!-- Sectoral Rates -->
-            <div class="setup-section">
-                <div class="info-btn" onclick="toggleHelp('help-sector')">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                </div>
-                <h3 class="setup-title">Sectoral Price Rates</h3>
-                <div id="help-sector" class="help-box">
-                    <span class="help-close" onclick="toggleHelp('help-sector')">&times;</span>
-                    <strong>Sectoral Price Rates</strong>
-                    <div>Configure destination-specific sectoral rates with base prices and customizable Weekday/Weekend discounts for Members and Guests. You can also manage which routes appear in the destination dropdown.</div>
+                <div class="grid-2" style="margin-bottom: 0.5rem;">
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label class="form-label">Guest Base Discount (%)</label>
+                        <input type="number" step="0.01" id="guest_disc_pct_input" name="base_rates[guest_discount_percent]" class="form-control" value="{{ $guestDiscPct }}" oninput="recalculateAllSectoralRates()">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label class="form-label">Member Base Discount (%)</label>
+                        <input type="number" step="0.01" id="member_disc_pct_input" name="base_rates[member_discount_percent]" class="form-control" value="{{ $memberDiscPct }}" oninput="recalculateAllSectoralRates()">
+                    </div>
                 </div>
 
-                @php
-                    $standardDestinations = $settings['sectoral_destinations'] ?? [
-                        'Manila - Balesin',
-                        'Balesin - Manila',
-                        'Clark - Balesin',
-                        'Balesin - Clark',
-                        'Sangley - Balesin',
-                        'Balesin - Sangley',
-                    ];
-                @endphp
+                <div style="display: flex; flex-direction: column; gap: 0.65rem; background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 0.75rem; padding: 0.9rem 1.1rem; margin-bottom: 1.5rem;">
+                    <div class="checkbox-wrap" style="margin-bottom: 0;">
+                        <input type="checkbox" id="weekday_extra_discount_enabled" name="base_rates[weekday_extra_discount_enabled]" {{ $weekdayExtraEnabled ? 'checked' : '' }} onchange="recalculateAllSectoralRates()">
+                        <label for="weekday_extra_discount_enabled" class="form-label" style="margin:0; color: #e2e8f0; font-weight: 500; cursor: pointer;">
+                            Allow additional <strong>10%</strong> discount for Weekdays (<strong>Mon, Tue, Wed, Thu</strong>) on top of the <span id="lbl-guest-disc">{{ $guestDiscPct }}</span>% (Guest) and <span id="lbl-member-disc">{{ $memberDiscPct }}</span>% (Member)
+                        </label>
+                        <input type="hidden" id="weekday_extra_pct_input" name="base_rates[weekday_extra_discount_percent]" value="{{ $weekdayExtraPct }}">
+                    </div>
+                    <div class="checkbox-wrap" style="margin-bottom: 0;">
+                        <input type="checkbox" id="airfare_free" name="infants[airfare_free]" {{ !empty($settings['infants']['airfare_free']) ? 'checked' : '' }}>
+                        <label for="airfare_free" class="form-label" style="margin:0; cursor: pointer;">Infants (≤23 mos) travel free of charge</label>
+                    </div>
+                </div>
 
-                <!-- Dropdown Presets Manager -->
-                <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border); border-radius: 0.75rem; padding: 1rem 1.25rem; margin-bottom: 1.25rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
-                        <div style="font-size: 0.875rem; font-weight: 600; color: #c7d2fe; display: flex; align-items: center; gap: 0.5rem;">
-                            <span>📍 Dropdown Destination Options</span>
-                            <span id="dest-save-status" style="font-size: 0.75rem; color: var(--text-muted); font-weight: normal; transition: all 0.3s;">(Auto-saved permanently)</span>
+                <!-- Sectoral Price Rates Subsection -->
+                <div style="border-top: 1px solid var(--border); padding-top: 1.5rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+                        <div>
+                            <h4 style="font-size: 1.05rem; font-weight: 600; color: #e2e8f0; margin: 0 0 0.25rem 0;">Sectoral Price Rates</h4>
+                            <p style="font-size: 0.825rem; color: var(--text-muted); margin: 0;">Configure route-specific Airfare Base Rates; Guest (<span class="js-guest-disc-label">{{ $guestDiscPct }}</span>%) and Member (<span class="js-member-disc-label">{{ $memberDiscPct }}</span>%) sectoral rates update automatically.</p>
                         </div>
-                        <button type="button" class="btn btn-sm" onclick="toggleAddRouteInput()" style="background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.4); color: #c7d2fe; padding: 0.35rem 0.75rem; border-radius: 0.5rem; font-size: 0.8rem;">
-                            + Add Option to Dropdown
+                        <button type="button" class="btn btn-primary btn-sm" onclick="addSectoralRate()" style="background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.45); color: #c7d2fe;">
+                            + Add Destination
                         </button>
                     </div>
 
-                    <!-- Inline Add Route Form -->
-                    <div id="add-route-form" style="display: none; margin-bottom: 0.75rem; gap: 0.5rem; align-items: center;">
-                        <input type="text" id="new-route-name-input" class="form-control" placeholder="Enter route name (e.g. Cebu - Balesin)" style="max-width: 320px; padding: 0.45rem 0.75rem; font-size: 0.85rem;" onkeydown="if(event.key === 'Enter'){ event.preventDefault(); addRouteToPresets(); }">
-                        <button type="button" class="btn btn-primary btn-sm" onclick="addRouteToPresets()" style="padding: 0.45rem 0.85rem; font-size: 0.85rem;">Add</button>
-                        <button type="button" class="btn btn-sm" onclick="toggleAddRouteInput()" style="background: transparent; color: var(--text-muted); border: none; font-size: 0.85rem;">Cancel</button>
+                    <!-- Editable Sectoral Routes Table -->
+                    <div style="background: rgba(15, 23, 42, 0.45); border: 1px solid var(--border); border-radius: 0.75rem; padding: 0.75rem 1rem; overflow-x: auto; margin-bottom: 1.25rem;">
+                        <table style="width: 100%; border-collapse: separate; border-spacing: 0 0.5rem;">
+                            <thead style="color: var(--text-muted); font-size: 0.825rem; text-align: left;">
+                                <tr>
+                                    <th style="padding: 0.5rem 0.6rem; font-weight: 600; width: 28%;">Destination / Route</th>
+                                    <th style="padding: 0.5rem 0.6rem; font-weight: 600; width: 22%; color: #f8fafc;">Airfare Base Rate (₱)</th>
+                                    <th style="padding: 0.5rem 0.6rem; font-weight: 600; width: 22%; color: #e9d5ff;">Guest (<span class="js-guest-disc-label">{{ $guestDiscPct }}</span>% Disc.) (₱)</th>
+                                    <th style="padding: 0.5rem 0.6rem; font-weight: 600; width: 22%; color: #c7d2fe;">Member (<span class="js-member-disc-label">{{ $memberDiscPct }}</span>% Disc.) (₱)</th>
+                                    <th style="padding: 0.5rem 0.4rem; font-weight: 600; width: 56px; text-align: center;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sectoral-rates-container">
+                                @foreach($sectoralRows as $rate)
+                                    @php
+                                        $currDest = $rate['destination'] ?? 'Manila - Balesin';
+                                        $isCustom = !empty($currDest) && !in_array($currDest, $standardDestinations);
+                                        $defaultAirBase = str_contains(strtolower($currDest), 'clark') ? 8500 : 9500;
+                                        $airBaseVal = $rate['airfare_base_rate'] ?? $defaultAirBase;
+                                        $guestVal = $rate['guest_base_rate'] ?? round($airBaseVal * (1 - ($guestDiscPct / 100)), 2);
+                                        $memberVal = $rate['member_base_rate'] ?? round($airBaseVal * (1 - ($memberDiscPct / 100)), 2);
+                                    @endphp
+                                    <tr class="sectoral-rate-row">
+                                        <td style="padding: 0.25rem 0.5rem; vertical-align: top;">
+                                            <div class="dest-field-wrap">
+                                                <div class="dest-select-view" style="{{ $isCustom ? 'display: none;' : 'display: flex;' }}">
+                                                    <select class="form-control" onchange="handleDestSelectChange(this)">
+                                                        @foreach($standardDestinations as $dest)
+                                                            <option value="{{ $dest }}" {{ $currDest === $dest ? 'selected' : '' }}>{{ $dest }}</option>
+                                                        @endforeach
+                                                        <option value="__custom__">✏️ Custom...</option>
+                                                    </select>
+                                                </div>
+                                                <div class="dest-custom-view" style="{{ $isCustom ? 'display: flex;' : 'display: none;' }} gap: 0.35rem; align-items: center;">
+                                                    <input type="text" class="form-control dest-custom-input" placeholder="Custom destination" value="{{ $currDest }}" oninput="handleDestCustomInput(this)">
+                                                    <button type="button" class="btn btn-sm" onclick="switchToDestSelect(this)" title="Choose from default routes" style="background: rgba(255,255,255,0.08); border: 1px solid var(--border); color: var(--text-muted); padding: 0.45rem 0.6rem; font-size: 0.75rem; white-space: nowrap; border-radius: 0.5rem;">
+                                                        Routes ▾
+                                                    </button>
+                                                </div>
+                                                <input type="hidden" name="sectoral_rates[destination][]" class="dest-final-input" value="{{ $currDest }}">
+                                            </div>
+                                        </td>
+                                        <td style="padding: 0.25rem 0.5rem; vertical-align: top;">
+                                            <input type="number" step="0.01" name="sectoral_rates[airfare_base_rate][]" class="form-control js-airfare-base-input" placeholder="0.00" value="{{ $airBaseVal }}" oninput="recalculateSectoralRow(this)">
+                                        </td>
+                                        <td style="padding: 0.25rem 0.5rem; vertical-align: top;">
+                                            <input type="number" step="0.01" name="sectoral_rates[guest_base_rate][]" class="form-control js-guest-base-input" placeholder="0.00" value="{{ $guestVal }}" oninput="updateSectoralSummaryMatrix()">
+                                            <div class="js-weekday-guest-hint" style="font-size: 0.74rem; color: #a7f3d0; margin-top: 0.25rem; {{ $weekdayExtraEnabled ? '' : 'display:none;' }}">
+                                                Weekday ({{ $guestDiscPct + $weekdayExtraPct }}%): ₱<span class="js-weekday-guest-val">{{ number_format($airBaseVal * (1 - (($guestDiscPct + $weekdayExtraPct) / 100)), 0) }}</span>
+                                            </div>
+                                        </td>
+                                        <td style="padding: 0.25rem 0.5rem; vertical-align: top;">
+                                            <input type="number" step="0.01" name="sectoral_rates[member_base_rate][]" class="form-control js-member-base-input" placeholder="0.00" value="{{ $memberVal }}" oninput="updateSectoralSummaryMatrix()">
+                                            <div class="js-weekday-member-hint" style="font-size: 0.74rem; color: #a7f3d0; margin-top: 0.25rem; {{ $weekdayExtraEnabled ? '' : 'display:none;' }}">
+                                                Weekday ({{ $memberDiscPct + $weekdayExtraPct }}%): ₱<span class="js-weekday-member-val">{{ number_format($airBaseVal * (1 - (($memberDiscPct + $weekdayExtraPct) / 100)), 0) }}</span>
+                                            </div>
+                                        </td>
+                                        <td style="padding: 0.25rem 0.4rem; text-align: center; vertical-align: top;">
+                                            <button type="button" class="btn btn-sm btn-trash-sectoral" onclick="removeSectoralRow(this)" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #ef4444; padding: 0.5rem 0.65rem; border-radius: 0.5rem; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'; this.style.color='#ef4444';" title="Remove Destination">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                                                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                                                </svg>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
                     </div>
 
-                    <!-- Route Pills Container -->
-                    <div id="route-pills-container" style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
-                        @foreach($standardDestinations as $dest)
-                            <div class="route-pill" style="display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.35rem 0.65rem; font-size: 0.825rem; color: #f8fafc;">
-                                <span>{{ $dest }}</span>
-                                <input type="hidden" name="sectoral_destinations[]" value="{{ $dest }}">
-                                <button type="button" onclick="removeRouteFromPresets(this, '{{ addslashes($dest) }}')" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #ef4444; border-radius: 0.35rem; cursor: pointer; padding: 3px 5px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; transition: all 0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'; this.style.color='#ef4444';" title="Remove from dropdown">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                        <polyline points="3 6 5 6 21 6"></polyline>
-                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                                        <line x1="10" y1="11" x2="10" y2="17"></line>
-                                        <line x1="14" y1="11" x2="14" y2="17"></line>
-                                    </svg>
-                                </button>
-                            </div>
-                        @endforeach
+                    <!-- Live Sectoral Pricing & Airfare Round Trip Summary Matrix -->
+                    <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); border-radius: 0.75rem; padding: 1rem 1.25rem; overflow-x: auto;">
+                        <div style="font-size: 0.85rem; font-weight: 600; color: #c7d2fe; margin-bottom: 0.75rem;">
+                            ✈️ Sectoral Pricing &amp; Airfare Round Trip Summary
+                        </div>
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: center;">
+                            <thead>
+                                <tr style="background: rgba(16, 185, 129, 0.12); color: #a7f3d0; border-bottom: 1px solid var(--border);">
+                                    <th rowspan="2" style="padding: 0.5rem 0.75rem; text-align: left; border-right: 1px solid var(--border);">Category</th>
+                                    <th rowspan="2" style="padding: 0.5rem 0.6rem; border-right: 1px solid var(--border);">Disc.</th>
+                                    <th colspan="4" style="padding: 0.45rem 0.6rem; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);">Sectoral Pricing</th>
+                                    <th colspan="2" style="padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border);">Airfare Round Trip</th>
+                                </tr>
+                                <tr style="background: rgba(16, 185, 129, 0.07); color: #cbd5e1; border-bottom: 1px solid var(--border); font-size: 0.8rem;">
+                                    <th style="padding: 0.4rem 0.5rem;">MNL - BSI</th>
+                                    <th style="padding: 0.4rem 0.5rem;">BSI - MNL</th>
+                                    <th style="padding: 0.4rem 0.5rem;">CRK - BSI</th>
+                                    <th style="padding: 0.4rem 0.5rem; border-right: 1px solid var(--border);">BSI - CRK</th>
+                                    <th style="padding: 0.4rem 0.5rem;">MNL</th>
+                                    <th style="padding: 0.4rem 0.5rem;">CRK</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sectoral-summary-matrix-body">
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.06);">
+                                    <td style="padding: 0.5rem 0.75rem; text-align: left; font-weight: 600; color: #f8fafc; border-right: 1px solid var(--border);">Airfare Base Rates</td>
+                                    <td style="padding: 0.5rem 0.6rem; color: var(--text-muted); border-right: 1px solid var(--border);">—</td>
+                                    <td style="padding: 0.5rem;" id="mx-base-mnl-bsi">9,500</td>
+                                    <td style="padding: 0.5rem;" id="mx-base-bsi-mnl">9,500</td>
+                                    <td style="padding: 0.5rem;" id="mx-base-crk-bsi">8,500</td>
+                                    <td style="padding: 0.5rem; border-right: 1px solid var(--border);" id="mx-base-bsi-crk">8,500</td>
+                                    <td style="padding: 0.5rem; font-weight: 600;" id="mx-base-rt-mnl">19,000</td>
+                                    <td style="padding: 0.5rem; font-weight: 600;" id="mx-base-rt-crk">17,000</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.06);">
+                                    <td style="padding: 0.5rem 0.75rem; text-align: left; font-weight: 500; color: #e9d5ff; border-right: 1px solid var(--border);">Guest</td>
+                                    <td style="padding: 0.5rem 0.6rem; color: #e9d5ff; border-right: 1px solid var(--border);"><span class="js-guest-disc-label">{{ $guestDiscPct }}</span>%</td>
+                                    <td style="padding: 0.5rem;" id="mx-guest-mnl-bsi">7,600</td>
+                                    <td style="padding: 0.5rem;" id="mx-guest-bsi-mnl">7,600</td>
+                                    <td style="padding: 0.5rem;" id="mx-guest-crk-bsi">6,800</td>
+                                    <td style="padding: 0.5rem; border-right: 1px solid var(--border);" id="mx-guest-bsi-crk">6,800</td>
+                                    <td style="padding: 0.5rem; font-weight: 600; color: #e9d5ff;" id="mx-guest-rt-mnl">15,200</td>
+                                    <td style="padding: 0.5rem; font-weight: 600; color: #e9d5ff;" id="mx-guest-rt-crk">13,600</td>
+                                </tr>
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.06);">
+                                    <td style="padding: 0.5rem 0.75rem; text-align: left; font-weight: 500; color: #c7d2fe; border-right: 1px solid var(--border);">Member</td>
+                                    <td style="padding: 0.5rem 0.6rem; color: #c7d2fe; border-right: 1px solid var(--border);"><span class="js-member-disc-label">{{ $memberDiscPct }}</span>%</td>
+                                    <td style="padding: 0.5rem;" id="mx-member-mnl-bsi">5,700</td>
+                                    <td style="padding: 0.5rem;" id="mx-member-bsi-mnl">5,700</td>
+                                    <td style="padding: 0.5rem;" id="mx-member-crk-bsi">5,100</td>
+                                    <td style="padding: 0.5rem; border-right: 1px solid var(--border);" id="mx-member-bsi-crk">5,100</td>
+                                    <td style="padding: 0.5rem; font-weight: 600; color: #c7d2fe;" id="mx-member-rt-mnl">11,400</td>
+                                    <td style="padding: 0.5rem; font-weight: 600; color: #c7d2fe;" id="mx-member-rt-crk">10,200</td>
+                                </tr>
+                                <tr class="js-weekday-matrix-row" style="background: rgba(16, 185, 129, 0.06); border-bottom: 1px solid rgba(255,255,255,0.06); {{ $weekdayExtraEnabled ? '' : 'display:none;' }}">
+                                    <td style="padding: 0.5rem 0.75rem; text-align: left; font-weight: 500; color: #6ee7b7; border-right: 1px solid var(--border);">Guest (Weekday: Mo–Th)</td>
+                                    <td style="padding: 0.5rem 0.6rem; color: #6ee7b7; border-right: 1px solid var(--border);"><span id="mx-wk-guest-pct">{{ $guestDiscPct + $weekdayExtraPct }}</span>%</td>
+                                    <td style="padding: 0.5rem; color: #a7f3d0;" id="mx-wk-guest-mnl-bsi">6,650</td>
+                                    <td style="padding: 0.5rem; color: #a7f3d0;" id="mx-wk-guest-bsi-mnl">6,650</td>
+                                    <td style="padding: 0.5rem; color: #a7f3d0;" id="mx-wk-guest-crk-bsi">5,950</td>
+                                    <td style="padding: 0.5rem; color: #a7f3d0; border-right: 1px solid var(--border);" id="mx-wk-guest-bsi-crk">5,950</td>
+                                    <td style="padding: 0.5rem; font-weight: 600; color: #6ee7b7;" id="mx-wk-guest-rt-mnl">13,300</td>
+                                    <td style="padding: 0.5rem; font-weight: 600; color: #6ee7b7;" id="mx-wk-guest-rt-crk">11,900</td>
+                                </tr>
+                                <tr class="js-weekday-matrix-row" style="background: rgba(16, 185, 129, 0.06); {{ $weekdayExtraEnabled ? '' : 'display:none;' }}">
+                                    <td style="padding: 0.5rem 0.75rem; text-align: left; font-weight: 500; color: #6ee7b7; border-right: 1px solid var(--border);">Member (Weekday: Mo–Th)</td>
+                                    <td style="padding: 0.5rem 0.6rem; color: #6ee7b7; border-right: 1px solid var(--border);"><span id="mx-wk-member-pct">{{ $memberDiscPct + $weekdayExtraPct }}</span>%</td>
+                                    <td style="padding: 0.5rem; color: #a7f3d0;" id="mx-wk-member-mnl-bsi">4,750</td>
+                                    <td style="padding: 0.5rem; color: #a7f3d0;" id="mx-wk-member-bsi-mnl">4,750</td>
+                                    <td style="padding: 0.5rem; color: #a7f3d0;" id="mx-wk-member-crk-bsi">4,250</td>
+                                    <td style="padding: 0.5rem; color: #a7f3d0; border-right: 1px solid var(--border);" id="mx-wk-member-bsi-crk">4,250</td>
+                                    <td style="padding: 0.5rem; font-weight: 600; color: #6ee7b7;" id="mx-wk-member-rt-mnl">9,500</td>
+                                    <td style="padding: 0.5rem; font-weight: 600; color: #6ee7b7;" id="mx-wk-member-rt-crk">8,500</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
-
-                <div style="overflow-x: auto; margin-bottom: 1rem;">
-                    <table style="width: 100%; min-width: 960px; border-collapse: separate; border-spacing: 0 0.5rem;">
-                        <thead style="color: var(--text-muted); font-size: 0.825rem;">
-                            <tr style="border-bottom: 1px solid var(--border);">
-                                <th rowspan="2" style="padding: 0.6rem 0.5rem; font-weight: 600; vertical-align: bottom; min-width: 170px;">Destination / Route</th>
-                                <th colspan="3" style="padding: 0.5rem; font-weight: 600; text-align: center; border-left: 1px solid var(--border); border-right: 1px solid var(--border); background: rgba(99, 102, 241, 0.12); color: #c7d2fe;">Members</th>
-                                <th colspan="3" style="padding: 0.5rem; font-weight: 600; text-align: center; border-right: 1px solid var(--border); background: rgba(168, 85, 247, 0.12); color: #e9d5ff;">Guests</th>
-                                <th rowspan="2" style="padding: 0.6rem 0.5rem; width: 50px; text-align: center; vertical-align: bottom;">Action</th>
-                            </tr>
-                            <tr style="font-size: 0.775rem;">
-                                <th style="padding: 0.4rem 0.5rem; font-weight: 500; text-align: center; border-left: 1px solid var(--border);">Base Rate (₱)</th>
-                                <th style="padding: 0.4rem 0.5rem; font-weight: 500; text-align: center;">Weekday Disc. (%)</th>
-                                <th style="padding: 0.4rem 0.5rem; font-weight: 500; text-align: center; border-right: 1px solid var(--border);">Weekend Disc. (%)</th>
-                                <th style="padding: 0.4rem 0.5rem; font-weight: 500; text-align: center;">Base Rate (₱)</th>
-                                <th style="padding: 0.4rem 0.5rem; font-weight: 500; text-align: center;">Weekday Disc. (%)</th>
-                                <th style="padding: 0.4rem 0.5rem; font-weight: 500; text-align: center; border-right: 1px solid var(--border);">Weekend Disc. (%)</th>
-                            </tr>
-                        </thead>
-                        <tbody id="sectoral-rates-container">
-                            @forelse($settings['sectoral_rates'] ?? [] as $rate)
-                                @php
-                                    $currDest = $rate['destination'] ?? 'Manila - Balesin';
-                                    $isCustom = !empty($currDest) && !in_array($currDest, $standardDestinations);
-                                @endphp
-                                <tr>
-                                    <td style="padding: 0.25rem 0.4rem; min-width: 195px;">
-                                        <div class="dest-field-wrap">
-                                            <div class="dest-select-view" style="{{ $isCustom ? 'display: none;' : 'display: flex;' }}">
-                                                <select class="form-control" onchange="handleDestSelectChange(this)">
-                                                    @foreach($standardDestinations as $dest)
-                                                        <option value="{{ $dest }}" {{ $currDest === $dest ? 'selected' : '' }}>{{ $dest }}</option>
-                                                    @endforeach
-                                                    <option value="__custom__">✏️ Custom...</option>
-                                                </select>
-                                            </div>
-                                            <div class="dest-custom-view" style="{{ $isCustom ? 'display: flex;' : 'display: none;' }} gap: 0.35rem; align-items: center;">
-                                                <input type="text" class="form-control dest-custom-input" placeholder="Custom destination" value="{{ $currDest }}" oninput="handleDestCustomInput(this)">
-                                                <button type="button" class="btn btn-sm" onclick="switchToDestSelect(this)" title="Choose from preset dropdown" style="background: rgba(255,255,255,0.08); border: 1px solid var(--border); color: var(--text-muted); padding: 0.45rem 0.6rem; font-size: 0.75rem; white-space: nowrap; border-radius: 0.5rem;">
-                                                    Presets ▾
-                                                </button>
-                                            </div>
-                                            <input type="hidden" name="sectoral_rates[destination][]" class="dest-final-input" value="{{ $currDest }}">
-                                        </div>
-                                    </td>
-                                    <td style="padding: 0.25rem 0.4rem;">
-                                        <input type="number" step="0.01" name="sectoral_rates[member_base_rate][]" class="form-control" placeholder="0.00" value="{{ $rate['member_base_rate'] ?? $rate['member_weekday'] ?? $rate['member'] ?? '' }}">
-                                    </td>
-                                    <td style="padding: 0.25rem 0.4rem;">
-                                        <input type="number" step="0.01" name="sectoral_rates[member_weekday_discount][]" class="form-control" placeholder="0%" value="{{ $rate['member_weekday_discount'] ?? '' }}">
-                                    </td>
-                                    <td style="padding: 0.25rem 0.4rem;">
-                                        <input type="number" step="0.01" name="sectoral_rates[member_weekend_discount][]" class="form-control" placeholder="0%" value="{{ $rate['member_weekend_discount'] ?? '' }}">
-                                    </td>
-                                    <td style="padding: 0.25rem 0.4rem;">
-                                        <input type="number" step="0.01" name="sectoral_rates[guest_base_rate][]" class="form-control" placeholder="0.00" value="{{ $rate['guest_base_rate'] ?? $rate['guest_weekday_discount'] ?? $rate['guest'] ?? '' }}">
-                                    </td>
-                                    <td style="padding: 0.25rem 0.4rem;">
-                                        <input type="number" step="0.01" name="sectoral_rates[guest_weekday_discount][]" class="form-control" placeholder="0%" value="{{ $rate['guest_weekday_discount'] ?? '' }}">
-                                    </td>
-                                    <td style="padding: 0.25rem 0.4rem;">
-                                        <input type="number" step="0.01" name="sectoral_rates[guest_weekend_discount][]" class="form-control" placeholder="0%" value="{{ $rate['guest_weekend_discount'] ?? '' }}">
-                                    </td>
-                                    <td style="padding: 0.25rem 0.4rem; text-align: center; vertical-align: middle;">
-                                        <button type="button" class="btn btn-sm btn-trash-sectoral" onclick="removeSectoralRow(this)" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #ef4444; padding: 0.45rem 0.6rem; border-radius: 0.5rem; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'; this.style.color='#ef4444';" title="Remove Destination">
-    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="3 6 5 6 21 6"></polyline>
-        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-        <line x1="10" y1="11" x2="10" y2="17"></line>
-        <line x1="14" y1="11" x2="14" y2="17"></line>
-    </svg>
-</button>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td style="padding: 0.25rem 0.4rem; min-width: 195px;">
-                                        <div class="dest-field-wrap">
-                                            <div class="dest-select-view" style="display: flex;">
-                                                <select class="form-control" onchange="handleDestSelectChange(this)">
-                                                    @foreach($standardDestinations as $dest)
-                                                        <option value="{{ $dest }}">{{ $dest }}</option>
-                                                    @endforeach
-                                                    <option value="__custom__">✏️ Custom...</option>
-                                                </select>
-                                            </div>
-                                            <div class="dest-custom-view" style="display: none; gap: 0.35rem; align-items: center;">
-                                                <input type="text" class="form-control dest-custom-input" placeholder="Custom destination" oninput="handleDestCustomInput(this)">
-                                                <button type="button" class="btn btn-sm" onclick="switchToDestSelect(this)" title="Choose from preset dropdown" style="background: rgba(255,255,255,0.08); border: 1px solid var(--border); color: var(--text-muted); padding: 0.45rem 0.6rem; font-size: 0.75rem; white-space: nowrap; border-radius: 0.5rem;">
-                                                    Presets ▾
-                                                </button>
-                                            </div>
-                                            <input type="hidden" name="sectoral_rates[destination][]" class="dest-final-input" value="Manila - Balesin">
-                                        </div>
-                                    </td>
-                                    <td style="padding: 0.25rem 0.4rem;">
-                                        <input type="number" step="0.01" name="sectoral_rates[member_base_rate][]" class="form-control" placeholder="0.00" value="{{ $settings['base_rates']['member'] ?? 5600 }}">
-                                    </td>
-                                    <td style="padding: 0.25rem 0.4rem;">
-                                        <input type="number" step="0.01" name="sectoral_rates[member_weekday_discount][]" class="form-control" placeholder="0%" value="">
-                                    </td>
-                                    <td style="padding: 0.25rem 0.4rem;">
-                                        <input type="number" step="0.01" name="sectoral_rates[member_weekend_discount][]" class="form-control" placeholder="0%" value="">
-                                    </td>
-                                    <td style="padding: 0.25rem 0.4rem;">
-                                        <input type="number" step="0.01" name="sectoral_rates[guest_base_rate][]" class="form-control" placeholder="0.00" value="{{ $settings['base_rates']['guest'] ?? 12320 }}">
-                                    </td>
-                                    <td style="padding: 0.25rem 0.4rem;">
-                                        <input type="number" step="0.01" name="sectoral_rates[guest_weekday_discount][]" class="form-control" placeholder="0%" value="">
-                                    </td>
-                                    <td style="padding: 0.25rem 0.4rem;">
-                                        <input type="number" step="0.01" name="sectoral_rates[guest_weekend_discount][]" class="form-control" placeholder="0%" value="">
-                                    </td>
-                                    <td style="padding: 0.25rem 0.4rem; text-align: center; vertical-align: middle;">
-                                        <button type="button" class="btn btn-sm btn-trash-sectoral" onclick="removeSectoralRow(this)" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #ef4444; padding: 0.45rem 0.6rem; border-radius: 0.5rem; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'; this.style.color='#ef4444';" title="Remove Destination">
-    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="3 6 5 6 21 6"></polyline>
-        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-        <line x1="10" y1="11" x2="10" y2="17"></line>
-        <line x1="14" y1="11" x2="14" y2="17"></line>
-    </svg>
-</button>
-                                    </td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-                <button type="button" class="btn btn-primary btn-sm" onclick="addSectoralRate()" style="background: rgba(255,255,255,0.1); border: 1px solid var(--border);">+ Add Destination</button>
             </div>
 
             <!-- Promo Rates -->
@@ -1415,140 +1431,12 @@
     }
 
     function getPresetDestinations() {
-        const inputs = document.querySelectorAll('#route-pills-container input[name="sectoral_destinations[]"]');
-        const list = [];
-        inputs.forEach(input => {
-            if (input.value.trim()) list.push(input.value.trim());
-        });
-        return list;
-    }
-
-    function refreshAllDropdowns() {
-        const presets = getPresetDestinations();
-        document.querySelectorAll('.dest-field-wrap').forEach(wrap => {
-            const select = wrap.querySelector('select');
-            const customInput = wrap.querySelector('.dest-custom-input');
-            const finalInput = wrap.querySelector('.dest-final-input');
-            const currentVal = finalInput ? finalInput.value : '';
-
-            if (!select) return;
-
-            // Rebuild select options
-            select.innerHTML = '';
-            presets.forEach(dest => {
-                const opt = document.createElement('option');
-                opt.value = dest;
-                opt.textContent = dest;
-                if (dest === currentVal) opt.selected = true;
-                select.appendChild(opt);
-            });
-            const customOpt = document.createElement('option');
-            customOpt.value = '__custom__';
-            customOpt.textContent = '✏️ Custom...';
-            if (!presets.includes(currentVal) && currentVal) {
-                customOpt.selected = true;
-            }
-            select.appendChild(customOpt);
-
-            if (presets.includes(currentVal)) {
-                select.value = currentVal;
-            }
-        });
-    }
-
-    function saveDestinationsToBackend(destinations) {
-        const statusEl = document.getElementById('dest-save-status');
-        if (statusEl) {
-            statusEl.innerHTML = '<span style="color:#f59e0b">● Saving changes...</span>';
-        }
-
-        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') 
-            || document.querySelector('input[name="_token"]')?.value;
-
-        fetch('{{ url("/setup/sectoral-destinations") }}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': csrfToken,
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify({ destinations: destinations })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                if (statusEl) {
-                    statusEl.innerHTML = '<span style="color:#10b981; font-weight: 600;">✓ Saved permanently</span>';
-                    setTimeout(() => {
-                        statusEl.innerHTML = '<span style="color:var(--text-muted); font-size:0.75rem;">(Auto-saved permanently)</span>';
-                    }, 2500);
-                }
-            }
-        })
-        .catch(err => {
-            console.error('Error auto-saving destinations:', err);
-            if (statusEl) {
-                statusEl.innerHTML = '<span style="color:#ef4444">Failed to auto-save. Please click Save Configuration below.</span>';
-            }
-        });
-    }
-
-    function removeRouteFromPresets(btn, routeName) {
-        if (confirm(`Remove "${routeName}" from dropdown destinations?`)) {
-            btn.closest('.route-pill').remove();
-            refreshAllDropdowns();
-            saveDestinationsToBackend(getPresetDestinations());
-        }
-    }
-
-    function toggleAddRouteInput() {
-        const form = document.getElementById('add-route-form');
-        const input = document.getElementById('new-route-name-input');
-        if (form.style.display === 'none' || !form.style.display) {
-            form.style.display = 'flex';
-            input.focus();
-        } else {
-            form.style.display = 'none';
-            input.value = '';
-        }
-    }
-
-    function addRouteToPresets() {
-        const input = document.getElementById('new-route-name-input');
-        const val = input.value.trim();
-        if (!val) return;
-
-        const existing = getPresetDestinations();
-        if (existing.includes(val)) {
-            alert('This route is already in the dropdown list.');
-            input.focus();
-            return;
-        }
-
-        const container = document.getElementById('route-pills-container');
-        const pill = document.createElement('div');
-        pill.className = 'route-pill';
-        pill.style.cssText = 'display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.35rem 0.65rem; font-size: 0.825rem; color: #f8fafc;';
-        
-        const escapedVal = val.replace(/"/g, '&quot;').replace(/'/g, "\\'");
-        pill.innerHTML = `
-            <span>${val}</span>
-            <input type="hidden" name="sectoral_destinations[]" value="${escapedVal}">
-            <button type="button" onclick="removeRouteFromPresets(this, '${escapedVal}')" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #ef4444; border-radius: 0.35rem; cursor: pointer; padding: 3px 5px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; transition: all 0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'; this.style.color='#ef4444';" title="Remove from dropdown">
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    <line x1="10" y1="11" x2="10" y2="17"></line>
-                    <line x1="14" y1="11" x2="14" y2="17"></line>
-                </svg>
-            </button>
-        `;
-        container.appendChild(pill);
-
-        input.value = '';
-        toggleAddRouteInput();
-        refreshAllDropdowns();
-        saveDestinationsToBackend(getPresetDestinations());
+        return [
+            'Manila - Balesin',
+            'Balesin - Manila',
+            'Clark - Balesin',
+            'Balesin - Clark'
+        ];
     }
 
     function handleDestSelectChange(select) {
@@ -1568,12 +1456,14 @@
             customInput.value = select.value;
             finalInput.value = select.value;
         }
+        updateSectoralSummaryMatrix();
     }
 
     function handleDestCustomInput(input) {
         const wrap = input.closest('.dest-field-wrap');
         const finalInput = wrap.querySelector('.dest-final-input');
         finalInput.value = input.value;
+        updateSectoralSummaryMatrix();
     }
 
     function switchToDestSelect(button) {
@@ -1599,6 +1489,144 @@
             select.selectedIndex = 0;
         }
         finalInput.value = select.value;
+        updateSectoralSummaryMatrix();
+    }
+
+    function getSectoralDiscounts() {
+        const guestDisc = parseFloat(document.getElementById('guest_disc_pct_input')?.value ?? 20) || 0;
+        const memberDisc = parseFloat(document.getElementById('member_disc_pct_input')?.value ?? 40) || 0;
+        const weekdayEnabled = !!document.getElementById('weekday_extra_discount_enabled')?.checked;
+        const weekdayExtra = parseFloat(document.getElementById('weekday_extra_pct_input')?.value ?? 10) || 10;
+        return { guestDisc, memberDisc, weekdayEnabled, weekdayExtra };
+    }
+
+    function recalculateSectoralRow(baseInput) {
+        const tr = baseInput.closest('tr');
+        if (!tr) return;
+        const { guestDisc, memberDisc, weekdayEnabled, weekdayExtra } = getSectoralDiscounts();
+        const baseVal = parseFloat(baseInput.value) || 0;
+
+        const guestInput = tr.querySelector('.js-guest-base-input');
+        const memberInput = tr.querySelector('.js-member-base-input');
+        if (guestInput) guestInput.value = Math.round(baseVal * (1 - guestDisc / 100) * 100) / 100;
+        if (memberInput) memberInput.value = Math.round(baseVal * (1 - memberDisc / 100) * 100) / 100;
+
+        const wkGuestHint = tr.querySelector('.js-weekday-guest-hint');
+        const wkMemberHint = tr.querySelector('.js-weekday-member-hint');
+        if (wkGuestHint) {
+            wkGuestHint.style.display = weekdayEnabled ? '' : 'none';
+            wkGuestHint.innerHTML = `Weekday (${guestDisc + weekdayExtra}%): ₱<span class="js-weekday-guest-val">${Math.round(baseVal * (1 - (guestDisc + weekdayExtra) / 100)).toLocaleString()}</span>`;
+        }
+        if (wkMemberHint) {
+            wkMemberHint.style.display = weekdayEnabled ? '' : 'none';
+            wkMemberHint.innerHTML = `Weekday (${memberDisc + weekdayExtra}%): ₱<span class="js-weekday-member-val">${Math.round(baseVal * (1 - (memberDisc + weekdayExtra) / 100)).toLocaleString()}</span>`;
+        }
+
+        updateSectoralSummaryMatrix();
+    }
+
+    function recalculateAllSectoralRates() {
+        const { guestDisc, memberDisc, weekdayEnabled, weekdayExtra } = getSectoralDiscounts();
+
+        document.querySelectorAll('.js-guest-disc-label, #lbl-guest-disc').forEach(el => el.textContent = guestDisc);
+        document.querySelectorAll('.js-member-disc-label, #lbl-member-disc').forEach(el => el.textContent = memberDisc);
+
+        const wkGuestPctEl = document.getElementById('mx-wk-guest-pct');
+        const wkMemberPctEl = document.getElementById('mx-wk-member-pct');
+        if (wkGuestPctEl) wkGuestPctEl.textContent = guestDisc + weekdayExtra;
+        if (wkMemberPctEl) wkMemberPctEl.textContent = memberDisc + weekdayExtra;
+
+        document.querySelectorAll('.js-weekday-matrix-row').forEach(row => {
+            row.style.display = weekdayEnabled ? '' : 'none';
+        });
+
+        document.querySelectorAll('#sectoral-rates-container .js-airfare-base-input').forEach(input => {
+            recalculateSectoralRow(input);
+        });
+    }
+
+    function updateSectoralSummaryMatrix() {
+        const { guestDisc, memberDisc, weekdayEnabled, weekdayExtra } = getSectoralDiscounts();
+        const routeData = {
+            'manila - balesin': { base: 9500, guest: 7600, member: 5700 },
+            'balesin - manila': { base: 9500, guest: 7600, member: 5700 },
+            'clark - balesin':  { base: 8500, guest: 6800, member: 5100 },
+            'balesin - clark':  { base: 8500, guest: 6800, member: 5100 },
+        };
+
+        document.querySelectorAll('#sectoral-rates-container tr').forEach(tr => {
+            const dest = (tr.querySelector('.dest-final-input')?.value || '').trim().toLowerCase();
+            const base = parseFloat(tr.querySelector('.js-airfare-base-input')?.value) || 0;
+            const guest = parseFloat(tr.querySelector('.js-guest-base-input')?.value) || 0;
+            const member = parseFloat(tr.querySelector('.js-member-base-input')?.value) || 0;
+            if (routeData[dest]) {
+                routeData[dest] = { base, guest, member };
+            }
+        });
+
+        const setCell = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = Math.round(val).toLocaleString();
+        };
+
+        const mnlBsi = routeData['manila - balesin'];
+        const bsiMnl = routeData['balesin - manila'];
+        const crkBsi = routeData['clark - balesin'];
+        const bsiCrk = routeData['balesin - clark'];
+
+        setCell('mx-base-mnl-bsi', mnlBsi.base);
+        setCell('mx-base-bsi-mnl', bsiMnl.base);
+        setCell('mx-base-crk-bsi', crkBsi.base);
+        setCell('mx-base-bsi-crk', bsiCrk.base);
+        setCell('mx-base-rt-mnl', mnlBsi.base + bsiMnl.base);
+        setCell('mx-base-rt-crk', crkBsi.base + bsiCrk.base);
+
+        setCell('mx-guest-mnl-bsi', mnlBsi.guest);
+        setCell('mx-guest-bsi-mnl', bsiMnl.guest);
+        setCell('mx-guest-crk-bsi', crkBsi.guest);
+        setCell('mx-guest-bsi-crk', bsiCrk.guest);
+        setCell('mx-guest-rt-mnl', mnlBsi.guest + bsiMnl.guest);
+        setCell('mx-guest-rt-crk', crkBsi.guest + bsiCrk.guest);
+
+        setCell('mx-member-mnl-bsi', mnlBsi.member);
+        setCell('mx-member-bsi-mnl', bsiMnl.member);
+        setCell('mx-member-crk-bsi', crkBsi.member);
+        setCell('mx-member-bsi-crk', bsiCrk.member);
+        setCell('mx-member-rt-mnl', mnlBsi.member + bsiMnl.member);
+        setCell('mx-member-rt-crk', crkBsi.member + bsiCrk.member);
+
+        const wkGuestFactor = 1 - ((guestDisc + weekdayExtra) / 100);
+        const wkMemberFactor = 1 - ((memberDisc + weekdayExtra) / 100);
+
+        const wkGuestMnlBsi = mnlBsi.base * wkGuestFactor;
+        const wkGuestBsiMnl = bsiMnl.base * wkGuestFactor;
+        const wkGuestCrkBsi = crkBsi.base * wkGuestFactor;
+        const wkGuestBsiCrk = bsiCrk.base * wkGuestFactor;
+
+        setCell('mx-wk-guest-mnl-bsi', wkGuestMnlBsi);
+        setCell('mx-wk-guest-bsi-mnl', wkGuestBsiMnl);
+        setCell('mx-wk-guest-crk-bsi', wkGuestCrkBsi);
+        setCell('mx-wk-guest-bsi-crk', wkGuestBsiCrk);
+        setCell('mx-wk-guest-rt-mnl', wkGuestMnlBsi + wkGuestBsiMnl);
+        setCell('mx-wk-guest-rt-crk', wkGuestCrkBsi + wkGuestBsiCrk);
+
+        const wkMemberMnlBsi = mnlBsi.base * wkMemberFactor;
+        const wkMemberBsiMnl = bsiMnl.base * wkMemberFactor;
+        const wkMemberCrkBsi = crkBsi.base * wkMemberFactor;
+        const wkMemberBsiCrk = bsiCrk.base * wkMemberFactor;
+
+        setCell('mx-wk-member-mnl-bsi', wkMemberMnlBsi);
+        setCell('mx-wk-member-bsi-mnl', wkMemberBsiMnl);
+        setCell('mx-wk-member-crk-bsi', wkMemberCrkBsi);
+        setCell('mx-wk-member-bsi-crk', wkMemberBsiCrk);
+        setCell('mx-wk-member-rt-mnl', wkMemberMnlBsi + wkMemberBsiMnl);
+        setCell('mx-wk-member-rt-crk', wkMemberCrkBsi + wkMemberBsiCrk);
+
+        // Keep top MNL Round Trip inputs synced
+        const memberRtInput = document.getElementById('base_rate_member_input');
+        const guestRtInput = document.getElementById('base_rate_guest_input');
+        if (memberRtInput) memberRtInput.value = Math.round((mnlBsi.member + bsiMnl.member) * 100) / 100;
+        if (guestRtInput) guestRtInput.value = Math.round((mnlBsi.guest + bsiMnl.guest) * 100) / 100;
     }
 
     function addSectoralRate() {
@@ -1609,12 +1637,17 @@
             optionsHtml += `<option value="${escaped}">${dest}</option>`;
         });
         optionsHtml += `<option value="__custom__">✏️ Custom...</option>`;
-        const defaultVal = presets.length > 0 ? presets[0] : 'Manila - Balesin';
+        const defaultVal = presets[0];
+        const { guestDisc, memberDisc, weekdayEnabled, weekdayExtra } = getSectoralDiscounts();
+        const defaultBase = 9500;
+        const defaultGuest = Math.round(defaultBase * (1 - guestDisc / 100) * 100) / 100;
+        const defaultMember = Math.round(defaultBase * (1 - memberDisc / 100) * 100) / 100;
 
         const container = document.getElementById('sectoral-rates-container');
         const tr = document.createElement('tr');
+        tr.className = 'sectoral-rate-row';
         tr.innerHTML = `
-            <td style="padding: 0.25rem 0.4rem; min-width: 195px;">
+            <td style="padding: 0.25rem 0.5rem; vertical-align: top;">
                 <div class="dest-field-wrap">
                     <div class="dest-select-view" style="display: flex;">
                         <select class="form-control" onchange="handleDestSelectChange(this)">
@@ -1623,43 +1656,41 @@
                     </div>
                     <div class="dest-custom-view" style="display: none; gap: 0.35rem; align-items: center;">
                         <input type="text" class="form-control dest-custom-input" placeholder="Custom destination" oninput="handleDestCustomInput(this)">
-                        <button type="button" class="btn btn-sm" onclick="switchToDestSelect(this)" title="Choose from preset dropdown" style="background: rgba(255,255,255,0.08); border: 1px solid var(--border); color: var(--text-muted); padding: 0.45rem 0.6rem; font-size: 0.75rem; white-space: nowrap; border-radius: 0.5rem;">
-                            Presets ▾
+                        <button type="button" class="btn btn-sm" onclick="switchToDestSelect(this)" title="Choose from default routes" style="background: rgba(255,255,255,0.08); border: 1px solid var(--border); color: var(--text-muted); padding: 0.45rem 0.6rem; font-size: 0.75rem; white-space: nowrap; border-radius: 0.5rem;">
+                            Routes ▾
                         </button>
                     </div>
                     <input type="hidden" name="sectoral_rates[destination][]" class="dest-final-input" value="${defaultVal.replace(/"/g, '&quot;')}">
                 </div>
             </td>
-            <td style="padding: 0.25rem 0.4rem;">
-                <input type="number" step="0.01" name="sectoral_rates[member_base_rate][]" class="form-control" placeholder="0.00">
+            <td style="padding: 0.25rem 0.5rem; vertical-align: top;">
+                <input type="number" step="0.01" name="sectoral_rates[airfare_base_rate][]" class="form-control js-airfare-base-input" placeholder="0.00" value="${defaultBase}" oninput="recalculateSectoralRow(this)">
             </td>
-            <td style="padding: 0.25rem 0.4rem;">
-                <input type="number" step="0.01" name="sectoral_rates[member_weekday_discount][]" class="form-control" placeholder="0%">
+            <td style="padding: 0.25rem 0.5rem; vertical-align: top;">
+                <input type="number" step="0.01" name="sectoral_rates[guest_base_rate][]" class="form-control js-guest-base-input" placeholder="0.00" value="${defaultGuest}" oninput="updateSectoralSummaryMatrix()">
+                <div class="js-weekday-guest-hint" style="font-size: 0.74rem; color: #a7f3d0; margin-top: 0.25rem; ${weekdayEnabled ? '' : 'display:none;'}">
+                    Weekday (${guestDisc + weekdayExtra}%): ₱<span class="js-weekday-guest-val">${Math.round(defaultBase * (1 - (guestDisc + weekdayExtra) / 100)).toLocaleString()}</span>
+                </div>
             </td>
-            <td style="padding: 0.25rem 0.4rem;">
-                <input type="number" step="0.01" name="sectoral_rates[member_weekend_discount][]" class="form-control" placeholder="0%">
+            <td style="padding: 0.25rem 0.5rem; vertical-align: top;">
+                <input type="number" step="0.01" name="sectoral_rates[member_base_rate][]" class="form-control js-member-base-input" placeholder="0.00" value="${defaultMember}" oninput="updateSectoralSummaryMatrix()">
+                <div class="js-weekday-member-hint" style="font-size: 0.74rem; color: #a7f3d0; margin-top: 0.25rem; ${weekdayEnabled ? '' : 'display:none;'}">
+                    Weekday (${memberDisc + weekdayExtra}%): ₱<span class="js-weekday-member-val">${Math.round(defaultBase * (1 - (memberDisc + weekdayExtra) / 100)).toLocaleString()}</span>
+                </div>
             </td>
-            <td style="padding: 0.25rem 0.4rem;">
-                <input type="number" step="0.01" name="sectoral_rates[guest_base_rate][]" class="form-control" placeholder="0.00">
-            </td>
-            <td style="padding: 0.25rem 0.4rem;">
-                <input type="number" step="0.01" name="sectoral_rates[guest_weekday_discount][]" class="form-control" placeholder="0%">
-            </td>
-            <td style="padding: 0.25rem 0.4rem;">
-                <input type="number" step="0.01" name="sectoral_rates[guest_weekend_discount][]" class="form-control" placeholder="0%">
-            </td>
-            <td style="padding: 0.25rem 0.4rem; text-align: center; vertical-align: middle;">
-                <button type="button" class="btn btn-sm btn-trash-sectoral" onclick="removeSectoralRow(this)" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #ef4444; padding: 0.45rem 0.6rem; border-radius: 0.5rem; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'; this.style.color='#ef4444';" title="Remove Destination">
-    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="3 6 5 6 21 6"></polyline>
-        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-        <line x1="10" y1="11" x2="10" y2="17"></line>
-        <line x1="14" y1="11" x2="14" y2="17"></line>
-    </svg>
-</button>
+            <td style="padding: 0.25rem 0.4rem; text-align: center; vertical-align: top;">
+                <button type="button" class="btn btn-sm btn-trash-sectoral" onclick="removeSectoralRow(this)" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.35); color: #ef4444; padding: 0.5rem 0.65rem; border-radius: 0.5rem; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#ef4444'; this.style.color='white';" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'; this.style.color='#ef4444';" title="Remove Destination">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        <line x1="10" y1="11" x2="10" y2="17"></line>
+                        <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
+                </button>
             </td>
         `;
         container.appendChild(tr);
+        updateSectoralSummaryMatrix();
     }
 
     function removeSectoralRow(btn) {
@@ -1674,6 +1705,7 @@
             const finalInput = tr.querySelector('.dest-final-input');
             if (finalInput && select) finalInput.value = select.value;
         }
+        updateSectoralSummaryMatrix();
     }
 
     function toggleHelp(id) {
@@ -1701,6 +1733,7 @@
     document.addEventListener('DOMContentLoaded', function() {
         const currentActive = "{{ $activeTab ?? 'island' }}";
         switchTab(currentActive);
+        updateSectoralSummaryMatrix();
     });
 </script>
 @endsection
