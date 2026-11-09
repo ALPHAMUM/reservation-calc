@@ -31,4 +31,5 @@ Route::get('/city/export', [BalesinCityController::class, 'export'])->name('city
 
 Route::get('/setup', [SettingsController::class, 'index'])->name('setup');
 Route::post('/setup', [SettingsController::class, 'update']);
+Route::post('/setup/sectoral-destinations', [SettingsController::class, 'saveSectoralDestinations'])->name('setup.sectoral_destinations');
 Route::get('/setup/rates/export', [SettingsController::class, 'exportRates'])->name('rates.export');
