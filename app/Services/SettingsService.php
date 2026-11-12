@@ -12,8 +12,8 @@ class SettingsService
     {
         return [
             'base_rates' => [
-                'member' => 11400,
-                'guest' => 15200,
+                'member' => 10179,
+                'guest' => 13571,
                 'employee' => 2800,
                 'guest_discount_percent' => 20,
                 'member_discount_percent' => 40,
@@ -29,27 +29,27 @@ class SettingsService
             'sectoral_rates' => [
                 [
                     'destination' => 'Manila - Balesin',
-                    'airfare_base_rate' => 9500,
-                    'guest_base_rate' => 7600,
-                    'member_base_rate' => 5700,
+                    'airfare_base_rate' => 8482,
+                    'guest_base_rate' => 6786,
+                    'member_base_rate' => 5089,
                 ],
                 [
                     'destination' => 'Balesin - Manila',
-                    'airfare_base_rate' => 9500,
-                    'guest_base_rate' => 7600,
-                    'member_base_rate' => 5700,
+                    'airfare_base_rate' => 8482,
+                    'guest_base_rate' => 6786,
+                    'member_base_rate' => 5089,
                 ],
                 [
                     'destination' => 'Clark - Balesin',
-                    'airfare_base_rate' => 8500,
-                    'guest_base_rate' => 6800,
-                    'member_base_rate' => 5100,
+                    'airfare_base_rate' => 7589,
+                    'guest_base_rate' => 6071,
+                    'member_base_rate' => 4554,
                 ],
                 [
                     'destination' => 'Balesin - Clark',
-                    'airfare_base_rate' => 8500,
-                    'guest_base_rate' => 6800,
-                    'member_base_rate' => 5100,
+                    'airfare_base_rate' => 7589,
+                    'guest_base_rate' => 6071,
+                    'member_base_rate' => 4554,
                 ],
             ],
             'promo_rates' => [
@@ -75,6 +75,7 @@ class SettingsService
                     'apply_to' => ['member', 'guest'],
                     'active_periods' => [
                         ['start' => '2026-04-01', 'end' => '2026-05-31', 'amount' => 2000],
+                        ['start' => '2026-06-01', 'end' => '2026-12-31', 'guest_amount' => 2500, 'member_amount' => 2200, 'amount' => 2500],
                     ],
                 ],
                 'environmental' => [
@@ -199,30 +200,84 @@ class SettingsService
                     unset($defaults['sectoral_destinations']);
                 }
 
-                // Upgrade legacy base_rates (5600 / 12320) to new round-trip base rates (11400 / 15200)
-                if (
-                    isset($stored['base_rates']['member'], $stored['base_rates']['guest']) &&
-                    (float)$stored['base_rates']['member'] == 5600 &&
-                    (float)$stored['base_rates']['guest'] == 12320 &&
-                    !isset($stored['base_rates']['guest_discount_percent'])
-                ) {
-                    $stored['base_rates']['member'] = 11400;
-                    $stored['base_rates']['guest'] = 15200;
+                // Upgrade legacy or decimal base_rates to rounded non-VAT sectoral round-trip base rates
+                if (isset($stored['base_rates']['member'], $stored['base_rates']['guest'])) {
+                    $m = (float)$stored['base_rates']['member'];
+                    $g = (float)$stored['base_rates']['guest'];
+                    if (($m == 5600 && $g == 12320) || ($m == 11400 && $g == 15200) || abs($m - 10178.57) < 1 || abs($g - 13571.42) < 1) {
+                        $stored['base_rates']['member'] = 10179;
+                        $stored['base_rates']['guest'] = 13571;
+                    } else {
+                        $stored['base_rates']['member'] = (int) round($m);
+                        $stored['base_rates']['guest'] = (int) round($g);
+                    }
+                }
+                if (isset($stored['base_rates']['employee'])) {
+                    $stored['base_rates']['employee'] = (int) round((float)$stored['base_rates']['employee']);
                 }
 
-                // Upgrade legacy sectoral_rates if airfare_base_rate is not yet present
+                // Upgrade legacy sectoral_rates if airfare_base_rate is missing or still using 9500/8500, and round to whole numbers
                 if (isset($stored['sectoral_rates']) && is_array($stored['sectoral_rates'])) {
-                    $hasAirfareBase = false;
+                    $hasNonVatBase = false;
                     foreach ($stored['sectoral_rates'] as $sr) {
-                        if (isset($sr['airfare_base_rate'])) {
-                            $hasAirfareBase = true;
+                        $ab = (float)($sr['airfare_base_rate'] ?? 0);
+                        if ($ab > 0 && $ab != 9500 && $ab != 8500) {
+                            $hasNonVatBase = true;
                             break;
                         }
                     }
-                    if ($hasAirfareBase) {
+                    if ($hasNonVatBase) {
                         unset($defaults['sectoral_rates']);
+                        foreach ($stored['sectoral_rates'] as &$sr) {
+                            if (isset($sr['airfare_base_rate'])) {
+                                $sr['airfare_base_rate'] = (int) round((float)$sr['airfare_base_rate']);
+                            }
+                            if (isset($sr['guest_base_rate'])) {
+                                $sr['guest_base_rate'] = (int) round((float)$sr['guest_base_rate']);
+                            }
+                            if (isset($sr['member_base_rate'])) {
+                                $sr['member_base_rate'] = (int) round((float)$sr['member_base_rate']);
+                            }
+                        }
+                        unset($sr);
                     } else {
                         unset($stored['sectoral_rates']);
+                    }
+                }
+
+                // Ensure moving-forward AOF periods have rounded guest_amount (2500) and member_amount (2200)
+                if (isset($stored['fees']['aof']['active_periods']) && is_array($stored['fees']['aof']['active_periods'])) {
+                    unset($defaults['fees']['aof']['active_periods']);
+                    $todayStr = date('Y-m-d');
+                    $hasMovingForward = false;
+                    foreach ($stored['fees']['aof']['active_periods'] as &$period) {
+                        $end = $period['end'] ?? '';
+                        $isPast = ($end !== '' && $todayStr > $end);
+                        if (!$isPast) {
+                            $hasMovingForward = true;
+                            $gAmt = isset($period['guest_amount']) ? (int) round((float)$period['guest_amount']) : 2500;
+                            $mAmt = isset($period['member_amount']) ? (int) round((float)$period['member_amount']) : 2200;
+                            if (($gAmt === 2232 && $mAmt === 1964) || ($gAmt === 2200 && $mAmt === 2500)) {
+                                $gAmt = 2500;
+                                $mAmt = 2200;
+                            }
+                            $period['guest_amount'] = $gAmt;
+                            $period['member_amount'] = $mAmt;
+                            $period['amount'] = $period['guest_amount'];
+                        } else {
+                            $period['amount'] = (int) round((float)($period['amount'] ?? 0));
+                        }
+                    }
+                    unset($period);
+
+                    if (!$hasMovingForward) {
+                        $stored['fees']['aof']['active_periods'][] = [
+                            'start' => '2026-06-01',
+                            'end' => '2026-12-31',
+                            'guest_amount' => 2500,
+                            'member_amount' => 2200,
+                            'amount' => 2500,
+                        ];
                     }
                 }
 

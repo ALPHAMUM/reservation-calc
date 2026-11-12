@@ -135,10 +135,10 @@ class SettingsController extends Controller
         }
 
         // Default: Balesin Island
-        // Update Base Rates
-        $settings['base_rates']['member'] = (float)($input['base_rates']['member'] ?? $settings['base_rates']['member'] ?? 11400);
-        $settings['base_rates']['guest'] = (float)($input['base_rates']['guest'] ?? $settings['base_rates']['guest'] ?? 15200);
-        $settings['base_rates']['employee'] = (float)($input['base_rates']['employee'] ?? $settings['base_rates']['employee'] ?? 2800);
+        // Update Base Rates (rounded whole numbers)
+        $settings['base_rates']['member'] = (int) round((float)($input['base_rates']['member'] ?? $settings['base_rates']['member'] ?? 10179));
+        $settings['base_rates']['guest'] = (int) round((float)($input['base_rates']['guest'] ?? $settings['base_rates']['guest'] ?? 13571));
+        $settings['base_rates']['employee'] = (int) round((float)($input['base_rates']['employee'] ?? $settings['base_rates']['employee'] ?? 2800));
         $settings['base_rates']['guest_discount_percent'] = (float)($input['base_rates']['guest_discount_percent'] ?? $settings['base_rates']['guest_discount_percent'] ?? 20);
         $settings['base_rates']['member_discount_percent'] = (float)($input['base_rates']['member_discount_percent'] ?? $settings['base_rates']['member_discount_percent'] ?? 40);
         $settings['base_rates']['weekday_extra_discount_enabled'] = isset($input['base_rates']['weekday_extra_discount_enabled']);
@@ -152,20 +152,20 @@ class SettingsController extends Controller
             'Balesin - Clark',
         ];
 
-        // Update Sectoral Rates
+        // Update Sectoral Rates (rounded whole numbers)
         $sectoralRates = [];
         $guestDisc = $settings['base_rates']['guest_discount_percent'];
         $memberDisc = $settings['base_rates']['member_discount_percent'];
         if (isset($input['sectoral_rates']['destination']) && is_array($input['sectoral_rates']['destination'])) {
             foreach ($input['sectoral_rates']['destination'] as $index => $destination) {
                 if (!empty(trim($destination))) {
-                    $airfareBase = (float)($input['sectoral_rates']['airfare_base_rate'][$index] ?? 0);
+                    $airfareBase = (int) round((float)($input['sectoral_rates']['airfare_base_rate'][$index] ?? 0));
                     $guestBase = isset($input['sectoral_rates']['guest_base_rate'][$index]) && $input['sectoral_rates']['guest_base_rate'][$index] !== ''
-                        ? (float)$input['sectoral_rates']['guest_base_rate'][$index]
-                        : round($airfareBase * (1 - ($guestDisc / 100)), 2);
+                        ? (int) round((float)$input['sectoral_rates']['guest_base_rate'][$index])
+                        : (int) round($airfareBase * (1 - ($guestDisc / 100)));
                     $memberBase = isset($input['sectoral_rates']['member_base_rate'][$index]) && $input['sectoral_rates']['member_base_rate'][$index] !== ''
-                        ? (float)$input['sectoral_rates']['member_base_rate'][$index]
-                        : round($airfareBase * (1 - ($memberDisc / 100)), 2);
+                        ? (int) round((float)$input['sectoral_rates']['member_base_rate'][$index])
+                        : (int) round($airfareBase * (1 - ($memberDisc / 100)));
 
                     $sectoralRates[] = [
                         'destination' => trim($destination),
@@ -213,11 +213,25 @@ class SettingsController extends Controller
         if (isset($input['fees']['aof']['active_periods']['start']) && isset($input['fees']['aof']['active_periods']['end'])) {
             foreach ($input['fees']['aof']['active_periods']['start'] as $idx => $start) {
                 if (!empty($start) && !empty($input['fees']['aof']['active_periods']['end'][$idx])) {
-                    $aofPeriods[] = [
+                    $end = $input['fees']['aof']['active_periods']['end'][$idx];
+                    $guestAmtRaw = $input['fees']['aof']['active_periods']['guest_amount'][$idx] ?? null;
+                    $memberAmtRaw = $input['fees']['aof']['active_periods']['member_amount'][$idx] ?? null;
+                    $legacyAmtRaw = $input['fees']['aof']['active_periods']['amount'][$idx] ?? null;
+
+                    $periodItem = [
                         'start' => $start,
-                        'end' => $input['fees']['aof']['active_periods']['end'][$idx],
-                        'amount' => (float)($input['fees']['aof']['active_periods']['amount'][$idx] ?? 2000)
+                        'end' => $end,
                     ];
+
+                    if ($guestAmtRaw !== null && $guestAmtRaw !== '') {
+                        $periodItem['guest_amount'] = (int) round((float) $guestAmtRaw);
+                        $periodItem['member_amount'] = ($memberAmtRaw !== null && $memberAmtRaw !== '') ? (int) round((float) $memberAmtRaw) : 2200;
+                        $periodItem['amount'] = $periodItem['guest_amount'];
+                    } else {
+                        $periodItem['amount'] = ($legacyAmtRaw !== null && $legacyAmtRaw !== '') ? (int) round((float) $legacyAmtRaw) : 2000;
+                    }
+
+                    $aofPeriods[] = $periodItem;
                 }
             }
         }

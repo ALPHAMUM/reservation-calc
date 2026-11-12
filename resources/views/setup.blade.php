@@ -362,10 +362,10 @@
                         'Balesin - Clark',
                     ];
                     $defaultSectoralRates = [
-                        ['destination' => 'Manila - Balesin', 'airfare_base_rate' => 9500, 'guest_base_rate' => 7600, 'member_base_rate' => 5700],
-                        ['destination' => 'Balesin - Manila', 'airfare_base_rate' => 9500, 'guest_base_rate' => 7600, 'member_base_rate' => 5700],
-                        ['destination' => 'Clark - Balesin',  'airfare_base_rate' => 8500, 'guest_base_rate' => 6800, 'member_base_rate' => 5100],
-                        ['destination' => 'Balesin - Clark',  'airfare_base_rate' => 8500, 'guest_base_rate' => 6800, 'member_base_rate' => 5100],
+                        ['destination' => 'Manila - Balesin', 'airfare_base_rate' => 8482, 'guest_base_rate' => 6786, 'member_base_rate' => 5089],
+                        ['destination' => 'Balesin - Manila', 'airfare_base_rate' => 8482, 'guest_base_rate' => 6786, 'member_base_rate' => 5089],
+                        ['destination' => 'Clark - Balesin',  'airfare_base_rate' => 7589, 'guest_base_rate' => 6071, 'member_base_rate' => 4554],
+                        ['destination' => 'Balesin - Clark',  'airfare_base_rate' => 7589, 'guest_base_rate' => 6071, 'member_base_rate' => 4554],
                     ];
                     $sectoralRows = !empty($settings['sectoral_rates']) ? $settings['sectoral_rates'] : $defaultSectoralRates;
                     if (count($sectoralRows) === 1 && !isset($sectoralRows[0]['airfare_base_rate'])) {
@@ -379,16 +379,16 @@
 
                 <div class="grid-3" style="margin-bottom: 0.25rem;">
                     <div class="form-group">
-                        <label class="form-label">Member Round Trip Rate - MNL (₱)</label>
-                        <input type="number" step="0.01" id="base_rate_member_input" name="base_rates[member]" class="form-control" value="{{ $settings['base_rates']['member'] ?? 11400 }}">
+                        <label class="form-label">Member Round Trip Base - MNL (₱)</label>
+                        <input type="number" step="1" id="base_rate_member_input" name="base_rates[member]" class="form-control" value="{{ (int) round((float)($settings['base_rates']['member'] ?? 10179)) }}">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Guest Round Trip Rate - MNL (₱)</label>
-                        <input type="number" step="0.01" id="base_rate_guest_input" name="base_rates[guest]" class="form-control" value="{{ $settings['base_rates']['guest'] ?? 15200 }}">
+                        <label class="form-label">Guest Round Trip Base - MNL (₱)</label>
+                        <input type="number" step="1" id="base_rate_guest_input" name="base_rates[guest]" class="form-control" value="{{ (int) round((float)($settings['base_rates']['guest'] ?? 13571)) }}">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Employee Airfare Rate (₱)</label>
-                        <input type="number" step="0.01" name="base_rates[employee]" class="form-control" value="{{ $settings['base_rates']['employee'] ?? 2800 }}">
+                        <input type="number" step="1" name="base_rates[employee]" class="form-control" value="{{ (int) round((float)($settings['base_rates']['employee'] ?? 2800)) }}">
                     </div>
                 </div>
 
@@ -446,10 +446,11 @@
                                     @php
                                         $currDest = $rate['destination'] ?? 'Manila - Balesin';
                                         $isCustom = !empty($currDest) && !in_array($currDest, $standardDestinations);
-                                        $defaultAirBase = str_contains(strtolower($currDest), 'clark') ? 8500 : 9500;
-                                        $airBaseVal = $rate['airfare_base_rate'] ?? $defaultAirBase;
-                                        $guestVal = $rate['guest_base_rate'] ?? round($airBaseVal * (1 - ($guestDiscPct / 100)), 2);
-                                        $memberVal = $rate['member_base_rate'] ?? round($airBaseVal * (1 - ($memberDiscPct / 100)), 2);
+                                        $currLower = strtolower($currDest);
+                                        $defaultAirBase = str_contains($currLower, 'clark') ? 7589 : 8482;
+                                        $airBaseVal = (int) round((float)($rate['airfare_base_rate'] ?? $defaultAirBase));
+                                        $guestVal = isset($rate['guest_base_rate']) ? (int) round((float)$rate['guest_base_rate']) : (int) round($airBaseVal * (1 - ($guestDiscPct / 100)));
+                                        $memberVal = isset($rate['member_base_rate']) ? (int) round((float)$rate['member_base_rate']) : (int) round($airBaseVal * (1 - ($memberDiscPct / 100)));
                                     @endphp
                                     <tr class="sectoral-rate-row">
                                         <td style="padding: 0.25rem 0.5rem; vertical-align: top;">
@@ -472,18 +473,18 @@
                                             </div>
                                         </td>
                                         <td style="padding: 0.25rem 0.5rem; vertical-align: top;">
-                                            <input type="number" step="0.01" name="sectoral_rates[airfare_base_rate][]" class="form-control js-airfare-base-input" placeholder="0.00" value="{{ $airBaseVal }}" oninput="recalculateSectoralRow(this)">
+                                            <input type="number" step="1" name="sectoral_rates[airfare_base_rate][]" class="form-control js-airfare-base-input" placeholder="0" value="{{ $airBaseVal }}" oninput="recalculateSectoralRow(this)">
                                         </td>
                                         <td style="padding: 0.25rem 0.5rem; vertical-align: top;">
-                                            <input type="number" step="0.01" name="sectoral_rates[guest_base_rate][]" class="form-control js-guest-base-input" placeholder="0.00" value="{{ $guestVal }}" oninput="updateSectoralSummaryMatrix()">
+                                            <input type="number" step="1" name="sectoral_rates[guest_base_rate][]" class="form-control js-guest-base-input" placeholder="0" value="{{ $guestVal }}" oninput="updateSectoralSummaryMatrix()">
                                             <div class="js-weekday-guest-hint" style="font-size: 0.74rem; color: #a7f3d0; margin-top: 0.25rem; {{ $weekdayExtraEnabled ? '' : 'display:none;' }}">
-                                                Weekday ({{ $guestDiscPct + $weekdayExtraPct }}%): ₱<span class="js-weekday-guest-val">{{ number_format($airBaseVal * (1 - (($guestDiscPct + $weekdayExtraPct) / 100)), 0) }}</span>
+                                                Weekday ({{ $guestDiscPct + $weekdayExtraPct }}%): ₱<span class="js-weekday-guest-val">{{ number_format(round($airBaseVal * (1 - (($guestDiscPct + $weekdayExtraPct) / 100))), 0) }}</span>
                                             </div>
                                         </td>
                                         <td style="padding: 0.25rem 0.5rem; vertical-align: top;">
-                                            <input type="number" step="0.01" name="sectoral_rates[member_base_rate][]" class="form-control js-member-base-input" placeholder="0.00" value="{{ $memberVal }}" oninput="updateSectoralSummaryMatrix()">
+                                            <input type="number" step="1" name="sectoral_rates[member_base_rate][]" class="form-control js-member-base-input" placeholder="0" value="{{ $memberVal }}" oninput="updateSectoralSummaryMatrix()">
                                             <div class="js-weekday-member-hint" style="font-size: 0.74rem; color: #a7f3d0; margin-top: 0.25rem; {{ $weekdayExtraEnabled ? '' : 'display:none;' }}">
-                                                Weekday ({{ $memberDiscPct + $weekdayExtraPct }}%): ₱<span class="js-weekday-member-val">{{ number_format($airBaseVal * (1 - (($memberDiscPct + $weekdayExtraPct) / 100)), 0) }}</span>
+                                                Weekday ({{ $memberDiscPct + $weekdayExtraPct }}%): ₱<span class="js-weekday-member-val">{{ number_format(round($airBaseVal * (1 - (($memberDiscPct + $weekdayExtraPct) / 100))), 0) }}</span>
                                             </div>
                                         </td>
                                         <td style="padding: 0.25rem 0.4rem; text-align: center; vertical-align: top;">
@@ -505,15 +506,15 @@
                     <!-- Live Sectoral Pricing & Airfare Round Trip Summary Matrix -->
                     <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border); border-radius: 0.75rem; padding: 1rem 1.25rem; overflow-x: auto;">
                         <div style="font-size: 0.85rem; font-weight: 600; color: #c7d2fe; margin-bottom: 0.75rem;">
-                            ✈️ Sectoral Pricing &amp; Airfare Round Trip Summary
+                            ✈️ Sectoral Pricing &amp; Airfare Round Trip Summary (Rounded Non-VAT Base Fares)
                         </div>
                         <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: center;">
                             <thead>
                                 <tr style="background: rgba(16, 185, 129, 0.12); color: #a7f3d0; border-bottom: 1px solid var(--border);">
                                     <th rowspan="2" style="padding: 0.5rem 0.75rem; text-align: left; border-right: 1px solid var(--border);">Category</th>
                                     <th rowspan="2" style="padding: 0.5rem 0.6rem; border-right: 1px solid var(--border);">Disc.</th>
-                                    <th colspan="4" style="padding: 0.45rem 0.6rem; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);">Sectoral Pricing</th>
-                                    <th colspan="2" style="padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border);">Airfare Round Trip</th>
+                                    <th colspan="4" style="padding: 0.45rem 0.6rem; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);">Sectoral Pricing (Per Leg)</th>
+                                    <th colspan="2" style="padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border);">Airfare Round Trip (Non-VAT / W/ 12% VAT)</th>
                                 </tr>
                                 <tr style="background: rgba(16, 185, 129, 0.07); color: #cbd5e1; border-bottom: 1px solid var(--border); font-size: 0.8rem;">
                                     <th style="padding: 0.4rem 0.5rem;">MNL - BSI</th>
@@ -526,54 +527,64 @@
                             </thead>
                             <tbody id="sectoral-summary-matrix-body">
                                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.06);">
-                                    <td style="padding: 0.5rem 0.75rem; text-align: left; font-weight: 600; color: #f8fafc; border-right: 1px solid var(--border);">Airfare Base Rates</td>
-                                    <td style="padding: 0.5rem 0.6rem; color: var(--text-muted); border-right: 1px solid var(--border);">—</td>
-                                    <td style="padding: 0.5rem;" id="mx-base-mnl-bsi">9,500</td>
-                                    <td style="padding: 0.5rem;" id="mx-base-bsi-mnl">9,500</td>
-                                    <td style="padding: 0.5rem;" id="mx-base-crk-bsi">8,500</td>
-                                    <td style="padding: 0.5rem; border-right: 1px solid var(--border);" id="mx-base-bsi-crk">8,500</td>
-                                    <td style="padding: 0.5rem; font-weight: 600;" id="mx-base-rt-mnl">19,000</td>
-                                    <td style="padding: 0.5rem; font-weight: 600;" id="mx-base-rt-crk">17,000</td>
+                                    <td style="padding: 0.5rem 0.75rem; text-align: left; font-weight: 600; color: #f8fafc; border-right: 1px solid var(--border);">Public / Airfare Base</td>
+                                    <td style="padding: 0.5rem 0.6rem; color: var(--text-muted); border-right: 1px solid var(--border);">0%</td>
+                                    <td style="padding: 0.5rem;" id="mx-base-mnl-bsi">8,482</td>
+                                    <td style="padding: 0.5rem;" id="mx-base-bsi-mnl">8,482</td>
+                                    <td style="padding: 0.5rem;" id="mx-base-crk-bsi">7,589</td>
+                                    <td style="padding: 0.5rem; border-right: 1px solid var(--border);" id="mx-base-bsi-crk">7,589</td>
+                                    <td style="padding: 0.5rem; font-weight: 600;" id="mx-base-rt-mnl">16,964 <span style="font-size:0.75rem; color:var(--text-muted);">(19,000)</span></td>
+                                    <td style="padding: 0.5rem; font-weight: 600;" id="mx-base-rt-crk">15,179 <span style="font-size:0.75rem; color:var(--text-muted);">(17,000)</span></td>
                                 </tr>
                                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.06);">
-                                    <td style="padding: 0.5rem 0.75rem; text-align: left; font-weight: 500; color: #e9d5ff; border-right: 1px solid var(--border);">Guest</td>
+                                    <td style="padding: 0.5rem 0.75rem; text-align: left; font-weight: 500; color: #e9d5ff; border-right: 1px solid var(--border);">Guest (Weekend)</td>
                                     <td style="padding: 0.5rem 0.6rem; color: #e9d5ff; border-right: 1px solid var(--border);"><span class="js-guest-disc-label">{{ $guestDiscPct }}</span>%</td>
-                                    <td style="padding: 0.5rem;" id="mx-guest-mnl-bsi">7,600</td>
-                                    <td style="padding: 0.5rem;" id="mx-guest-bsi-mnl">7,600</td>
-                                    <td style="padding: 0.5rem;" id="mx-guest-crk-bsi">6,800</td>
-                                    <td style="padding: 0.5rem; border-right: 1px solid var(--border);" id="mx-guest-bsi-crk">6,800</td>
-                                    <td style="padding: 0.5rem; font-weight: 600; color: #e9d5ff;" id="mx-guest-rt-mnl">15,200</td>
-                                    <td style="padding: 0.5rem; font-weight: 600; color: #e9d5ff;" id="mx-guest-rt-crk">13,600</td>
+                                    <td style="padding: 0.5rem;" id="mx-guest-mnl-bsi">6,786</td>
+                                    <td style="padding: 0.5rem;" id="mx-guest-bsi-mnl">6,786</td>
+                                    <td style="padding: 0.5rem;" id="mx-guest-crk-bsi">6,071</td>
+                                    <td style="padding: 0.5rem; border-right: 1px solid var(--border);" id="mx-guest-bsi-crk">6,071</td>
+                                    <td style="padding: 0.5rem; font-weight: 600; color: #e9d5ff;" id="mx-guest-rt-mnl">13,571 <span style="font-size:0.75rem; color:var(--text-muted);">(15,200)</span></td>
+                                    <td style="padding: 0.5rem; font-weight: 600; color: #e9d5ff;" id="mx-guest-rt-crk">12,143 <span style="font-size:0.75rem; color:var(--text-muted);">(13,600)</span></td>
                                 </tr>
                                 <tr style="border-bottom: 1px solid rgba(255,255,255,0.06);">
-                                    <td style="padding: 0.5rem 0.75rem; text-align: left; font-weight: 500; color: #c7d2fe; border-right: 1px solid var(--border);">Member</td>
+                                    <td style="padding: 0.5rem 0.75rem; text-align: left; font-weight: 500; color: #c7d2fe; border-right: 1px solid var(--border);">Member (Weekend)</td>
                                     <td style="padding: 0.5rem 0.6rem; color: #c7d2fe; border-right: 1px solid var(--border);"><span class="js-member-disc-label">{{ $memberDiscPct }}</span>%</td>
-                                    <td style="padding: 0.5rem;" id="mx-member-mnl-bsi">5,700</td>
-                                    <td style="padding: 0.5rem;" id="mx-member-bsi-mnl">5,700</td>
-                                    <td style="padding: 0.5rem;" id="mx-member-crk-bsi">5,100</td>
-                                    <td style="padding: 0.5rem; border-right: 1px solid var(--border);" id="mx-member-bsi-crk">5,100</td>
-                                    <td style="padding: 0.5rem; font-weight: 600; color: #c7d2fe;" id="mx-member-rt-mnl">11,400</td>
-                                    <td style="padding: 0.5rem; font-weight: 600; color: #c7d2fe;" id="mx-member-rt-crk">10,200</td>
+                                    <td style="padding: 0.5rem;" id="mx-member-mnl-bsi">5,089</td>
+                                    <td style="padding: 0.5rem;" id="mx-member-bsi-mnl">5,089</td>
+                                    <td style="padding: 0.5rem;" id="mx-member-crk-bsi">4,554</td>
+                                    <td style="padding: 0.5rem; border-right: 1px solid var(--border);" id="mx-member-bsi-crk">4,554</td>
+                                    <td style="padding: 0.5rem; font-weight: 600; color: #c7d2fe;" id="mx-member-rt-mnl">10,179 <span style="font-size:0.75rem; color:var(--text-muted);">(11,400)</span></td>
+                                    <td style="padding: 0.5rem; font-weight: 600; color: #c7d2fe;" id="mx-member-rt-crk">9,107 <span style="font-size:0.75rem; color:var(--text-muted);">(10,200)</span></td>
                                 </tr>
                                 <tr class="js-weekday-matrix-row" style="background: rgba(16, 185, 129, 0.06); border-bottom: 1px solid rgba(255,255,255,0.06); {{ $weekdayExtraEnabled ? '' : 'display:none;' }}">
                                     <td style="padding: 0.5rem 0.75rem; text-align: left; font-weight: 500; color: #6ee7b7; border-right: 1px solid var(--border);">Guest (Weekday: Mo–Th)</td>
                                     <td style="padding: 0.5rem 0.6rem; color: #6ee7b7; border-right: 1px solid var(--border);"><span id="mx-wk-guest-pct">{{ $guestDiscPct + $weekdayExtraPct }}</span>%</td>
-                                    <td style="padding: 0.5rem; color: #a7f3d0;" id="mx-wk-guest-mnl-bsi">6,650</td>
-                                    <td style="padding: 0.5rem; color: #a7f3d0;" id="mx-wk-guest-bsi-mnl">6,650</td>
-                                    <td style="padding: 0.5rem; color: #a7f3d0;" id="mx-wk-guest-crk-bsi">5,950</td>
-                                    <td style="padding: 0.5rem; color: #a7f3d0; border-right: 1px solid var(--border);" id="mx-wk-guest-bsi-crk">5,950</td>
-                                    <td style="padding: 0.5rem; font-weight: 600; color: #6ee7b7;" id="mx-wk-guest-rt-mnl">13,300</td>
-                                    <td style="padding: 0.5rem; font-weight: 600; color: #6ee7b7;" id="mx-wk-guest-rt-crk">11,900</td>
+                                    <td style="padding: 0.5rem; color: #a7f3d0;" id="mx-wk-guest-mnl-bsi">5,937</td>
+                                    <td style="padding: 0.5rem; color: #a7f3d0;" id="mx-wk-guest-bsi-mnl">5,937</td>
+                                    <td style="padding: 0.5rem; color: #a7f3d0;" id="mx-wk-guest-crk-bsi">5,312</td>
+                                    <td style="padding: 0.5rem; color: #a7f3d0; border-right: 1px solid var(--border);" id="mx-wk-guest-bsi-crk">5,313</td>
+                                    <td style="padding: 0.5rem; font-weight: 600; color: #6ee7b7;" id="mx-wk-guest-rt-mnl">11,875 <span style="font-size:0.75rem; color:var(--text-muted);">(13,300)</span></td>
+                                    <td style="padding: 0.5rem; font-weight: 600; color: #6ee7b7;" id="mx-wk-guest-rt-crk">10,625 <span style="font-size:0.75rem; color:var(--text-muted);">(11,900)</span></td>
                                 </tr>
-                                <tr class="js-weekday-matrix-row" style="background: rgba(16, 185, 129, 0.06); {{ $weekdayExtraEnabled ? '' : 'display:none;' }}">
+                                <tr class="js-weekday-matrix-row" style="background: rgba(16, 185, 129, 0.06); border-bottom: 1px solid rgba(255,255,255,0.06); {{ $weekdayExtraEnabled ? '' : 'display:none;' }}">
                                     <td style="padding: 0.5rem 0.75rem; text-align: left; font-weight: 500; color: #6ee7b7; border-right: 1px solid var(--border);">Member (Weekday: Mo–Th)</td>
                                     <td style="padding: 0.5rem 0.6rem; color: #6ee7b7; border-right: 1px solid var(--border);"><span id="mx-wk-member-pct">{{ $memberDiscPct + $weekdayExtraPct }}</span>%</td>
-                                    <td style="padding: 0.5rem; color: #a7f3d0;" id="mx-wk-member-mnl-bsi">4,750</td>
-                                    <td style="padding: 0.5rem; color: #a7f3d0;" id="mx-wk-member-bsi-mnl">4,750</td>
-                                    <td style="padding: 0.5rem; color: #a7f3d0;" id="mx-wk-member-crk-bsi">4,250</td>
-                                    <td style="padding: 0.5rem; color: #a7f3d0; border-right: 1px solid var(--border);" id="mx-wk-member-bsi-crk">4,250</td>
-                                    <td style="padding: 0.5rem; font-weight: 600; color: #6ee7b7;" id="mx-wk-member-rt-mnl">9,500</td>
-                                    <td style="padding: 0.5rem; font-weight: 600; color: #6ee7b7;" id="mx-wk-member-rt-crk">8,500</td>
+                                    <td style="padding: 0.5rem; color: #a7f3d0;" id="mx-wk-member-mnl-bsi">4,241</td>
+                                    <td style="padding: 0.5rem; color: #a7f3d0;" id="mx-wk-member-bsi-mnl">4,241</td>
+                                    <td style="padding: 0.5rem; color: #a7f3d0;" id="mx-wk-member-crk-bsi">3,795</td>
+                                    <td style="padding: 0.5rem; color: #a7f3d0; border-right: 1px solid var(--border);" id="mx-wk-member-bsi-crk">3,795</td>
+                                    <td style="padding: 0.5rem; font-weight: 600; color: #6ee7b7;" id="mx-wk-member-rt-mnl">8,482 <span style="font-size:0.75rem; color:var(--text-muted);">(9,500)</span></td>
+                                    <td style="padding: 0.5rem; font-weight: 600; color: #6ee7b7;" id="mx-wk-member-rt-crk">7,589 <span style="font-size:0.75rem; color:var(--text-muted);">(8,500)</span></td>
+                                </tr>
+                                <tr style="background: rgba(59, 130, 246, 0.08);">
+                                    <td style="padding: 0.5rem 0.75rem; text-align: left; font-weight: 500; color: #93c5fd; border-right: 1px solid var(--border);">Senior / PWD (VAT Exempt)</td>
+                                    <td style="padding: 0.5rem 0.6rem; color: #93c5fd; border-right: 1px solid var(--border);">20%</td>
+                                    <td style="padding: 0.5rem; color: #bfdbfe;" id="mx-sc-mnl-bsi">6,786</td>
+                                    <td style="padding: 0.5rem; color: #bfdbfe;" id="mx-sc-bsi-mnl">6,786</td>
+                                    <td style="padding: 0.5rem; color: #bfdbfe;" id="mx-sc-crk-bsi">6,071</td>
+                                    <td style="padding: 0.5rem; color: #bfdbfe; border-right: 1px solid var(--border);" id="mx-sc-bsi-crk">6,071</td>
+                                    <td style="padding: 0.5rem; font-weight: 600; color: #93c5fd;" id="mx-sc-rt-mnl">13,571 <span style="font-size:0.75rem; color:#93c5fd;">(VAT Exempt)</span></td>
+                                    <td style="padding: 0.5rem; font-weight: 600; color: #93c5fd;" id="mx-sc-rt-crk">12,143 <span style="font-size:0.75rem; color:#93c5fd;">(VAT Exempt)</span></td>
                                 </tr>
                             </tbody>
                         </table>
@@ -777,7 +788,7 @@
                     </div>
 
                     <div style="padding: 1.25rem; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border); border-radius: 0.75rem;">
-                        <label class="form-label" style="font-size: 0.95rem; color: white; font-weight: 500; margin-bottom: 1rem;">Active AOF Periods (Start Date, End Date, and Amount in one row)</label>
+                        <label class="form-label" style="font-size: 0.95rem; color: white; font-weight: 500; margin-bottom: 1rem;">Active AOF Periods (Start Date, End Date, and Guest / Member AOF Amounts)</label>
                         <div id="aof-periods-container">
                             @php 
                                 $periods = $settings['fees']['aof']['active_periods'] ?? [];
@@ -815,17 +826,28 @@
                                         <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem;">End Date</label>
                                         <input type="date" name="fees[aof][active_periods][end][]" class="form-control" value="{{ $end }}" @if($isPast) readonly @endif>
                                     </div>
-                                    <div style="flex:0.8">
-                                        <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem;">AOF Amount (₱)</label>
-                                        <input type="number" step="0.01" name="fees[aof][active_periods][amount][]" class="form-control" value="{{ $period['amount'] ?? 2000 }}" @if($isPast) readonly @endif>
-                                    </div>
-                                    
+
                                     @if($isPast)
+                                        <div style="flex:0.8">
+                                            <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem;">AOF Amount (₱)</label>
+                                            <input type="number" step="1" name="fees[aof][active_periods][amount][]" class="form-control" value="{{ (int) round((float)($period['amount'] ?? 2000)) }}" readonly>
+                                            <input type="hidden" name="fees[aof][active_periods][guest_amount][]" value="">
+                                            <input type="hidden" name="fees[aof][active_periods][member_amount][]" value="">
+                                        </div>
                                         <div style="width: 82px; height: 42px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 0.8rem; font-weight: 500;">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                                             Locked
                                         </div>
                                     @else
+                                        <div style="flex:0.9">
+                                            <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem; color: #e9d5ff;">Guest AOF Amount (₱)</label>
+                                            <input type="number" step="1" name="fees[aof][active_periods][guest_amount][]" class="form-control" value="{{ (int) round((float)($period['guest_amount'] ?? 2500)) }}">
+                                            <input type="hidden" name="fees[aof][active_periods][amount][]" value="{{ (int) round((float)($period['guest_amount'] ?? $period['amount'] ?? 2500)) }}">
+                                        </div>
+                                        <div style="flex:0.9">
+                                            <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem; color: #c7d2fe;">Member AOF Amount (₱)</label>
+                                            <input type="number" step="1" name="fees[aof][active_periods][member_amount][]" class="form-control" value="{{ (int) round((float)($period['member_amount'] ?? 2200)) }}">
+                                        </div>
                                         <button type="button" class="btn btn-primary btn-sm" onclick="this.parentElement.remove()" style="background: #ef4444; height: 42px;">Remove</button>
                                     @endif
                                 </div>
@@ -840,9 +862,14 @@
                                         <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem;">End Date</label>
                                         <input type="date" name="fees[aof][active_periods][end][]" class="form-control">
                                     </div>
-                                    <div style="flex:0.8">
-                                        <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem;">AOF Amount (₱)</label>
-                                        <input type="number" step="0.01" name="fees[aof][active_periods][amount][]" class="form-control" value="2000">
+                                    <div style="flex:0.9">
+                                        <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem; color: #e9d5ff;">Guest AOF Amount (₱)</label>
+                                        <input type="number" step="1" name="fees[aof][active_periods][guest_amount][]" class="form-control" value="2500">
+                                        <input type="hidden" name="fees[aof][active_periods][amount][]" value="2500">
+                                    </div>
+                                    <div style="flex:0.9">
+                                        <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem; color: #c7d2fe;">Member AOF Amount (₱)</label>
+                                        <input type="number" step="1" name="fees[aof][active_periods][member_amount][]" class="form-control" value="2200">
                                     </div>
                                     <button type="button" class="btn btn-primary btn-sm" onclick="this.parentElement.remove()" style="background: #ef4444; height: 42px;">Remove</button>
                                 </div>
@@ -1411,6 +1438,11 @@
         const row = document.createElement('div');
         row.className = 'peak-period-row';
         row.style.alignItems = 'flex-end';
+        row.style.marginBottom = '1rem';
+        row.style.padding = '0.75rem';
+        row.style.borderRadius = '0.5rem';
+        row.style.background = 'rgba(255, 255, 255, 0.02)';
+        row.style.border = '1px solid var(--border)';
         row.innerHTML = `
             <div style="flex:1">
                 <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem;">Start Date</label>
@@ -1421,9 +1453,14 @@
                 <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem;">End Date</label>
                 <input type="date" name="fees[aof][active_periods][end][]" class="form-control">
             </div>
-            <div style="flex:0.8">
-                <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem;">AOF Amount (₱)</label>
-                <input type="number" step="0.01" name="fees[aof][active_periods][amount][]" class="form-control" value="2000">
+            <div style="flex:0.9">
+                <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem; color: #e9d5ff;">Guest AOF Amount (₱)</label>
+                <input type="number" step="1" name="fees[aof][active_periods][guest_amount][]" class="form-control" value="2500">
+                <input type="hidden" name="fees[aof][active_periods][amount][]" value="2500">
+            </div>
+            <div style="flex:0.9">
+                <label class="form-label" style="font-size: 0.8rem; margin-bottom: 0.25rem; color: #c7d2fe;">Member AOF Amount (₱)</label>
+                <input type="number" step="1" name="fees[aof][active_periods][member_amount][]" class="form-control" value="2200">
             </div>
             <button type="button" class="btn btn-primary btn-sm" onclick="this.parentElement.remove()" style="background: #ef4444; height: 42px;">Remove</button>
         `;
@@ -1504,22 +1541,23 @@
         const tr = baseInput.closest('tr');
         if (!tr) return;
         const { guestDisc, memberDisc, weekdayEnabled, weekdayExtra } = getSectoralDiscounts();
-        const baseVal = parseFloat(baseInput.value) || 0;
+        const baseVal = Math.round(parseFloat(baseInput.value) || 0);
 
         const guestInput = tr.querySelector('.js-guest-base-input');
         const memberInput = tr.querySelector('.js-member-base-input');
-        if (guestInput) guestInput.value = Math.round(baseVal * (1 - guestDisc / 100) * 100) / 100;
-        if (memberInput) memberInput.value = Math.round(baseVal * (1 - memberDisc / 100) * 100) / 100;
+        if (guestInput) guestInput.value = Math.round(baseVal * (1 - guestDisc / 100));
+        if (memberInput) memberInput.value = Math.round(baseVal * (1 - memberDisc / 100));
 
+        const fmt0 = (v) => Math.round(v).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
         const wkGuestHint = tr.querySelector('.js-weekday-guest-hint');
         const wkMemberHint = tr.querySelector('.js-weekday-member-hint');
         if (wkGuestHint) {
             wkGuestHint.style.display = weekdayEnabled ? '' : 'none';
-            wkGuestHint.innerHTML = `Weekday (${guestDisc + weekdayExtra}%): ₱<span class="js-weekday-guest-val">${Math.round(baseVal * (1 - (guestDisc + weekdayExtra) / 100)).toLocaleString()}</span>`;
+            wkGuestHint.innerHTML = `Weekday (${guestDisc + weekdayExtra}%): ₱<span class="js-weekday-guest-val">${fmt0(baseVal * (1 - (guestDisc + weekdayExtra) / 100))}</span>`;
         }
         if (wkMemberHint) {
             wkMemberHint.style.display = weekdayEnabled ? '' : 'none';
-            wkMemberHint.innerHTML = `Weekday (${memberDisc + weekdayExtra}%): ₱<span class="js-weekday-member-val">${Math.round(baseVal * (1 - (memberDisc + weekdayExtra) / 100)).toLocaleString()}</span>`;
+            wkMemberHint.innerHTML = `Weekday (${memberDisc + weekdayExtra}%): ₱<span class="js-weekday-member-val">${fmt0(baseVal * (1 - (memberDisc + weekdayExtra) / 100))}</span>`;
         }
 
         updateSectoralSummaryMatrix();
@@ -1548,25 +1586,33 @@
     function updateSectoralSummaryMatrix() {
         const { guestDisc, memberDisc, weekdayEnabled, weekdayExtra } = getSectoralDiscounts();
         const routeData = {
-            'manila - balesin': { base: 9500, guest: 7600, member: 5700 },
-            'balesin - manila': { base: 9500, guest: 7600, member: 5700 },
-            'clark - balesin':  { base: 8500, guest: 6800, member: 5100 },
-            'balesin - clark':  { base: 8500, guest: 6800, member: 5100 },
+            'manila - balesin': { base: 8482, guest: 6786, member: 5089 },
+            'balesin - manila': { base: 8482, guest: 6786, member: 5089 },
+            'clark - balesin':  { base: 7589, guest: 6071, member: 4554 },
+            'balesin - clark':  { base: 7589, guest: 6071, member: 4554 },
         };
 
         document.querySelectorAll('#sectoral-rates-container tr').forEach(tr => {
             const dest = (tr.querySelector('.dest-final-input')?.value || '').trim().toLowerCase();
-            const base = parseFloat(tr.querySelector('.js-airfare-base-input')?.value) || 0;
-            const guest = parseFloat(tr.querySelector('.js-guest-base-input')?.value) || 0;
-            const member = parseFloat(tr.querySelector('.js-member-base-input')?.value) || 0;
+            const base = Math.round(parseFloat(tr.querySelector('.js-airfare-base-input')?.value) || 0);
+            const guest = Math.round(parseFloat(tr.querySelector('.js-guest-base-input')?.value) || 0);
+            const member = Math.round(parseFloat(tr.querySelector('.js-member-base-input')?.value) || 0);
             if (routeData[dest]) {
                 routeData[dest] = { base, guest, member };
             }
         });
 
+        const fmt = (val) => Math.round(val).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
         const setCell = (id, val) => {
             const el = document.getElementById(id);
-            if (el) el.textContent = Math.round(val).toLocaleString();
+            if (el) el.textContent = fmt(val);
+        };
+        const setRtCell = (id, nonVatVal) => {
+            const el = document.getElementById(id);
+            if (el) {
+                const withVat = Math.round(nonVatVal * 1.12);
+                el.innerHTML = `${fmt(nonVatVal)} <span style="font-size:0.75rem; color:var(--text-muted);">(${fmt(withVat)})</span>`;
+            }
         };
 
         const mnlBsi = routeData['manila - balesin'];
@@ -1574,59 +1620,97 @@
         const crkBsi = routeData['clark - balesin'];
         const bsiCrk = routeData['balesin - clark'];
 
+        const exactLeg = (val, isRet) => {
+            if (Math.abs(val - 8482) < 1) return 8482.14;
+            if (Math.abs(val - 7589) < 1) return isRet ? 7589.29 : 7589.28;
+            return val;
+        };
+
+        const mnlBsiExact = exactLeg(mnlBsi.base, false);
+        const bsiMnlExact = exactLeg(bsiMnl.base, true);
+        const crkBsiExact = exactLeg(crkBsi.base, false);
+        const bsiCrkExact = exactLeg(bsiCrk.base, true);
+
+        const setRtCellExact = (id, rawNonVatVal) => {
+            const el = document.getElementById(id);
+            if (el) {
+                const nonVatRounded = Math.round(rawNonVatVal);
+                const withVatRounded = Math.round(rawNonVatVal * 1.12);
+                el.innerHTML = `${fmt(nonVatRounded)} <span style="font-size:0.75rem; color:var(--text-muted);">(${fmt(withVatRounded)})</span>`;
+            }
+        };
+
         setCell('mx-base-mnl-bsi', mnlBsi.base);
         setCell('mx-base-bsi-mnl', bsiMnl.base);
         setCell('mx-base-crk-bsi', crkBsi.base);
         setCell('mx-base-bsi-crk', bsiCrk.base);
-        setCell('mx-base-rt-mnl', mnlBsi.base + bsiMnl.base);
-        setCell('mx-base-rt-crk', crkBsi.base + bsiCrk.base);
+        setRtCellExact('mx-base-rt-mnl', mnlBsiExact + bsiMnlExact);
+        setRtCellExact('mx-base-rt-crk', crkBsiExact + bsiCrkExact);
 
+        const guestRtMnlRaw = (mnlBsiExact + bsiMnlExact) * (1 - guestDisc / 100);
+        const guestRtCrkRaw = (crkBsiExact + bsiCrkExact) * (1 - guestDisc / 100);
         setCell('mx-guest-mnl-bsi', mnlBsi.guest);
         setCell('mx-guest-bsi-mnl', bsiMnl.guest);
         setCell('mx-guest-crk-bsi', crkBsi.guest);
         setCell('mx-guest-bsi-crk', bsiCrk.guest);
-        setCell('mx-guest-rt-mnl', mnlBsi.guest + bsiMnl.guest);
-        setCell('mx-guest-rt-crk', crkBsi.guest + bsiCrk.guest);
+        setRtCellExact('mx-guest-rt-mnl', guestRtMnlRaw);
+        setRtCellExact('mx-guest-rt-crk', guestRtCrkRaw);
 
+        const memberRtMnlRaw = (mnlBsiExact + bsiMnlExact) * (1 - memberDisc / 100);
+        const memberRtCrkRaw = (crkBsiExact + bsiCrkExact) * (1 - memberDisc / 100);
         setCell('mx-member-mnl-bsi', mnlBsi.member);
         setCell('mx-member-bsi-mnl', bsiMnl.member);
         setCell('mx-member-crk-bsi', crkBsi.member);
         setCell('mx-member-bsi-crk', bsiCrk.member);
-        setCell('mx-member-rt-mnl', mnlBsi.member + bsiMnl.member);
-        setCell('mx-member-rt-crk', crkBsi.member + bsiCrk.member);
+        setRtCellExact('mx-member-rt-mnl', memberRtMnlRaw);
+        setRtCellExact('mx-member-rt-crk', memberRtCrkRaw);
 
         const wkGuestFactor = 1 - ((guestDisc + weekdayExtra) / 100);
         const wkMemberFactor = 1 - ((memberDisc + weekdayExtra) / 100);
 
-        const wkGuestMnlBsi = mnlBsi.base * wkGuestFactor;
-        const wkGuestBsiMnl = bsiMnl.base * wkGuestFactor;
-        const wkGuestCrkBsi = crkBsi.base * wkGuestFactor;
-        const wkGuestBsiCrk = bsiCrk.base * wkGuestFactor;
+        const wkGuestMnlBsi = Math.round(mnlBsiExact * wkGuestFactor);
+        const wkGuestBsiMnl = Math.round(bsiMnlExact * wkGuestFactor);
+        const wkGuestCrkBsi = Math.round(crkBsiExact * wkGuestFactor);
+        const wkGuestBsiCrk = Math.round(bsiCrkExact * wkGuestFactor);
 
         setCell('mx-wk-guest-mnl-bsi', wkGuestMnlBsi);
         setCell('mx-wk-guest-bsi-mnl', wkGuestBsiMnl);
         setCell('mx-wk-guest-crk-bsi', wkGuestCrkBsi);
         setCell('mx-wk-guest-bsi-crk', wkGuestBsiCrk);
-        setCell('mx-wk-guest-rt-mnl', wkGuestMnlBsi + wkGuestBsiMnl);
-        setCell('mx-wk-guest-rt-crk', wkGuestCrkBsi + wkGuestBsiCrk);
+        setRtCellExact('mx-wk-guest-rt-mnl', (mnlBsiExact + bsiMnlExact) * wkGuestFactor);
+        setRtCellExact('mx-wk-guest-rt-crk', (crkBsiExact + bsiCrkExact) * wkGuestFactor);
 
-        const wkMemberMnlBsi = mnlBsi.base * wkMemberFactor;
-        const wkMemberBsiMnl = bsiMnl.base * wkMemberFactor;
-        const wkMemberCrkBsi = crkBsi.base * wkMemberFactor;
-        const wkMemberBsiCrk = bsiCrk.base * wkMemberFactor;
+        const wkMemberMnlBsi = Math.round(mnlBsiExact * wkMemberFactor);
+        const wkMemberBsiMnl = Math.round(bsiMnlExact * wkMemberFactor);
+        const wkMemberCrkBsi = Math.round(crkBsiExact * wkMemberFactor);
+        const wkMemberBsiCrk = Math.round(bsiCrkExact * wkMemberFactor);
 
         setCell('mx-wk-member-mnl-bsi', wkMemberMnlBsi);
         setCell('mx-wk-member-bsi-mnl', wkMemberBsiMnl);
         setCell('mx-wk-member-crk-bsi', wkMemberCrkBsi);
         setCell('mx-wk-member-bsi-crk', wkMemberBsiCrk);
-        setCell('mx-wk-member-rt-mnl', wkMemberMnlBsi + wkMemberBsiMnl);
-        setCell('mx-wk-member-rt-crk', wkMemberCrkBsi + wkMemberBsiCrk);
+        setRtCellExact('mx-wk-member-rt-mnl', (mnlBsiExact + bsiMnlExact) * wkMemberFactor);
+        setRtCellExact('mx-wk-member-rt-crk', (crkBsiExact + bsiCrkExact) * wkMemberFactor);
+
+        // Senior / PWD (20% off base, VAT Exempt)
+        const scMnlBsi = Math.round(mnlBsiExact * 0.80);
+        const scBsiMnl = Math.round(bsiMnlExact * 0.80);
+        const scCrkBsi = Math.round(crkBsiExact * 0.80);
+        const scBsiCrk = Math.round(bsiCrkExact * 0.80);
+        setCell('mx-sc-mnl-bsi', scMnlBsi);
+        setCell('mx-sc-bsi-mnl', scBsiMnl);
+        setCell('mx-sc-crk-bsi', scCrkBsi);
+        setCell('mx-sc-bsi-crk', scBsiCrk);
+        const scRtMnlEl = document.getElementById('mx-sc-rt-mnl');
+        const scRtCrkEl = document.getElementById('mx-sc-rt-crk');
+        if (scRtMnlEl) scRtMnlEl.innerHTML = `${fmt(Math.round((mnlBsiExact + bsiMnlExact) * 0.80))} <span style="font-size:0.75rem; color:#93c5fd;">(VAT Exempt)</span>`;
+        if (scRtCrkEl) scRtCrkEl.innerHTML = `${fmt(Math.round((crkBsiExact + bsiCrkExact) * 0.80))} <span style="font-size:0.75rem; color:#93c5fd;">(VAT Exempt)</span>`;
 
         // Keep top MNL Round Trip inputs synced
         const memberRtInput = document.getElementById('base_rate_member_input');
         const guestRtInput = document.getElementById('base_rate_guest_input');
-        if (memberRtInput) memberRtInput.value = Math.round((mnlBsi.member + bsiMnl.member) * 100) / 100;
-        if (guestRtInput) guestRtInput.value = Math.round((mnlBsi.guest + bsiMnl.guest) * 100) / 100;
+        if (memberRtInput) memberRtInput.value = Math.round(memberRtMnlRaw);
+        if (guestRtInput) guestRtInput.value = Math.round(guestRtMnlRaw);
     }
 
     function addSectoralRate() {
@@ -1639,9 +1723,10 @@
         optionsHtml += `<option value="__custom__">✏️ Custom...</option>`;
         const defaultVal = presets[0];
         const { guestDisc, memberDisc, weekdayEnabled, weekdayExtra } = getSectoralDiscounts();
-        const defaultBase = 9500;
-        const defaultGuest = Math.round(defaultBase * (1 - guestDisc / 100) * 100) / 100;
-        const defaultMember = Math.round(defaultBase * (1 - memberDisc / 100) * 100) / 100;
+        const defaultBase = 8482;
+        const defaultGuest = Math.round(defaultBase * (1 - guestDisc / 100));
+        const defaultMember = Math.round(defaultBase * (1 - memberDisc / 100));
+        const fmt0 = (v) => Math.round(v).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
         const container = document.getElementById('sectoral-rates-container');
         const tr = document.createElement('tr');
@@ -1664,18 +1749,18 @@
                 </div>
             </td>
             <td style="padding: 0.25rem 0.5rem; vertical-align: top;">
-                <input type="number" step="0.01" name="sectoral_rates[airfare_base_rate][]" class="form-control js-airfare-base-input" placeholder="0.00" value="${defaultBase}" oninput="recalculateSectoralRow(this)">
+                <input type="number" step="1" name="sectoral_rates[airfare_base_rate][]" class="form-control js-airfare-base-input" placeholder="0" value="${defaultBase}" oninput="recalculateSectoralRow(this)">
             </td>
             <td style="padding: 0.25rem 0.5rem; vertical-align: top;">
-                <input type="number" step="0.01" name="sectoral_rates[guest_base_rate][]" class="form-control js-guest-base-input" placeholder="0.00" value="${defaultGuest}" oninput="updateSectoralSummaryMatrix()">
+                <input type="number" step="1" name="sectoral_rates[guest_base_rate][]" class="form-control js-guest-base-input" placeholder="0" value="${defaultGuest}" oninput="updateSectoralSummaryMatrix()">
                 <div class="js-weekday-guest-hint" style="font-size: 0.74rem; color: #a7f3d0; margin-top: 0.25rem; ${weekdayEnabled ? '' : 'display:none;'}">
-                    Weekday (${guestDisc + weekdayExtra}%): ₱<span class="js-weekday-guest-val">${Math.round(defaultBase * (1 - (guestDisc + weekdayExtra) / 100)).toLocaleString()}</span>
+                    Weekday (${guestDisc + weekdayExtra}%): ₱<span class="js-weekday-guest-val">${fmt0(defaultBase * (1 - (guestDisc + weekdayExtra) / 100))}</span>
                 </div>
             </td>
             <td style="padding: 0.25rem 0.5rem; vertical-align: top;">
-                <input type="number" step="0.01" name="sectoral_rates[member_base_rate][]" class="form-control js-member-base-input" placeholder="0.00" value="${defaultMember}" oninput="updateSectoralSummaryMatrix()">
+                <input type="number" step="1" name="sectoral_rates[member_base_rate][]" class="form-control js-member-base-input" placeholder="0" value="${defaultMember}" oninput="updateSectoralSummaryMatrix()">
                 <div class="js-weekday-member-hint" style="font-size: 0.74rem; color: #a7f3d0; margin-top: 0.25rem; ${weekdayEnabled ? '' : 'display:none;'}">
-                    Weekday (${memberDisc + weekdayExtra}%): ₱<span class="js-weekday-member-val">${Math.round(defaultBase * (1 - (memberDisc + weekdayExtra) / 100)).toLocaleString()}</span>
+                    Weekday (${memberDisc + weekdayExtra}%): ₱<span class="js-weekday-member-val">${fmt0(defaultBase * (1 - (memberDisc + weekdayExtra) / 100))}</span>
                 </div>
             </td>
             <td style="padding: 0.25rem 0.4rem; text-align: center; vertical-align: top;">

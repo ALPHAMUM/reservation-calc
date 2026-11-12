@@ -2442,32 +2442,45 @@
                 res.sc_mode = selectedMode;
                 res.privCard = hasVillaSc ? 'Senior Citizen' : 'N';
 
-                // Recalculate Airfare rate in res.calculated_rates (only for Island — Pines and City have no flights)
+                // Recalculate Airfare & AOF rate in res.calculated_rates (only for Island — Pines and City have no flights)
                 if (property === 'island') {
-                    let currentAir = parseFloat(res.calculated_rates.air || 0);
                     const isEmployee = !!res.is_employee;
-                    const isMember   = ['member', 'spouse', 'dependent', 'authorized'].some(t => (res.gstType || '').toLowerCase().includes(t));
-                    const defaultRegular = isEmployee ? 0 : (isMember ? 4200 : 8400);
+                    const isScAirActive = (hasAirSc && !isEmployee);
 
-                    let baseAir = 0;
-                    if (res.calculated_rates.air_base !== undefined) {
-                        baseAir = res.calculated_rates.air_base;
+                    if (res.calculated_rates.air_regular !== undefined && res.calculated_rates.air_sc !== undefined) {
+                        res.calculated_rates.air = isScAirActive
+                            ? parseFloat(res.calculated_rates.air_sc || 0)
+                            : parseFloat(res.calculated_rates.air_regular || 0);
                     } else {
-                        if (currentAir > 0 && Math.abs(currentAir - Math.round(defaultRegular / 1.12)) < 50) {
-                            baseAir = defaultRegular;
-                        } else if (currentAir > 0) {
-                            baseAir = currentAir;
-                        } else {
-                            baseAir = defaultRegular;
-                        }
+                        let currentAir = parseFloat(res.calculated_rates.air || 0);
+                        const isMember = ['member', 'spouse', 'dependent', 'authorized'].some(t => (res.gstType || '').toLowerCase().includes(t));
+                        const defaultRegular = isEmployee ? 0 : (isMember ? 11400 : 15200);
+                        let baseAir = res.calculated_rates.air_base !== undefined ? res.calculated_rates.air_base : (currentAir > 0 ? currentAir : defaultRegular);
                         res.calculated_rates.air_base = baseAir;
+                        res.calculated_rates.air = isScAirActive ? Math.round((baseAir / 1.12) * 100) / 100 : baseAir;
                     }
 
-                    if (hasAirSc && !isEmployee) {
-                        res.calculated_rates.air = Math.round((baseAir / 1.12) * 100) / 100;
-                    } else {
-                        res.calculated_rates.air = baseAir;
+                    if (res.calculated_rates.avi_regular !== undefined && res.calculated_rates.avi_sc !== undefined) {
+                        res.calculated_rates.avi = isScAirActive
+                            ? parseFloat(res.calculated_rates.avi_sc || 0)
+                            : parseFloat(res.calculated_rates.avi_regular || 0);
                     }
+
+                    if (res.calculated_rates.air_breakdown) {
+                        const ab = res.calculated_rates.air_breakdown;
+                        ab.is_senior_pwd = isScAirActive;
+                        ab.rt_fare_non_vat = isScAirActive ? parseFloat(ab.rt_fare_sc_non_vat || 0) : parseFloat(ab.rt_fare_reg_non_vat || 0);
+                        ab.aof_non_vat = isScAirActive ? parseFloat(ab.aof_sc_non_vat || 0) : parseFloat(ab.aof_reg_non_vat || 0);
+                        ab.non_vat_total = Math.round((ab.rt_fare_non_vat + ab.aof_non_vat) * 100) / 100;
+                        ab.fare_with_vat = Math.round(((parseFloat(res.calculated_rates.air) || 0) + (parseFloat(res.calculated_rates.avi) || 0)) * 100) / 100;
+                        ab.vat = isScAirActive ? 0 : Math.round((ab.fare_with_vat - ab.non_vat_total) * 100) / 100;
+                    }
+
+                    const newBaseFees = (parseFloat(res.calculated_rates.air) || 0)
+                        + (parseFloat(res.calculated_rates.han) || 0)
+                        + (parseFloat(res.calculated_rates.avi) || 0)
+                        + (parseFloat(res.calculated_rates.env) || 0);
+                    tr.find('.total-val').data('base-fees', newBaseFees).attr('data-base-fees', newBaseFees);
                 } else {
                     res.calculated_rates.air = 0;
                     res.calculated_rates.air_base = 0;
@@ -2908,11 +2921,27 @@
             // Add other fees — only for Island (Pines has no additional airfare/hangar/aviation/env fees)
             if (property !== 'pines') {
                 const fees = res.calculated_rates || {};
+                const ab = fees.air_breakdown || null;
+                const isAirSc = ab ? !!ab.is_senior_pwd : false;
+                if (isAirSc) hasDiscount = true;
+
                 const feeItems = [
-                    { label: 'Airfare', val: fees.air },
-                    { label: 'Hangar Fee', val: fees.han },
-                    { label: 'Aviation Operational Fee', val: fees.avi },
-                    { label: 'Environmental Fee', val: fees.env }
+                    {
+                        key: 'air',
+                        label: 'Airfare' + (isAirSc ? ' <span style="font-size: 0.65rem; color: #4ade80;">(Senior/PWD 20% Off)</span>' : ''),
+                        val: fees.air,
+                        nonVat: ab ? parseFloat(ab.rt_fare_non_vat || 0) : null,
+                        taxHtml: ab ? (isAirSc ? '<div style="font-size: 0.7rem; color: #f87171;">VAT EXEMPT</div>' : `<div style="font-size: 0.7rem; color: var(--text-muted);">+ 12% VAT: ₱${Math.max(0, (parseFloat(fees.air || 0) - parseFloat(ab.rt_fare_non_vat || 0))).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>`) : ''
+                    },
+                    {
+                        key: 'avi',
+                        label: 'Aviation Operational Fee (AOF)' + (isAirSc ? ' <span style="font-size: 0.65rem; color: #4ade80;">(Senior/PWD 20% Off)</span>' : ''),
+                        val: fees.avi,
+                        nonVat: ab ? parseFloat(ab.aof_non_vat || 0) : null,
+                        taxHtml: ab ? (isAirSc ? '<div style="font-size: 0.7rem; color: #f87171;">VAT EXEMPT</div>' : `<div style="font-size: 0.7rem; color: var(--text-muted);">+ 12% VAT: ₱${Math.max(0, (parseFloat(fees.avi || 0) - parseFloat(ab.aof_non_vat || 0))).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>`) : ''
+                    },
+                    { key: 'han', label: 'Hangar Fee', val: fees.han, nonVat: null, taxHtml: '' },
+                    { key: 'env', label: 'Environmental Fee', val: fees.env, nonVat: null, taxHtml: '' }
                 ];
 
                 let hasFees = false;
@@ -2922,12 +2951,15 @@
                             html += `<tr><td colspan="5" style="padding: 1rem 0.5rem 0.5rem 0.5rem; color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: none;">Additional Fees</td></tr>`;
                             hasFees = true;
                         }
+                        const nonVatCell = (f.nonVat !== null && f.nonVat > 0)
+                            ? `₱${f.nonVat.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                            : '';
                         html += `
                             <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
                                 <td colspan="2">${f.label}</td>
-                                <td></td>
-                                <td></td>
-                                <td style="font-weight: bold; text-align: right; color: white;">₱${parseFloat(f.val).toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                                <td>${nonVatCell}</td>
+                                <td>${f.taxHtml || ''}</td>
+                                <td style="font-weight: bold; text-align: right; color: white;">₱${parseFloat(f.val).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                             </tr>
                         `;
                         overallTotal += parseFloat(f.val);
