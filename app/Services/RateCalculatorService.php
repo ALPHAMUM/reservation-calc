@@ -355,15 +355,22 @@ class RateCalculatorService
         $airSc = 0;
         $rtFareRegNonVat = 0;
         $rtFareScNonVat = 0;
+        $airCalc = [];
 
-        // Detect if Clark route is specified in passenger metadata/remarks, default to Manila
-        $metaStr = strtolower(($passenger['rate_metadata'] ?? '') . ' ' . ($passenger['remarks'] ?? '') . ' ' . ($passenger['route'] ?? ''));
-        $isClark = str_contains($metaStr, 'clark') || str_contains($metaStr, 'crk');
+        // Detect flight legs from arrPort and depPort (options: Manila, Clark), with fallback to metadata/remarks
+        $flightLegs = $this->resolveFlightLegs($passenger);
+        $isClark = $flightLegs['is_clark_only'];
+        $leg1Code = $flightLegs['arr_is_clark'] ? 'CRK - BSI' : 'MNL - BSI';
+        $leg2Code = $flightLegs['dep_is_clark'] ? 'BSI - CRK' : 'BSI - MNL';
+        $routeSummary = $leg1Code . ' / ' . $leg2Code;
         $checkInDate = $passenger['arrdt'] ?? $passenger['arrDt'] ?? null;
         $vatRate = (float) ($this->settings['discounts']['vat_rate'] ?? 12);
 
         if ($isInfant) {
             // Infants (age < 2) are exempt from airfare
+            $airfare = 0;
+        } elseif (!$flightLegs['has_arr_port'] && !$flightLegs['has_dep_port']) {
+            // Both arrPort and depPort are empty — airfare is 0 / blank
             $airfare = 0;
         } elseif (isset($passenger['rate_metadata']) && str_contains(strtoupper($passenger['rate_metadata']), 'AIRFARE:EXEMPT')) {
             $airfare = 0;
@@ -503,6 +510,15 @@ class RateCalculatorService
         $activeNonVatTotal = round($activeRtNonVat + $activeAofNonVat, 2);
         $activeVat = $isScActive ? 0.00 : round(($airfare + $aof) - $activeNonVatTotal, 2);
 
+        $leg1Reg = (float) ($airCalc['leg1_reg'] ?? ($flightLegs['has_arr_port'] ? round($rtFareRegNonVat / 2, 0) : 0));
+        $leg2Reg = (float) ($airCalc['leg2_reg'] ?? ($flightLegs['has_dep_port'] ? ($rtFareRegNonVat - $leg1Reg) : 0));
+        $leg1Sc  = (float) ($airCalc['leg1_sc'] ?? ($flightLegs['has_arr_port'] ? round($rtFareScNonVat / 2, 0) : 0));
+        $leg2Sc  = (float) ($airCalc['leg2_sc'] ?? ($flightLegs['has_dep_port'] ? ($rtFareScNonVat - $leg1Sc) : 0));
+        $leg1RegVat = (float) ($airCalc['leg1_reg_vat'] ?? ($flightLegs['has_arr_port'] ? round($leg1Reg * (1 + ($vatRate / 100)), 0) : 0));
+        $leg2RegVat = (float) ($airCalc['leg2_reg_vat'] ?? ($flightLegs['has_dep_port'] ? round($leg2Reg * (1 + ($vatRate / 100)), 0) : 0));
+        $leg1ScVat  = (float) ($airCalc['leg1_sc_vat'] ?? $leg1Sc);
+        $leg2ScVat  = (float) ($airCalc['leg2_sc_vat'] ?? $leg2Sc);
+
         return [
             'acc' => $acc,
             'acc_dates' => $accDates,
@@ -517,6 +533,32 @@ class RateCalculatorService
             'is_employee' => $isEmployee,
             'base_pax' => $basePax,
             'air_breakdown' => [
+                'arr_port' => $flightLegs['arr_port'],
+                'dep_port' => $flightLegs['dep_port'],
+                'has_arr_port' => $flightLegs['has_arr_port'],
+                'has_dep_port' => $flightLegs['has_dep_port'],
+                'leg1_code' => $airCalc['leg1_code'] ?? $leg1Code,
+                'leg2_code' => $airCalc['leg2_code'] ?? $leg2Code,
+                'route_summary' => $airCalc['route_summary'] ?? $routeSummary,
+                'leg1_base' => $airCalc['leg1_base'] ?? ($flightLegs['arr_is_clark'] ? 7589 : 8482),
+                'leg2_base' => $airCalc['leg2_base'] ?? ($flightLegs['dep_is_clark'] ? 7589 : 8482),
+                'leg1_day_type' => $airCalc['leg1_day_type'] ?? 'WE',
+                'leg2_day_type' => $airCalc['leg2_day_type'] ?? 'WE',
+                'leg1_disc_percent' => $airCalc['leg1_disc_percent'] ?? 0,
+                'leg2_disc_percent' => $airCalc['leg2_disc_percent'] ?? 0,
+                'sc_disc_percent' => $airCalc['sc_disc_percent'] ?? 20,
+                'leg1_reg' => $leg1Reg,
+                'leg2_reg' => $leg2Reg,
+                'leg1_sc' => $leg1Sc,
+                'leg2_sc' => $leg2Sc,
+                'leg1_reg_vat' => $leg1RegVat,
+                'leg2_reg_vat' => $leg2RegVat,
+                'leg1_sc_vat' => $leg1ScVat,
+                'leg2_sc_vat' => $leg2ScVat,
+                'leg1_active' => $isScActive ? $leg1Sc : $leg1Reg,
+                'leg2_active' => $isScActive ? $leg2Sc : $leg2Reg,
+                'leg1_active_vat' => $isScActive ? $leg1ScVat : $leg1RegVat,
+                'leg2_active_vat' => $isScActive ? $leg2ScVat : $leg2RegVat,
                 'is_senior_pwd' => $isScActive,
                 'rt_fare_non_vat' => $activeRtNonVat,
                 'aof_non_vat' => $activeAofNonVat,
@@ -696,16 +738,127 @@ class RateCalculatorService
         return self::EXTRA_PERSON_CHARGE;
     }
 
+    /**
+     * Resolve outbound (arrPort -> Balesin) and return (Balesin -> depPort) flight legs.
+     * Supports "Manila" and "Clark" from API fields "arrPort" and "depPort".
+     * If one port is empty, it defaults to the other port; if both are empty, falls back to metadata/remarks or Manila.
+     */
+    private function resolveFlightLegs(array $passenger): array
+    {
+        $arrPortRaw = strtolower(trim((string) ($passenger['arrPort'] ?? $passenger['arrport'] ?? '')));
+        $depPortRaw = strtolower(trim((string) ($passenger['depPort'] ?? $passenger['depport'] ?? '')));
+
+        $parsePort = function (string $portStr): ?string {
+            if ($portStr === '') {
+                return null;
+            }
+            if (str_contains($portStr, 'clark') || str_contains($portStr, 'crk')) {
+                return 'clark';
+            }
+            if (str_contains($portStr, 'manila') || str_contains($portStr, 'mnl')) {
+                return 'manila';
+            }
+            return null;
+        };
+
+        $arrPort = $parsePort($arrPortRaw);
+        $depPort = $parsePort($depPortRaw);
+        $hasArrPort = ($arrPort !== null);
+        $hasDepPort = ($depPort !== null);
+
+        if ($arrPort === null && $depPort === null) {
+            $metaStr = strtolower(($passenger['rate_metadata'] ?? '') . ' ' . ($passenger['remarks'] ?? '') . ' ' . ($passenger['route'] ?? ''));
+            $fallback = (str_contains($metaStr, 'clark') || str_contains($metaStr, 'crk')) ? 'clark' : 'manila';
+            $arrPort = $fallback;
+            $depPort = $fallback;
+        } elseif ($arrPort === null) {
+            $arrPort = $depPort;
+        } elseif ($depPort === null) {
+            $depPort = $arrPort;
+        }
+
+        $arrIsClark = ($arrPort === 'clark');
+        $depIsClark = ($depPort === 'clark');
+
+        return [
+            'arr_port'      => $arrIsClark ? 'Clark' : 'Manila',
+            'dep_port'      => $depIsClark ? 'Clark' : 'Manila',
+            'has_arr_port'  => $hasArrPort,
+            'has_dep_port'  => $hasDepPort,
+            'arr_is_clark'  => $arrIsClark,
+            'dep_is_clark'  => $depIsClark,
+            'is_clark_only' => ($arrIsClark && $depIsClark),
+            'outbound_key'  => $arrIsClark ? 'clark - balesin' : 'manila - balesin',
+            'return_key'    => $depIsClark ? 'balesin - clark' : 'balesin - manila',
+        ];
+    }
+
     private function calculateSectoralAirfareBreakdown(array $passenger, string $passengerClass, ?string $checkInDate): array
     {
+        $flightLegs = $this->resolveFlightLegs($passenger);
+        $hasArrPort = $flightLegs['has_arr_port'];
+        $hasDepPort = $flightLegs['has_dep_port'];
+        $leg1Code = $flightLegs['arr_is_clark'] ? 'CRK - BSI' : 'MNL - BSI';
+        $leg2Code = $flightLegs['dep_is_clark'] ? 'BSI - CRK' : 'BSI - MNL';
+        $routeSummary = $leg1Code . ' / ' . $leg2Code;
+
+        if (!$hasArrPort && !$hasDepPort) {
+            return [
+                'rt_fare_reg_non_vat' => 0.0,
+                'rt_fare_sc_non_vat'  => 0.0,
+                'air_regular'         => 0.0,
+                'air_sc'              => 0.0,
+                'leg1_code'           => $leg1Code,
+                'leg2_code'           => $leg2Code,
+                'route_summary'       => '',
+                'leg1_base'           => 0.0,
+                'leg2_base'           => 0.0,
+                'leg1_day_type'       => '',
+                'leg2_day_type'       => '',
+                'leg1_disc_percent'   => 0.0,
+                'leg2_disc_percent'   => 0.0,
+                'sc_disc_percent'     => 0.0,
+                'leg1_reg'            => 0.0,
+                'leg2_reg'            => 0.0,
+                'leg1_sc'             => 0.0,
+                'leg2_sc'             => 0.0,
+                'leg1_reg_vat'        => 0.0,
+                'leg2_reg_vat'        => 0.0,
+                'leg1_sc_vat'         => 0.0,
+                'leg2_sc_vat'         => 0.0,
+            ];
+        }
+
         $baseRates = $this->settings['base_rates'] ?? [];
         if ($passengerClass === 'employee') {
             $empRate = (float) ($baseRates['employee'] ?? 2800);
+            $halfEmp = round($empRate / 2, 0);
+            $leg1Emp = $hasArrPort ? $halfEmp : 0.0;
+            $leg2Emp = $hasDepPort ? ($empRate - $halfEmp) : 0.0;
+            $totEmp  = $leg1Emp + $leg2Emp;
             return [
-                'rt_fare_reg_non_vat' => $empRate,
-                'rt_fare_sc_non_vat'  => $empRate,
-                'air_regular'         => $empRate,
-                'air_sc'              => $empRate,
+                'rt_fare_reg_non_vat' => $totEmp,
+                'rt_fare_sc_non_vat'  => $totEmp,
+                'air_regular'         => $totEmp,
+                'air_sc'              => $totEmp,
+                'leg1_code'           => $leg1Code,
+                'leg2_code'           => $leg2Code,
+                'route_summary'       => $routeSummary,
+                'leg1_base'           => $leg1Emp,
+                'leg2_base'           => $leg2Emp,
+                'leg1_day_type'       => 'Employee',
+                'leg2_day_type'       => 'Employee',
+                'leg1_disc_percent'   => 0.0,
+                'leg2_disc_percent'   => 0.0,
+                'sc_disc_percent'     => 0.0,
+                'leg1_reg'            => $leg1Emp,
+                'leg2_reg'            => $leg2Emp,
+                'leg1_sc'             => $leg1Emp,
+                'leg2_sc'             => $leg2Emp,
+                'leg1_reg_vat'        => $leg1Emp,
+                'leg2_reg_vat'        => $leg2Emp,
+                'leg1_sc_vat'         => $leg1Emp,
+                'leg2_sc_vat'         => $leg2Emp,
             ];
         }
 
@@ -730,20 +883,17 @@ class RateCalculatorService
             }
         }
 
-        // Detect if Clark route is specified in passenger metadata/remarks, default to Manila
-        $metaStr = strtolower(($passenger['rate_metadata'] ?? '') . ' ' . ($passenger['remarks'] ?? '') . ' ' . ($passenger['route'] ?? ''));
-        $isClark = str_contains($metaStr, 'clark') || str_contains($metaStr, 'crk');
-
-        $outboundKey = $isClark ? 'clark - balesin' : 'manila - balesin';
-        $returnKey = $isClark ? 'balesin - clark' : 'balesin - manila';
+        // Identify flight legs from arrPort and depPort (Manila or Clark), falling back to metadata/remarks
+        $outboundKey = $flightLegs['outbound_key'];
+        $returnKey = $flightLegs['return_key'];
 
         $checkOutDate = $passenger['depdt'] ?? $passenger['depDt'] ?? $checkInDate;
 
         $outboundLeg = $sectorMap[$outboundKey] ?? ($sectorMap['manila - balesin'] ?? null);
         $returnLeg = $sectorMap[$returnKey] ?? ($sectorMap['balesin - manila'] ?? $outboundLeg);
 
-        $base1Raw = (float) ($outboundLeg['airfare_base_rate'] ?? ($isClark ? 7589 : 8482));
-        $base2Raw = (float) ($returnLeg['airfare_base_rate'] ?? ($isClark ? 7589 : 8482));
+        $base1Raw = (float) ($outboundLeg['airfare_base_rate'] ?? ($flightLegs['arr_is_clark'] ? 7589 : 8482));
+        $base2Raw = (float) ($returnLeg['airfare_base_rate'] ?? ($flightLegs['dep_is_clark'] ? 7589 : 8482));
 
         $resolveExactBase = function (float $val, bool $isReturnLeg): float {
             if (abs($val - 8482) < 1) {
@@ -758,13 +908,14 @@ class RateCalculatorService
         $base1 = $resolveExactBase($base1Raw, false);
         $base2 = $resolveExactBase($base2Raw, true);
 
-        $calcLegReg = function (float $airfareBase, ?string $dateStr) use ($effectiveClass, $guestDiscPercent, $memberDiscPercent, $weekdayExtraEnabled, $weekdayExtraPercent): float {
+        $resolveLegMeta = function (?string $dateStr) use ($effectiveClass, $guestDiscPercent, $memberDiscPercent, $weekdayExtraEnabled, $weekdayExtraPercent): array {
             $isWeekday = false;
             if ($dateStr) {
                 $ts = strtotime($dateStr);
                 if ($ts !== false) {
-                    $dayNum = (int) date('N', $ts); // 1=Mon, 2=Tue, 3=Wed, 4=Thu
-                    $isWeekday = in_array($dayNum, [1, 2, 3, 4], true);
+                    $dayNum = (int) date('N', $ts); // 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 7=Sun
+                    // Weekday is Sun to Thu (7, 1, 2, 3, 4); Weekend is Fri to Sat (5, 6)
+                    $isWeekday = in_array($dayNum, [7, 1, 2, 3, 4], true);
                 }
             }
 
@@ -772,19 +923,25 @@ class RateCalculatorService
             if ($weekdayExtraEnabled && $isWeekday && $effectiveClass !== 'public') {
                 $disc += $weekdayExtraPercent;
             }
-            return $airfareBase * (1 - ($disc / 100));
+            return [
+                'day_type'     => $isWeekday ? 'WD' : 'WE',
+                'disc_percent' => $disc,
+            ];
         };
 
-        // Step 1 & 2 (Regular — rounded to whole numbers matching Updated Airfare Excel)
-        $leg1Reg = $calcLegReg($base1, $checkInDate);
-        $leg2Reg = $calcLegReg($base2, $checkOutDate);
+        $leg1Meta = $resolveLegMeta($checkInDate);
+        $leg2Meta = $resolveLegMeta($checkOutDate);
+
+        // Step 1 & 2 (Regular — only calculate populated legs, rounded to whole numbers)
+        $leg1Reg = $hasArrPort ? ($base1 * (1 - ($leg1Meta['disc_percent'] / 100))) : 0.0;
+        $leg2Reg = $hasDepPort ? ($base2 * (1 - ($leg2Meta['disc_percent'] / 100))) : 0.0;
         $rtFareRegRaw = $leg1Reg + $leg2Reg;
         $rtFareRegNonVat = round($rtFareRegRaw, 0);
         $airRegular = round($rtFareRegRaw * (1 + ($vatRate / 100)), 0);
 
-        // Step 1 & 2 (Senior / PWD: 20% off standard sectoral base fare, VAT exempt — rounded to whole numbers)
-        $leg1Sc = $base1 * (1 - ($scDiscPercent / 100));
-        $leg2Sc = $base2 * (1 - ($scDiscPercent / 100));
+        // Step 1 & 2 (Senior / PWD: 20% off standard sectoral base fare, VAT exempt — only populated legs)
+        $leg1Sc = $hasArrPort ? ($base1 * (1 - ($scDiscPercent / 100))) : 0.0;
+        $leg2Sc = $hasDepPort ? ($base2 * (1 - ($scDiscPercent / 100))) : 0.0;
         $rtFareScRaw = $leg1Sc + $leg2Sc;
         $rtFareScNonVat = round($rtFareScRaw, 0);
         $airSc = $removeVat ? $rtFareScNonVat : round($rtFareScRaw * (1 + ($vatRate / 100)), 0);
@@ -794,6 +951,24 @@ class RateCalculatorService
             'rt_fare_sc_non_vat'  => $rtFareScNonVat,
             'air_regular'         => $airRegular,
             'air_sc'              => $airSc,
+            'leg1_code'           => $leg1Code,
+            'leg2_code'           => $leg2Code,
+            'route_summary'       => $routeSummary,
+            'leg1_base'           => $hasArrPort ? round($base1, 0) : 0.0,
+            'leg2_base'           => $hasDepPort ? round($base2, 0) : 0.0,
+            'leg1_day_type'       => $leg1Meta['day_type'],
+            'leg2_day_type'       => $leg2Meta['day_type'],
+            'leg1_disc_percent'   => $leg1Meta['disc_percent'],
+            'leg2_disc_percent'   => $leg2Meta['disc_percent'],
+            'sc_disc_percent'     => $scDiscPercent,
+            'leg1_reg'            => round($leg1Reg, 0),
+            'leg2_reg'            => round($leg2Reg, 0),
+            'leg1_sc'             => round($leg1Sc, 0),
+            'leg2_sc'             => round($leg2Sc, 0),
+            'leg1_reg_vat'        => $hasArrPort ? round($leg1Reg * (1 + ($vatRate / 100)), 0) : 0.0,
+            'leg2_reg_vat'        => $hasDepPort ? round($leg2Reg * (1 + ($vatRate / 100)), 0) : 0.0,
+            'leg1_sc_vat'         => $hasArrPort ? ($removeVat ? round($leg1Sc, 0) : round($leg1Sc * (1 + ($vatRate / 100)), 0)) : 0.0,
+            'leg2_sc_vat'         => $hasDepPort ? ($removeVat ? round($leg2Sc, 0) : round($leg2Sc * (1 + ($vatRate / 100)), 0)) : 0.0,
         ];
     }
 

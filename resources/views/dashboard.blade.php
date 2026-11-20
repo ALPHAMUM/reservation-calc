@@ -915,6 +915,12 @@
                                 </th>
                                 @endif
                                 <th class="sticky-col-3" style="width: 200px;">Occupant</th>
+                                @if($property === 'island')
+                                <th style="min-width: 180px; text-align: center; font-size: 0.75rem; padding: 0.5rem 0.6rem;">
+                                    Airfare
+                                    <div style="font-size: 0.6rem; font-weight: normal; opacity: 0.65; margin-top: 2px;">(Per Leg)</div>
+                                </th>
+                                @endif
                                 @foreach($dateCols as $date)
                                     <th class="date-header">
                                         <span class="date-day">{{ \Carbon\Carbon::parse($date)->format('D') }}</span>
@@ -1397,7 +1403,47 @@
                                         $resGstType  = strtolower(trim($res['gstType'] ?? ''));
                                         $ageInt      = ($resAge !== null && $resAge !== '') ? (int)$resAge : 99;
                                         $isInfant    = str_contains($resGstType, 'infant') || ($resAge !== null && $resAge !== '' && $ageInt >= 0 && $ageInt <= 1);
+                                        $calcRatesRow = $res['calculated_rates'] ?? [];
+                                        $airBreakRow  = $calcRatesRow['air_breakdown'] ?? [];
+                                        $hasArrRow    = !empty($airBreakRow['has_arr_port']);
+                                        $hasDepRow    = !empty($airBreakRow['has_dep_port']);
+                                        $leg1CodeRow  = $airBreakRow['leg1_code'] ?? 'MNL - BSI';
+                                        $leg2CodeRow  = $airBreakRow['leg2_code'] ?? 'BSI - MNL';
+                                        $leg1DayRow   = $airBreakRow['leg1_day_type'] ?? 'WE';
+                                        $leg2DayRow   = $airBreakRow['leg2_day_type'] ?? 'WE';
+                                        $leg1ValRow   = (float)($airBreakRow['leg1_active'] ?? 0);
+                                        $leg2ValRow   = (float)($airBreakRow['leg2_active'] ?? 0);
+                                        $rtNonVatRow  = (float)($airBreakRow['rt_fare_non_vat'] ?? 0);
+                                        $airVatRow    = (float)($calcRatesRow['air'] ?? 0);
+                                        $isScAirRow   = !empty($airBreakRow['is_senior_pwd']);
                                     @endphp
+
+                                    @if($property === 'island')
+                                    <td class="sectoral-pricing-cell" style="vertical-align: middle; padding: 0.45rem 0.65rem; min-width: 180px;">
+                                        @if($splitType === 'fvn' || (!$hasArrRow && !$hasDepRow) || $isInfant || $airVatRow <= 0)
+                                            {{-- Blank when both arrPort and depPort are empty or exempt --}}
+                                        @else
+                                            <div style="display: flex; flex-direction: column; gap: 3px;">
+                                                <div style="display: flex; align-items: baseline; justify-content: space-between; gap: 6px;">
+                                                    <span class="sectoral-rt-val" style="font-weight: 700; font-size: 0.82rem; color: #38bdf8;">₱{{ number_format($airVatRow, 0) }}</span>
+                                                    <span class="sectoral-air-vat-val" style="font-size: 0.65rem; color: var(--text-muted);">{{ $isScAirRow ? 'VAT Exempt' : 'Non-VAT: ₱' . number_format($rtNonVatRow, 0) }}</span>
+                                                </div>
+                                                @if($hasArrRow)
+                                                <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 0.66rem; background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.2); padding: 1px 6px; border-radius: 4px;">
+                                                    <span style="color: #bae6fd; font-weight: 600;">✈️ {{ $leg1CodeRow }} <span style="opacity: 0.7; font-weight: 400;">({{ $leg1DayRow }})</span></span>
+                                                    <span class="sectoral-leg1-val" style="color: white; font-weight: 600;">₱{{ number_format($leg1ValRow, 0) }}</span>
+                                                </div>
+                                                @endif
+                                                @if($hasDepRow)
+                                                <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 0.66rem; background: rgba(129, 140, 248, 0.08); border: 1px solid rgba(129, 140, 248, 0.2); padding: 1px 6px; border-radius: 4px;">
+                                                    <span style="color: #c7d2fe; font-weight: 600;">✈️ {{ $leg2CodeRow }} <span style="opacity: 0.7; font-weight: 400;">({{ $leg2DayRow }})</span></span>
+                                                    <span class="sectoral-leg2-val" style="color: white; font-weight: 600;">₱{{ number_format($leg2ValRow, 0) }}</span>
+                                                </div>
+                                                @endif
+                                            </div>
+                                        @endif
+                                    </td>
+                                    @endif
 
                                     @if($spanInfo['span'] > 0)
                                         @foreach($dateCols as $date)
@@ -2181,10 +2227,16 @@
                 <tr>
                     <td class="sticky-col-1"><span class="text-primary" style="font-size: 0.8rem; font-weight: bold;">NEW</span></td>
                     <td class="sticky-col-2"><span class="text-white" style="font-size: 0.8rem; opacity: 0.7;">MANUAL</span></td>
+                    @if($property === 'island' || $property === 'pines' || $property === 'city')
+                    <td style="text-align:center; vertical-align:middle; padding: 0.4rem;">—</td>
+                    @endif
                     <td class="sticky-col-3">
                         <input type="text" placeholder="Guest Name" class="bg-transparent border-0 text-white w-100" style="font-weight: 500; outline: none;" autofocus>
                         <div style="font-size: 0.7rem; color: var(--text-muted)">Manual Entry</div>
                     </td>
+                    @if($property === 'island')
+                    <td class="sectoral-pricing-cell"></td>
+                    @endif
             `;
             
             for(let i=0; i<dateCount; i++) {
@@ -2470,10 +2522,20 @@
                         const ab = res.calculated_rates.air_breakdown;
                         ab.is_senior_pwd = isScAirActive;
                         ab.rt_fare_non_vat = isScAirActive ? parseFloat(ab.rt_fare_sc_non_vat || 0) : parseFloat(ab.rt_fare_reg_non_vat || 0);
+                        ab.leg1_active = isScAirActive ? parseFloat(ab.leg1_sc || 0) : parseFloat(ab.leg1_reg || 0);
+                        ab.leg2_active = isScAirActive ? parseFloat(ab.leg2_sc || 0) : parseFloat(ab.leg2_reg || 0);
                         ab.aof_non_vat = isScAirActive ? parseFloat(ab.aof_sc_non_vat || 0) : parseFloat(ab.aof_reg_non_vat || 0);
                         ab.non_vat_total = Math.round((ab.rt_fare_non_vat + ab.aof_non_vat) * 100) / 100;
                         ab.fare_with_vat = Math.round(((parseFloat(res.calculated_rates.air) || 0) + (parseFloat(res.calculated_rates.avi) || 0)) * 100) / 100;
                         ab.vat = isScAirActive ? 0 : Math.round((ab.fare_with_vat - ab.non_vat_total) * 100) / 100;
+
+                        const secCell = tr.find('.sectoral-pricing-cell');
+                        if (secCell.length) {
+                            secCell.find('.sectoral-rt-val').text('₱' + Math.round(parseFloat(res.calculated_rates.air) || 0).toLocaleString());
+                            secCell.find('.sectoral-air-vat-val').text(isScAirActive ? 'VAT Exempt' : ('Non-VAT: ₱' + Math.round(ab.rt_fare_non_vat).toLocaleString()));
+                            secCell.find('.sectoral-leg1-val').text('₱' + Math.round(ab.leg1_active).toLocaleString());
+                            secCell.find('.sectoral-leg2-val').text('₱' + Math.round(ab.leg2_active).toLocaleString());
+                        }
                     }
 
                     const newBaseFees = (parseFloat(res.calculated_rates.air) || 0)
@@ -2945,6 +3007,79 @@
                 ];
 
                 let hasFees = false;
+                const hasArrPort = ab ? !!ab.has_arr_port : false;
+                const hasDepPort = ab ? !!ab.has_dep_port : false;
+                if (property === 'island' && ab && (hasArrPort || hasDepPort) && parseFloat(fees.air || 0) > 0) {
+                    html += `<tr><td colspan="5" style="padding: 1rem 0.5rem 0.5rem 0.5rem; color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: none;">Additional Fees</td></tr>`;
+                    hasFees = true;
+
+                    const leg1Code = ab.leg1_code || 'MNL - BSI';
+                    const leg2Code = ab.leg2_code || 'BSI - MNL';
+                    const leg1Base = parseFloat(ab.leg1_base || 8482);
+                    const leg2Base = parseFloat(ab.leg2_base || 8482);
+                    const leg1Active = parseFloat(ab.leg1_active || 0);
+                    const leg2Active = parseFloat(ab.leg2_active || 0);
+                    const rtFareNonVat = parseFloat(ab.rt_fare_non_vat || 0);
+                    const leg1DiscBadge = res.is_employee
+                        ? 'Employee Rate'
+                        : (isAirSc ? `SC/PWD -${ab.sc_disc_percent || 20}%` : `${ab.leg1_day_type || 'WE'} -${ab.leg1_disc_percent || 0}%`);
+                    const leg2DiscBadge = res.is_employee
+                        ? 'Employee Rate'
+                        : (isAirSc ? `SC/PWD -${ab.sc_disc_percent || 20}%` : `${ab.leg2_day_type || 'WE'} -${ab.leg2_disc_percent || 0}%`);
+
+                    const activeRoutePills = [];
+                    if (hasArrPort) activeRoutePills.push(leg1Code);
+                    if (hasDepPort) activeRoutePills.push(leg2Code);
+                    const routeBadgeText = activeRoutePills.join(' • ');
+
+                    let legsHtml = '';
+                    if (hasArrPort) {
+                        legsHtml += `<div>✈️ <strong>${leg1Code}</strong> <span style="color: var(--text-muted);">(Base ₱${leg1Base.toLocaleString()} | ${leg1DiscBadge})</span>: <strong style="color: white;">₱${leg1Active.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</strong></div>`;
+                    }
+                    if (hasDepPort) {
+                        legsHtml += `<div>✈️ <strong>${leg2Code}</strong> <span style="color: var(--text-muted);">(Base ₱${leg2Base.toLocaleString()} | ${leg2DiscBadge})</span>: <strong style="color: white;">₱${leg2Active.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</strong></div>`;
+                    }
+
+                    const baseDisplay = (hasArrPort && hasDepPort)
+                        ? (leg1Base + leg2Base)
+                        : (hasArrPort ? leg1Base : leg2Base);
+                    const discColHtml = res.is_employee
+                        ? 'Employee Flat'
+                        : (isAirSc
+                            ? `- ${ab.sc_disc_percent || 20}% SC/PWD Disc`
+                            : [
+                                hasArrPort ? `${leg1Code}: -${ab.leg1_disc_percent || 0}%` : '',
+                                hasDepPort ? `${leg2Code}: -${ab.leg2_disc_percent || 0}%` : ''
+                            ].filter(Boolean).join('<br>'));
+                    const shownAmount = (hasArrPort && hasDepPort)
+                        ? rtFareNonVat
+                        : (hasArrPort ? leg1Active : leg2Active);
+
+                    html += `
+                        <tr style="background: rgba(56, 189, 248, 0.06); border-bottom: 1px solid rgba(56, 189, 248, 0.18);">
+                            <td colspan="2">
+                                <div style="display: flex; align-items: center; gap: 6px; font-weight: 600; color: #38bdf8;">
+                                    <span>Sectoral Pricing</span>
+                                    <span style="font-size: 0.65rem; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: #bae6fd; padding: 1px 6px; border-radius: 4px;">${routeBadgeText}</span>
+                                </div>
+                                <div style="display: flex; flex-direction: column; gap: 2px; margin-top: 4px; font-size: 0.72rem; color: #cbd5e1;">
+                                    ${legsHtml}
+                                </div>
+                            </td>
+                            <td style="vertical-align: middle; color: var(--text-muted); font-size: 0.78rem;">
+                                Base: ₱${baseDisplay.toLocaleString()}
+                            </td>
+                            <td style="vertical-align: middle; font-size: 0.72rem; color: #4ade80;">
+                                ${discColHtml}
+                            </td>
+                            <td style="font-weight: 700; text-align: right; vertical-align: middle; color: #38bdf8;">
+                                ₱${shownAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                                <div style="font-size: 0.6rem; font-weight: normal; color: var(--text-muted);">(Sectoral Base)</div>
+                            </td>
+                        </tr>
+                    `;
+                }
+
                 feeItems.forEach(f => {
                     if (f.val > 0) {
                         if (!hasFees) {

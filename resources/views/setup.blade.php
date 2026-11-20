@@ -351,7 +351,7 @@
                 <div id="help-base" class="help-box">
                     <span class="help-close" onclick="toggleHelp('help-base')">&times;</span>
                     <strong>Base Airfare & Sectoral Rates</strong>
-                    <div>Configure the standard year-round airfare rates, Guest (20%) and Member (40%) discounts, optional +10% weekday discount (Mon–Thu), and route-specific sectoral base rates.</div>
+                    <div>Configure the standard year-round airfare rates, Guest (20%) and Member (40%) discounts, optional +10% weekday discount (Sun–Thu), and route-specific sectoral base rates.</div>
                 </div>
 
                 @php
@@ -407,7 +407,7 @@
                     <div class="checkbox-wrap" style="margin-bottom: 0;">
                         <input type="checkbox" id="weekday_extra_discount_enabled" name="base_rates[weekday_extra_discount_enabled]" {{ $weekdayExtraEnabled ? 'checked' : '' }} onchange="recalculateAllSectoralRates()">
                         <label for="weekday_extra_discount_enabled" class="form-label" style="margin:0; color: #e2e8f0; font-weight: 500; cursor: pointer;">
-                            Allow additional <strong>10%</strong> discount for Weekdays (<strong>Mon, Tue, Wed, Thu</strong>) on top of the <span id="lbl-guest-disc">{{ $guestDiscPct }}</span>% (Guest) and <span id="lbl-member-disc">{{ $memberDiscPct }}</span>% (Member)
+                            Allow additional <strong>10%</strong> discount for Weekdays (<strong>Sun, Mon, Tue, Wed, Thu</strong>; Weekend is <strong>Fri, Sat</strong>) on top of the <span id="lbl-guest-disc">{{ $guestDiscPct }}</span>% (Guest) and <span id="lbl-member-disc">{{ $memberDiscPct }}</span>% (Member)
                         </label>
                         <input type="hidden" id="weekday_extra_pct_input" name="base_rates[weekday_extra_discount_percent]" value="{{ $weekdayExtraPct }}">
                     </div>
